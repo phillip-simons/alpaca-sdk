@@ -18,7 +18,7 @@ default = ["trading", "data", "rustls-tls"]
 
 # API surfaces.
 trading = ["_ws"]
-data = ["_ws", "dep:rmp-serde"]
+data = ["_ws", "dep:rmp-serde", "dep:rmpv"]
 broker = ["dep:eventsource-stream"]
 
 # Ergonomics.
@@ -51,6 +51,7 @@ reqwest = { version = "0.13.4", default-features = false, features = [
     "query",
 ] }
 rmp-serde = { version = "1.3.1", optional = true }
+rmpv = { version = "1.3.1", optional = true }
 rust_decimal = "1.42.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_bytes = "0.11.19"

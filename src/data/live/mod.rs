@@ -543,17 +543,70 @@ async fn expect_control(socket: &mut Socket, expected: &str) -> Result<()> {
 ///
 /// Alpaca sends an array of frames per websocket message.
 fn decode(payload: &[u8]) -> Vec<Result<StreamMessage>> {
-    // The live stream is msgpack; the JSON fallback keeps mock servers and
-    // captured payloads usable without re-encoding them.
-    let frames: Option<Vec<Value>> = rmp_serde::from_slice(payload)
-        .ok()
-        .or_else(|| serde_json::from_slice(payload).ok());
+    // msgpack is read through rmpv rather than straight into serde_json::Value.
+    // Alpaca sends every timestamp as extension type -1, and serde_json::Value
+    // has no representation for an extension, so decoding a real frame that way
+    // fails outright — the whole message is lost, not just the timestamp. rmpv
+    // carries extensions natively; `normalize` turns them into the RFC 3339
+    // strings the models already accept.
+    //
+    // A mock that encodes timestamps as strings passes either way, which is
+    // exactly how this survived until the first live run.
+    // JSON is tried first on purpose. `rmpv` does not require consuming the
+    // whole input, so a JSON payload starting with `[` (0x5b) parses as the
+    // msgpack fixint 91 and "succeeds" with garbage.
+    let frames: Option<Vec<Value>> = serde_json::from_slice(payload).ok().or_else(|| {
+        rmpv::decode::read_value(&mut &payload[..])
+            .ok()
+            .map(normalize)
+            .map(|value| match value {
+                Value::Array(frames) => frames,
+                other => vec![other],
+            })
+    });
 
     match frames {
         Some(frames) => frames.into_iter().map(decode_frame).collect(),
         None => vec![Err(Error::InvalidRequest(
             "could not decode a stream frame as msgpack or JSON".to_owned(),
         ))],
+    }
+}
+
+/// Converts a msgpack value into JSON, rendering timestamp extensions as
+/// RFC 3339 strings so the shared models deserialize them unchanged.
+fn normalize(value: rmpv::Value) -> Value {
+    use rmpv::Value as Mp;
+
+    match value {
+        Mp::Nil => Value::Null,
+        Mp::Boolean(flag) => Value::Bool(flag),
+        Mp::Integer(number) => number
+            .as_i64()
+            .map(Value::from)
+            .or_else(|| number.as_u64().map(Value::from))
+            .unwrap_or(Value::Null),
+        Mp::F32(number) => Value::from(f64::from(number)),
+        Mp::F64(number) => Value::from(number),
+        Mp::String(text) => text.into_str().map_or(Value::Null, Value::from),
+        Mp::Binary(bytes) => String::from_utf8(bytes).map_or(Value::Null, Value::from),
+        Mp::Array(items) => Value::Array(items.into_iter().map(normalize).collect()),
+        Mp::Map(pairs) => Value::Object(
+            pairs
+                .into_iter()
+                .map(|(key, value)| {
+                    let key = match key {
+                        Mp::String(text) => text.into_str().unwrap_or_default(),
+                        other => other.to_string(),
+                    };
+                    (key, normalize(value))
+                })
+                .collect(),
+        ),
+        Mp::Ext(tag, bytes) => crate::types::timestamp::from_extension(tag, &bytes)
+            .map_or(Value::Null, |timestamp| {
+                Value::from(timestamp.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true))
+            }),
     }
 }
 
@@ -752,6 +805,39 @@ mod tests {
         assert_eq!(decoded[0].symbol(), Some("AAPL"));
         assert_eq!(decoded[0].channel(), Some(Channel::Trades));
         assert_eq!(decoded[1].channel(), Some(Channel::Quotes));
+    }
+
+    #[test]
+    fn decodes_a_real_msgpack_frame_with_an_extension_timestamp() {
+        // The shape the live server actually sends. Routing this through
+        // serde_json::Value loses the whole frame, because JSON cannot hold a
+        // msgpack extension — the failure the first live run surfaced.
+        let mut buf = vec![0x91]; // one-element array
+        buf.push(0x84); // four-entry map
+        buf.extend_from_slice(&[0xa1, b'T', 0xa1, b't']);
+        buf.extend_from_slice(&[0xa1, b'S', 0xa7]);
+        buf.extend_from_slice(b"BTC/USD");
+        buf.extend_from_slice(&[0xa1, b'p', 0xcb]);
+        buf.extend_from_slice(&63_496.28f64.to_be_bytes());
+        // "t" as timestamp32, extension type -1.
+        buf.extend_from_slice(&[0xa1, b't', 0xd6, 0xff]);
+        buf.extend_from_slice(&1_646_802_000u32.to_be_bytes());
+        // The model needs a size; add it via a fifth entry instead.
+        buf[1] = 0x85;
+        buf.extend_from_slice(&[0xa1, b's', 0xcb]);
+        buf.extend_from_slice(&1.5f64.to_be_bytes());
+
+        let decoded: Vec<_> = decode(&buf).into_iter().map(Result::unwrap).collect();
+
+        assert_eq!(decoded.len(), 1);
+        match &decoded[0] {
+            StreamMessage::Trade(trade) => {
+                assert_eq!(trade.symbol, "BTC/USD");
+                assert_eq!(trade.price, 63_496.28);
+                assert_eq!(trade.timestamp.timestamp(), 1_646_802_000);
+            }
+            other => panic!("expected a trade, got {other:?}"),
+        }
     }
 
     #[test]

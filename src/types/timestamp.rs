@@ -27,6 +27,18 @@ const TIMESTAMP_EXT_TYPE: i8 = -1;
 
 struct TimestampVisitor;
 
+/// Decodes a msgpack timestamp extension into a `DateTime`.
+///
+/// Shared with the live stream, which reads frames through `rmpv` and has to
+/// convert extensions itself — the same parsing, one implementation.
+///
+/// # Errors
+/// Returns an error string if the tag is not the timestamp extension or the
+/// payload is not 4, 8, or 12 bytes.
+pub fn from_extension(tag: i8, bytes: &[u8]) -> Result<DateTime<Utc>, String> {
+    TimestampVisitor::from_ext::<serde::de::value::Error>(tag, bytes).map_err(|e| e.to_string())
+}
+
 impl TimestampVisitor {
     fn from_parts<E: de::Error>(seconds: i64, nanoseconds: u32) -> Result<DateTime<Utc>, E> {
         Utc.timestamp_opt(seconds, nanoseconds)
