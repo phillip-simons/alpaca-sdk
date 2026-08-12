@@ -723,6 +723,13 @@ impl BrokerClient {
     /// [`download_trade_document_for_account_by_id`](Self::download_trade_document_for_account_by_id)
     /// for the contents.
     ///
+    /// **Undocumented.** This route appears in neither the `OpenAPI` spec nor the
+    /// published reference, which list only the collection, the upload and the
+    /// download. It is here because alpaca-py calls it. Prefer
+    /// [`get_trade_documents_for_account`](Self::get_trade_documents_for_account)
+    /// and filter, and treat a 404 here as the route not existing rather than
+    /// the document not existing. See `COVERAGE.md`.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_trade_document_for_account_by_id(
@@ -1188,6 +1195,10 @@ impl BrokerClient {
     }
 
     /// An account's trading configuration.
+    ///
+    /// **Undocumented.** Alpaca documents the `PATCH` on this path but no `GET`,
+    /// in neither the spec nor the reference. It is here because alpaca-py calls
+    /// it and has a captured payload for it. See `COVERAGE.md`.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.

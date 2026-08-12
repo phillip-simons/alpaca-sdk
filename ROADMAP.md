@@ -122,6 +122,40 @@ is the least complete of Alpaca's five official SDKs for market data. Evidence:
 the OpenAPI specs carry 18 trading routes it lacks, and diffing the C#, Node, Go
 and Java clients found ~25 more non-broker gaps.
 
+### Where coverage actually stands
+
+`just coverage` diffs every route this crate calls against the OpenAPI specs and
+writes `COVERAGE.md`. As of the first run:
+
+| Surface | Implemented | Spec operations |
+|---|---|---|
+| trading | 30 | 57 |
+| data | 26 | 42 |
+| broker | 74 | 154 |
+| **total** | **130** | **253** |
+
+Two independent numbers corroborate the extraction: broker's 154 operations is
+the count this file already carried, and data's 26 is exactly the method count
+Phase 3 landed.
+
+**Two routes this crate calls appear in no spec and in no reference page:**
+
+- `GET /v1/accounts/{account_id}/documents/{document_id}` — the reference
+  documents the collection, the upload and the download, but no fetch-one.
+- `GET /v1/trading/accounts/{account_id}/account/configurations` — the `PATCH`
+  is documented; the `GET` is not.
+
+Both are here because alpaca-py calls them. That is the same footing the retired
+`/v1/events/trades` stream stood on, so both are now marked undocumented in
+their rustdoc rather than quietly trusted. Neither is removed: undocumented is
+not the same as absent, and alpaca-py has a captured payload for the second.
+Confirming or removing them wants a live broker sandbox.
+
+The percentages are a floor, not a verdict. A ✅ means the route is called, not
+that it is called at the right version — precisely the distinction the event
+streams got wrong — so version drift needs the reference, which is what the rest
+of this section is for.
+
 ### Start by reconciling against the published reference
 
 Three sources disagree about what the API is, and the published reference is the

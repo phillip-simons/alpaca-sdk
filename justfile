@@ -112,6 +112,24 @@ fixtures source=alpaca_py:
 regen source=alpaca_py: (gen-enums source) (fixtures source)
     just check
 
+# Download the OpenAPI specs the coverage check diffs against.
+#
+# These come from alpacahq/alpaca-java, which generates itself from them and
+# runs a drift job against upstream — so they are the closest machine-readable
+# statement of what the API is. Not vendored: they are 1.2MB of YAML that
+# changes on Alpaca's schedule, not ours.
+specs:
+    mkdir -p specs
+    for surface in broker data trading; do \
+        curl -fsSL -o "specs/$surface.yaml" \
+            "https://raw.githubusercontent.com/alpacahq/alpaca-java/main/specs/$surface/openapi.yaml"; \
+    done
+    @echo "specs downloaded to specs/"
+
+# Regenerate COVERAGE.md: which documented routes this crate implements.
+coverage: specs
+    python3 scripts/coverage.py specs --out COVERAGE.md
+
 # Compare the pinned upstream revision against the local alpaca-py checkout.
 pinned source=alpaca_py:
     #!/usr/bin/env bash

@@ -11,3 +11,6 @@ secrets.env
 .envrc
 *.pem
 *.key
+
+# Downloaded by `just specs` for the coverage check; not ours to vendor.
+specs/
