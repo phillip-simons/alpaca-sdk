@@ -30,6 +30,18 @@ pub mod backoff;
 pub mod config;
 pub mod error;
 pub mod rest;
+pub mod types;
+
+#[cfg(feature = "broker")]
+#[cfg_attr(docsrs, doc(cfg(feature = "broker")))]
+pub mod broker;
+#[cfg(feature = "data")]
+#[cfg_attr(docsrs, doc(cfg(feature = "data")))]
+pub mod data;
+#[cfg(feature = "trading")]
+#[cfg_attr(docsrs, doc(cfg(feature = "trading")))]
+pub mod trading;
+
 pub use auth::Credentials;
 pub use config::{BaseUrl, RetryConfig};
 pub use error::{ApiError, Error, Result};
