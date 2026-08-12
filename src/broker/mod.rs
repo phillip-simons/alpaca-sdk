@@ -5,10 +5,12 @@
 
 mod client;
 mod enums;
+mod events;
 mod models;
 mod requests;
 
 pub use client::BrokerClient;
 pub use enums::*;
+pub use events::{BrokerEvent, GetEventsRequest};
 pub use models::*;
 pub use requests::*;

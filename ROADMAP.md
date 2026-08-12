@@ -13,32 +13,42 @@ Written to be picked up cold.
 | 3 — Historical data | ✅ | 6 clients, 26 methods, the pagination loop |
 | 4 — Live market data | ✅ | msgpack websocket, 4 streams, reconnect machine |
 | 5 — Trade updates | ✅ | JSON websocket, single channel |
-| **6 — Broker** | **🚧** | accounts + trading-on-behalf done; see below |
-| 6.5 — Exceed alpaca-py | ⬜ | API gaps; see below |
+| 6 — Broker | ✅ | 75 routes, 20 models, 4 pagination schemes, 5 SSE streams |
+| **6.5 — Exceed alpaca-py** | **⬜** | API gaps; see below |
 | 7 — Polish | ⬜ | polars, blocking façade, docs, migration guide, 1.0 |
 
 Ported against alpaca-py `cc4cb3b`. `just pinned` reports drift against a local
 alpaca-py checkout.
 
-## Remaining in Phase 6
+## Phase 6, as built
 
-- The five SSE event streams (`reqwest` byte stream + `eventsource-stream`).
-  Mirror `_get_sse_headers` and the five paths; alpaca-py just iterates the
-  stream, so do not import the websocket reconnect machine.
+All 76 of alpaca-py's broker routes are ported, bar one: `delete_account`, which
+alpaca-py deprecates and forwards to `close_account`. One route, one method.
 
-Also unported, found while doing the above: `create_account`, `update_account`
-and `list_accounts` take a generic `Serialize` body rather than a request type,
-so `CreateAccountRequest`, `UpdateAccountRequest` and `ListAccountsRequest` do
-not exist here — including the last one's `entities` comma-join, which currently
-falls on the caller.
+The broker spec has **154 operations**; alpaca-py has 76. The remaining 78 are
+Phase 6.5's business.
 
-The broker spec has **154 operations**; alpaca-py has **76**. Phase 6 targets the
-76. The rest is Phase 6.5.
+**Count the routes, not the sections.** This section once claimed accounts and
+trading-on-behalf were finished while 16 order, asset, announcement and
+account-lifecycle routes were missing. The check that would have caught it, and
+the one to re-run before believing this file:
 
-**Count the routes, not the sections.** This list once read as though only these
-were left, while 16 order, asset, announcement and account-lifecycle routes were
-also missing — the diff to run is alpaca-py's `broker/client.py` method names
-against `src/broker/client.rs`, not this file's memory of them.
+```sh
+diff <(grep -oE '^    def [a-z_0-9]+' ../alpaca-py/alpaca/broker/client.py \
+        | sed 's/    def //' | grep -v '^_' | sort) \
+     <(grep -oE 'pub (async )?fn [a-z_0-9]+' src/broker/client.rs \
+        | sed 's/.*fn //' | sort -u)
+```
+
+### Still open from Phase 6
+
+- `create_account`, `update_account` and `list_accounts` take a generic
+  `Serialize` body rather than a request type, so `CreateAccountRequest`,
+  `UpdateAccountRequest` and `ListAccountsRequest` do not exist here — including
+  the last one's `entities` comma-join, which currently falls on the caller.
+- `Error` has no variant for a stream that breaks mid-flight. Both the SSE
+  streams and the websocket code report those as `InvalidRequest`, which is
+  wrong in the same way for both. Worth one variant covering the two.
 
 ### The broker's models are not the trading models
 
@@ -67,6 +77,24 @@ other about which:
 - **Cursor**, no envelope, where the cursor is the last item's own `id`: account
   activities. Nothing in the response says there is more; an empty array stops it.
 - **None at all**, bare array: rebalancing portfolios.
+
+### The event streams are not the websocket streams
+
+The five SSE endpoints are plain HTTP streams of `text/event-stream`: no
+subscribe message, no auth handshake, no reconnect machine. They live in
+`broker/events.rs` and share nothing with `data/live`.
+
+Two details the SSE specification decides, not Alpaca:
+
+- **The last event id persists.** An event that sends no `id` line keeps the
+  previous one, which is what makes `GetEventsRequest::after_id` a usable way to
+  resume a dropped stream.
+- **The event type does not.** It resets every dispatch and falls back to the
+  spec default `"message"`, so `BrokerEvent::name` always has a value and that
+  value is often meaningless.
+
+The subscription is awaited before the stream is handed back, so a rejected one
+is an error rather than a stream that mysteriously says nothing.
 
 Each paginated route has both a single-page method and a `get_all_*` that walks,
 which covers alpaca-py's `PaginationType.NONE` and `.FULL`. The lazy `.ITERATOR`

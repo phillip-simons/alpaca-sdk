@@ -1,0 +1,224 @@
+//! The five broker event streams.
+//!
+//! These are `text/event-stream` over plain HTTP, not websockets, so what is
+//! worth pinning down is the wire contract: five distinct paths, the SSE headers
+//! alpaca-py sends, and a subscription that fails loudly instead of handing back
+//! a silent empty stream.
+
+#![cfg(feature = "broker")]
+
+use alpaca_sdk::broker::{BrokerClient, GetEventsRequest};
+use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
+use futures_util::StreamExt as _;
+use serde_json::json;
+use wiremock::matchers::{header, method, path, query_param};
+use wiremock::{Mock, MockServer, ResponseTemplate};
+
+fn client(server: &MockServer) -> BrokerClient {
+    let credentials = Credentials::new("broker-key", "broker-secret").unwrap();
+    BrokerClient::with_config(
+        &credentials,
+        RestConfig::new(server.uri())
+            .api_version("v1")
+            .retry(RetryConfig::none()),
+    )
+    .unwrap()
+}
+
+/// A `text/event-stream` body: one fully-specified event, then one that sends
+/// neither an `id` nor an `event` line.
+const STREAM: &str = concat!(
+    "id: 1\n",
+    "event: account_status\n",
+    "data: {\"status_to\":\"ACTIVE\",\"account_id\":\"a\"}\n",
+    "\n",
+    "data: {\"status_to\":\"SUBMITTED\",\"account_id\":\"b\"}\n",
+    "\n",
+);
+
+fn stream_response() -> ResponseTemplate {
+    ResponseTemplate::new(200)
+        .insert_header("content-type", "text/event-stream")
+        .set_body_string(STREAM)
+}
+
+#[tokio::test]
+async fn the_stream_yields_each_event_with_its_id_and_name() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/events/accounts/status"))
+        .respond_with(stream_response())
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let events: Vec<_> = client(&server)
+        .get_account_status_events(None)
+        .await
+        .unwrap()
+        .collect()
+        .await;
+
+    assert_eq!(events.len(), 2);
+
+    let first = events[0].as_ref().unwrap();
+    assert_eq!(first.id.as_deref(), Some("1"));
+    assert_eq!(first.name, "account_status");
+    // The payload is JSON the caller types itself; there are no captured
+    // payloads for these streams to model from.
+    let payload: serde_json::Value = first.json().unwrap();
+    assert_eq!(payload["status_to"], "ACTIVE");
+
+    // The second event sends neither field, and the two behave differently —
+    // this is the SSE specification, not a quirk of the parser. The last event
+    // ID persists until the server changes it, so it is still "1", which is
+    // what makes it usable for resumption. The event *type* resets after every
+    // dispatch and falls back to the spec default.
+    let second = events[1].as_ref().unwrap();
+    assert_eq!(second.id.as_deref(), Some("1"));
+    assert_eq!(second.name, "message");
+}
+
+/// Mounts a mock for `expected_path` alone, so any other path 404s.
+async fn server_for(expected_path: &str) -> MockServer {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(expected_path.to_owned()))
+        .respond_with(stream_response())
+        .expect(1)
+        .mount(&server)
+        .await;
+    server
+}
+
+#[tokio::test]
+async fn every_stream_has_its_own_path() {
+    // Five endpoints, and nothing in the response distinguishes them, so a
+    // transposed path would be invisible without this. Each method returns its
+    // own opaque stream type, so these cannot share a loop body.
+    let server = server_for("/v1/events/accounts/status").await;
+    let events: Vec<_> = client(&server)
+        .get_account_status_events(None)
+        .await
+        .unwrap()
+        .collect()
+        .await;
+    assert_eq!(events.len(), 2);
+
+    let server = server_for("/v1/events/trades").await;
+    let events: Vec<_> = client(&server)
+        .get_trade_events(None)
+        .await
+        .unwrap()
+        .collect()
+        .await;
+    assert_eq!(events.len(), 2);
+
+    let server = server_for("/v1/events/journals/status").await;
+    let events: Vec<_> = client(&server)
+        .get_journal_events(None)
+        .await
+        .unwrap()
+        .collect()
+        .await;
+    assert_eq!(events.len(), 2);
+
+    let server = server_for("/v1/events/transfers/status").await;
+    let events: Vec<_> = client(&server)
+        .get_transfer_events(None)
+        .await
+        .unwrap()
+        .collect()
+        .await;
+    assert_eq!(events.len(), 2);
+
+    let server = server_for("/v1/events/nta").await;
+    let events: Vec<_> = client(&server)
+        .get_non_trading_activity_events(None)
+        .await
+        .unwrap()
+        .collect()
+        .await;
+    assert_eq!(events.len(), 2);
+}
+
+#[tokio::test]
+async fn the_subscription_sends_the_sse_headers_and_the_filter() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/events/trades"))
+        .and(header("accept", "text/event-stream"))
+        .and(header("cache-control", "no-cache"))
+        .and(header("content-type", "text/event-stream"))
+        // Still the broker API, so still authenticated.
+        .and(header(
+            "authorization",
+            "Basic YnJva2VyLWtleTpicm9rZXItc2VjcmV0",
+        ))
+        .and(query_param("since", "2022-02-01"))
+        .and(query_param("until", "2022-02-28"))
+        .respond_with(stream_response())
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let filter = GetEventsRequest {
+        id: None,
+        since: Some("2022-02-01".parse().unwrap()),
+        until: Some("2022-02-28".parse().unwrap()),
+    };
+
+    // The mock's `expect(1)` is the assertion; the stream itself is not needed.
+    drop(
+        client(&server)
+            .get_trade_events(Some(&filter))
+            .await
+            .unwrap(),
+    );
+}
+
+#[tokio::test]
+async fn resuming_sends_the_event_id_that_was_last_seen() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/events/journals/status"))
+        .and(query_param("id", "42"))
+        .respond_with(stream_response())
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // The id comes off a BrokerEvent, which is why that field is kept —
+    // alpaca-py discards it and yields only the payload.
+    drop(
+        client(&server)
+            .get_journal_events(Some(&GetEventsRequest::after_id("42")))
+            .await
+            .unwrap(),
+    );
+}
+
+#[tokio::test]
+async fn a_rejected_subscription_fails_instead_of_returning_an_empty_stream() {
+    // Awaiting the response before handing back the stream is what makes this
+    // possible: a 403 here would otherwise look like a stream that simply had
+    // nothing to say.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/events/nta"))
+        .respond_with(
+            ResponseTemplate::new(403)
+                .set_body_json(json!({ "code": 40110000, "message": "forbidden" })),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // `unwrap_err` is unavailable here: the Ok side is an opaque stream type
+    // that does not implement Debug.
+    let Err(error) = client(&server).get_non_trading_activity_events(None).await else {
+        panic!("a 403 subscription must not produce a stream");
+    };
+
+    assert_eq!(error.status(), Some(403));
+}

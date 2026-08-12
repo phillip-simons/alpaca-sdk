@@ -4,11 +4,14 @@
 //! with HTTP basic auth rather than the `APCA-*` headers, and it acts *on behalf
 //! of* an account, so most routes carry an account id in the path.
 
+use eventsource_stream::Eventsource as _;
+use futures_util::{Stream, StreamExt as _};
 use reqwest::Method;
 use uuid::Uuid;
 
 use crate::auth::Credentials;
 use crate::broker::enums::ACHRelationshipStatus;
+use crate::broker::events::{BrokerEvent, GetEventsRequest};
 use crate::broker::models::{
     ACHRelationship, Account, AllAccountsPositions, Bank, BatchJournalResponse, CIPInfo, Journal,
     Order, Portfolio, RebalancingRun, RunsPage, Subscription, SubscriptionsPage, TradeAccount,
@@ -70,14 +73,15 @@ fn page_limit(configured: &Option<u32>, max_items: Option<usize>, collected: usi
 #[derive(Debug, Clone)]
 pub struct BrokerClient {
     rest: RestClient,
-    /// A second HTTP client, for the one route that redirects.
+    /// A second HTTP client, for the routes that do not fit [`RestClient`].
     ///
-    /// [`RestClient`] disables redirects deliberately, so it cannot fetch a
-    /// document: that route answers `301` to a presigned storage URL. This
-    /// client follows redirects, and drops the credentials when one crosses to
-    /// another host — which is what `requests` does for alpaca-py, and what
-    /// keeps broker keys off a storage provider.
-    downloads: reqwest::Client,
+    /// Two need it. The document download answers `301` to a presigned storage
+    /// URL, and `RestClient` refuses redirects deliberately; this client follows
+    /// them and drops the credentials when one crosses to another host, which is
+    /// what `requests` does for alpaca-py and what keeps broker keys off a
+    /// storage provider. The event streams need a response body that is read
+    /// incrementally rather than decoded whole.
+    raw: reqwest::Client,
 }
 
 impl BrokerClient {
@@ -103,13 +107,13 @@ impl BrokerClient {
         // alpaca-py sets use_basic_auth=True on BrokerClient and nothing else.
         let credentials = credentials.clone().into_basic();
         Ok(Self {
-            downloads: Self::download_client(&credentials, &config)?,
+            raw: Self::raw_client(&credentials, &config)?,
             rest: RestClient::new(&credentials, config)?,
         })
     }
 
-    /// Builds the redirect-following client used by the document download.
-    fn download_client(credentials: &Credentials, config: &RestConfig) -> Result<reqwest::Client> {
+    /// Builds the client used by the document download and the event streams.
+    fn raw_client(credentials: &Credentials, config: &RestConfig) -> Result<reqwest::Client> {
         let mut headers = reqwest::header::HeaderMap::new();
         credentials.apply(&mut headers)?;
         headers.insert(
@@ -420,6 +424,120 @@ impl BrokerClient {
         .await
     }
 
+    // ------------------------------------------------------------ events
+
+    /// Streams account status changes as they happen.
+    ///
+    /// # Errors
+    /// Propagates transport failures and any non-success status the server
+    /// answers the subscription with.
+    pub async fn get_account_status_events(
+        &self,
+        filter: Option<&GetEventsRequest>,
+    ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
+        self.events("/events/accounts/status", filter).await
+    }
+
+    /// Streams trade events as they happen.
+    ///
+    /// # Errors
+    /// Propagates transport failures and any non-success status the server
+    /// answers the subscription with.
+    pub async fn get_trade_events(
+        &self,
+        filter: Option<&GetEventsRequest>,
+    ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
+        self.events("/events/trades", filter).await
+    }
+
+    /// Streams journal status changes as they happen.
+    ///
+    /// # Errors
+    /// Propagates transport failures and any non-success status the server
+    /// answers the subscription with.
+    pub async fn get_journal_events(
+        &self,
+        filter: Option<&GetEventsRequest>,
+    ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
+        self.events("/events/journals/status", filter).await
+    }
+
+    /// Streams transfer status changes as they happen.
+    ///
+    /// # Errors
+    /// Propagates transport failures and any non-success status the server
+    /// answers the subscription with.
+    pub async fn get_transfer_events(
+        &self,
+        filter: Option<&GetEventsRequest>,
+    ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
+        self.events("/events/transfers/status", filter).await
+    }
+
+    /// Streams non-trading activity events as they happen.
+    ///
+    /// # Errors
+    /// Propagates transport failures and any non-success status the server
+    /// answers the subscription with.
+    pub async fn get_non_trading_activity_events(
+        &self,
+        filter: Option<&GetEventsRequest>,
+    ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
+        self.events("/events/nta", filter).await
+    }
+
+    /// Opens one of the five event streams.
+    ///
+    /// The subscription itself is awaited so a rejected one — bad credentials, a
+    /// filter the server dislikes — surfaces as an error here rather than as a
+    /// single item on an otherwise empty stream.
+    async fn events(
+        &self,
+        path: &str,
+        filter: Option<&GetEventsRequest>,
+    ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
+        let config = self.rest.config();
+        let url = format!(
+            "{}/{}{path}",
+            config.base_url.trim_end_matches('/'),
+            config.api_version
+        );
+
+        let mut request = self
+            .raw
+            .get(&url)
+            // alpaca-py's _get_sse_headers, verbatim.
+            .header(reqwest::header::CONNECTION, "keep-alive")
+            .header(reqwest::header::CACHE_CONTROL, "no-cache")
+            .header(reqwest::header::CONTENT_TYPE, "text/event-stream")
+            .header(reqwest::header::ACCEPT, "text/event-stream");
+        if let Some(filter) = filter {
+            request = request.query(filter);
+        }
+
+        let response = request.send().await.map_err(crate::Error::Transport)?;
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(crate::Error::Api(crate::error::ApiError::from_body(
+                status.as_u16(),
+                path,
+                body,
+            )));
+        }
+
+        // Nothing is retried past this point: a stream that dies mid-flight has
+        // already delivered events, and replaying it would repeat them. alpaca-py
+        // does not reconnect either.
+        Ok(response
+            .bytes_stream()
+            .eventsource()
+            .map(|event| match event {
+                Ok(event) => Ok(BrokerEvent::from(event)),
+                Err(error) => Err(crate::broker::events::stream_error(&error)),
+            }))
+    }
+
     // ------------------------------------------------- account activities
 
     /// Fetches one page of account activities.
@@ -604,7 +722,7 @@ impl BrokerClient {
 
         for attempt in 1..=total_attempts {
             let response = self
-                .downloads
+                .raw
                 .get(&url)
                 .send()
                 .await
