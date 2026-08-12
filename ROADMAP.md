@@ -119,6 +119,68 @@ is the least complete of Alpaca's five official SDKs for market data. Evidence:
 the OpenAPI specs carry 18 trading routes it lacks, and diffing the C#, Node, Go
 and Java clients found ~25 more non-broker gaps.
 
+### Start by reconciling against the published reference
+
+Three sources disagree about what the API is, and the published reference is the
+one that says which endpoints are *current*. The OpenAPI specs list routes
+without saying which are legacy; the other SDKs show what someone bothered to
+implement. Neither tells you a route has been switched off. **The reference
+does**, and the first pass over it found exactly that (see the SSE table below).
+
+The reference at <https://docs.alpaca.markets/us/reference/> is a JavaScript
+application and cannot be scraped. It publishes a machine-readable index instead:
+
+```sh
+curl -s https://docs.alpaca.markets/us/llms.txt          # every doc page, grouped
+curl -s https://docs.alpaca.markets/us/reference/<slug>.md   # one endpoint, as markdown
+```
+
+Every reference page has a `.md` twin at the same slug, carrying the method,
+path, parameters, and — the part that matters — the deprecation notes. Work the
+index group by group against `src/`, and for each endpoint record one of: ported,
+gap, or deliberately skipped.
+
+**Surface areas the index shows that the lists below do not mention at all.**
+Surfaced by one read of `llms.txt`, not yet checked against the port or costed:
+
+- **Broker JIT** — reports, daily limits, ledgers, ledger balances, settlements
+  (7 routes)
+- **Broker funding wallets** — create, batch create, transfers, recipient banks,
+  withdrawals (11 routes)
+- **Broker instant funding** (3 routes)
+- **Options approval** — request options trading for an account, list approval
+  requests (2 routes, BETA)
+- **Order estimation** — `/v1/trading/accounts/{id}/orders/estimation`
+- **Trading limits** — `/v1/account/trading/limits`
+- **W-8BEN download** — a separate route from the document download we have
+- **Asset entry requirements**
+- **A single activity event by ULID** — `getaccountactivityevent`
+- **More SSE streams than alpaca-py knows about** — admin actions, funding
+  status, system events, IPO events, activities, corporate actions
+- **OAuth token issuance**
+
+Confirmed already covered, so the reference is not all gaps: news, market movers,
+most actives, tokenisation, locates.
+
+### The event streams need correcting, not extending
+
+The first pass over the reference found that the five SSE streams shipped in
+Phase 6 — ported faithfully from alpaca-py — do not all still exist. alpaca-py
+is stale here and the port inherited it:
+
+| Stream | What we ship | What the reference says |
+|---|---|---|
+| Account status | `/v1/events/accounts/status` | current; `since_id`/`until_id` deprecated, sunset 2027-02-15, use `since_ulid` |
+| Trades | `/v1/events/trades` | **"fully deprecated and no longer available"** — use `/v2/events/trades` |
+| Journals | `/v1/events/journals/status` | legacy; `/v2/events/journals/status` exists, and the ids are *not* compatible between them |
+| Transfers | `/v1/events/transfers/status` | deprecated, existing broker partners only; new partners must use `/v2/events/funding/status` |
+| Non-trading activity | `/v1/events/nta` | not yet checked |
+
+`get_trade_events` therefore points at a route that is switched off. That is a
+Phase 6 defect rather than a Phase 6.5 gap and should be fixed first. The
+v2 streams also take `since_id`/`until_id` as ULIDs, which the v1 filter shape
+does not express.
+
 **Market data** — all confirmed present in `market-data-api.json`:
 
 - Auctions: `/v2/stocks/auctions` — the only route all four other SDKs carry and
