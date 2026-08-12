@@ -13,7 +13,9 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::broker::enums::{
-    AccountType, AgreementType, ClearingBroker, DocumentType, FundingSource, TaxIdType, VisaType,
+    ACHRelationshipStatus, AccountType, AgreementType, BankAccountType, BankStatus, ClearingBroker,
+    DocumentType, FeePaymentMethod, FundingSource, IdentifierType, TaxIdType, TransferDirection,
+    TransferStatus, TransferType, VisaType,
 };
 use crate::trading::AccountStatus;
 use crate::types::serde_util::empty_string_as_none;
@@ -355,6 +357,127 @@ pub struct Order {
     /// update events; [`Decimal`] reads both.
     #[serde(default, with = "crate::types::option_decimal")]
     pub commission: Option<Decimal>,
+}
+
+/// A link between an account and a bank account, for ACH transfers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ACHRelationship {
+    /// Alpaca's id for the relationship.
+    pub id: Uuid,
+    /// The account the relationship belongs to.
+    pub account_id: Uuid,
+    /// When the relationship was created.
+    pub created_at: DateTime<Utc>,
+    /// When the relationship last changed.
+    pub updated_at: DateTime<Utc>,
+    /// Where the relationship is in the approval process.
+    pub status: ACHRelationshipStatus,
+    /// The name on the bank account.
+    #[serde(default)]
+    pub account_owner_name: String,
+    /// Whether the bank account is checking or savings.
+    pub bank_account_type: BankAccountType,
+    /// The bank account number.
+    #[serde(default)]
+    pub bank_account_number: String,
+    /// The bank's routing number.
+    #[serde(default)]
+    pub bank_routing_number: String,
+    /// A caller-supplied name for the relationship.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub nickname: Option<String>,
+    /// The Plaid processor token, when the relationship was created through Plaid.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub processor_token: Option<String>,
+}
+
+/// A bank an account may wire money to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Bank {
+    /// Alpaca's id for the bank connection.
+    pub id: Uuid,
+    /// The account the connection belongs to.
+    pub account_id: Uuid,
+    /// When the connection was created.
+    pub created_at: DateTime<Utc>,
+    /// When the connection last changed.
+    pub updated_at: DateTime<Utc>,
+    /// The bank's name.
+    #[serde(default)]
+    pub name: String,
+    /// Where the connection is in the approval process.
+    pub status: BankStatus,
+    /// The bank's country. Empty for domestic banks.
+    #[serde(default)]
+    pub country: String,
+    /// The bank's state or province. Empty for domestic banks.
+    #[serde(default)]
+    pub state_province: String,
+    /// The bank's postal code. Empty for domestic banks.
+    #[serde(default)]
+    pub postal_code: String,
+    /// The bank's city. Empty for domestic banks.
+    #[serde(default)]
+    pub city: String,
+    /// The bank's street address. Empty for domestic banks.
+    #[serde(default)]
+    pub street_address: String,
+    /// The bank account number.
+    #[serde(default)]
+    pub account_number: String,
+    /// The routing number or BIC.
+    #[serde(default)]
+    pub bank_code: String,
+    /// Which of the two `bank_code` is.
+    pub bank_code_type: IdentifierType,
+}
+
+/// Money moving into or out of an account.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Transfer {
+    /// Alpaca's id for the transfer.
+    pub id: Uuid,
+    /// The account the money moves for.
+    pub account_id: Uuid,
+    /// When the transfer was created.
+    pub created_at: DateTime<Utc>,
+    /// When the transfer last changed.
+    #[serde(default)]
+    pub updated_at: Option<DateTime<Utc>>,
+    /// When the transfer expires if it has not settled.
+    #[serde(default)]
+    pub expires_at: Option<DateTime<Utc>>,
+    /// The ACH relationship the money moves over, for ACH transfers.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub relationship_id: Option<Uuid>,
+    /// The bank the money moves to, for wires.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub bank_id: Option<Uuid>,
+    /// What the recipient receives, after fees.
+    #[serde(with = "crate::types::decimal")]
+    pub amount: Decimal,
+    /// Whether this is an ACH transfer or a wire.
+    #[serde(rename = "type")]
+    pub transfer_type: TransferType,
+    /// Where the transfer is in its lifecycle.
+    pub status: TransferStatus,
+    /// Whether money is coming in or going out.
+    pub direction: TransferDirection,
+    /// Why the transfer is in its current status.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub reason: Option<String>,
+    /// What was asked for, before fees.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub requested_amount: Option<Decimal>,
+    /// Fees applied to the transfer.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub fee: Option<Decimal>,
+    /// How the fees are paid.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub fee_payment_method: Option<FeePaymentMethod>,
+    /// Free-text detail carried on wires.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub additional_information: Option<String>,
 }
 
 /// Positions held across every account, as of the last market close.

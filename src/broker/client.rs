@@ -8,8 +8,14 @@ use reqwest::Method;
 use uuid::Uuid;
 
 use crate::auth::Credentials;
-use crate::broker::models::{Account, AllAccountsPositions, Order, TradeAccount};
-use crate::broker::requests::{CreateOptionExerciseRequest, OrderRequest};
+use crate::broker::enums::ACHRelationshipStatus;
+use crate::broker::models::{
+    ACHRelationship, Account, AllAccountsPositions, Bank, Order, TradeAccount, Transfer,
+};
+use crate::broker::requests::{
+    CreateACHRelationshipRequest, CreateBankRequest, CreateOptionExerciseRequest,
+    CreateTransferRequest, GetTransfersRequest, OrderRequest,
+};
 use crate::config::BaseUrl;
 use crate::error::Result;
 use crate::rest::{Empty, RestClient, RestConfig};
@@ -154,6 +160,205 @@ impl BrokerClient {
     /// Propagates transport, API, and decoding failures.
     pub async fn get_all_accounts_positions(&self) -> Result<AllAccountsPositions> {
         self.rest.get("/accounts/positions", &Empty).await
+    }
+
+    // ----------------------------------------------------------- funding
+
+    /// Opens an ACH relationship between an account and a bank account.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn create_ach_relationship_for_account(
+        &self,
+        account_id: Uuid,
+        relationship: &CreateACHRelationshipRequest,
+    ) -> Result<ACHRelationship> {
+        self.rest
+            .post(
+                &format!("/accounts/{account_id}/ach_relationships"),
+                relationship,
+            )
+            .await
+    }
+
+    /// Lists an account's ACH relationships, optionally filtered by status.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_ach_relationships_for_account(
+        &self,
+        account_id: Uuid,
+        statuses: &[ACHRelationshipStatus],
+    ) -> Result<Vec<ACHRelationship>> {
+        let path = format!("/accounts/{account_id}/ach_relationships");
+        if statuses.is_empty() {
+            return self.rest.get(&path, &Empty).await;
+        }
+        // One comma-separated parameter, not a repeated one.
+        let statuses = statuses
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        self.rest.get(&path, &[("statuses", statuses)]).await
+    }
+
+    /// Deletes an ACH relationship.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn delete_ach_relationship_for_account(
+        &self,
+        account_id: Uuid,
+        ach_relationship_id: Uuid,
+    ) -> Result<()> {
+        self.send_void(
+            Method::DELETE,
+            &format!("/accounts/{account_id}/ach_relationships/{ach_relationship_id}"),
+            None::<&Empty>,
+        )
+        .await
+    }
+
+    /// Connects a recipient bank to an account, for wires.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if the address fields do not
+    /// match the bank code type; see [`CreateBankRequest::validate`].
+    pub async fn create_bank_for_account(
+        &self,
+        account_id: Uuid,
+        bank: &CreateBankRequest,
+    ) -> Result<Bank> {
+        bank.validate()?;
+        self.rest
+            .post(&format!("/accounts/{account_id}/recipient_banks"), bank)
+            .await
+    }
+
+    /// Lists an account's connected banks.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_banks_for_account(&self, account_id: Uuid) -> Result<Vec<Bank>> {
+        self.rest
+            .get(&format!("/accounts/{account_id}/recipient_banks"), &Empty)
+            .await
+    }
+
+    /// Deletes a bank connection.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn delete_bank_for_account(&self, account_id: Uuid, bank_id: Uuid) -> Result<()> {
+        self.send_void(
+            Method::DELETE,
+            &format!("/accounts/{account_id}/recipient_banks/{bank_id}"),
+            None::<&Empty>,
+        )
+        .await
+    }
+
+    /// Moves money into or out of an account.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if the amount is not positive.
+    pub async fn create_transfer_for_account(
+        &self,
+        account_id: Uuid,
+        transfer: &CreateTransferRequest,
+    ) -> Result<Transfer> {
+        transfer.validate()?;
+        self.rest
+            .post(&format!("/accounts/{account_id}/transfers"), transfer)
+            .await
+    }
+
+    /// Fetches one page of an account's transfers.
+    ///
+    /// This is alpaca-py's `PaginationType.NONE`: exactly one request, honouring
+    /// whatever `limit` and `offset` the filter carries. Use
+    /// [`get_all_transfers_for_account`](Self::get_all_transfers_for_account) to
+    /// walk every page.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_transfers_for_account(
+        &self,
+        account_id: Uuid,
+        filter: Option<&GetTransfersRequest>,
+    ) -> Result<Vec<Transfer>> {
+        let path = format!("/accounts/{account_id}/transfers");
+        match filter {
+            Some(filter) => self.rest.get(&path, filter).await,
+            None => self.rest.get(&path, &Empty).await,
+        }
+    }
+
+    /// Walks every page of an account's transfers.
+    ///
+    /// This is alpaca-py's default, `PaginationType.FULL`: request pages until
+    /// one comes back empty, then return the lot. `max_items` caps the total,
+    /// as alpaca-py's `max_items_limit` does.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_all_transfers_for_account(
+        &self,
+        account_id: Uuid,
+        filter: Option<&GetTransfersRequest>,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Transfer>> {
+        let mut filter = filter.cloned().unwrap_or_default();
+        let mut collected: Vec<Transfer> = Vec::new();
+
+        loop {
+            // alpaca-py sets the offset to the running count on every pass,
+            // including the first, so a caller-supplied offset is overwritten
+            // once the walk starts.
+            filter.offset = Some(u32::try_from(collected.len()).map_err(|_| {
+                crate::Error::InvalidRequest("too many transfers to page through".to_owned())
+            })?);
+
+            let page: Vec<Transfer> = self
+                .rest
+                .get(&format!("/accounts/{account_id}/transfers"), &filter)
+                .await?;
+
+            // An empty page is how this endpoint says it is done; it carries no
+            // token or total to check instead.
+            if page.is_empty() {
+                break;
+            }
+
+            collected.extend(page);
+
+            if let Some(max_items) = max_items
+                && collected.len() >= max_items
+            {
+                collected.truncate(max_items);
+                break;
+            }
+        }
+
+        Ok(collected)
+    }
+
+    /// Cancels a transfer that has not yet settled.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn cancel_transfer_for_account(
+        &self,
+        account_id: Uuid,
+        transfer_id: Uuid,
+    ) -> Result<()> {
+        self.send_void(
+            Method::DELETE,
+            &format!("/accounts/{account_id}/transfers/{transfer_id}"),
+            None::<&Empty>,
+        )
+        .await
     }
 
     // ------------------------------------------- trading on behalf of an account
