@@ -3,6 +3,7 @@
 mod corporate_actions;
 mod enums;
 mod historical;
+pub mod live;
 mod models;
 mod pagination;
 mod requests;
@@ -13,6 +14,10 @@ pub use enums::*;
 pub use historical::{
     CorporateActionsClient, CryptoHistoricalDataClient, NewsClient, OptionHistoricalDataClient,
     ScreenerClient, StockHistoricalDataClient,
+};
+pub use live::{
+    Channel, CryptoDataStream, DataStream, NewsDataStream, OptionDataStream, StockDataStream,
+    StreamConfig, StreamError, StreamMessage, SubscriptionSet, Subscriptions,
 };
 pub use models::*;
 pub use requests::*;

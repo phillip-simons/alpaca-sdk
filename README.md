@@ -21,8 +21,8 @@ Under active development. Ported phase by phase against alpaca-py commit `cc4cb3
 | Type vocabulary: 71 enums, `Decimal`, `TimeFrame` | ✅ |
 | Trading REST | ✅ |
 | Historical market data | ✅ |
-| Live market data streams | 🚧 |
-| Trade update stream | ⬜ |
+| Live market data streams | ✅ |
+| Trade update stream | 🚧 |
 | Broker API | ⬜ |
 
 ## What changes from alpaca-py
