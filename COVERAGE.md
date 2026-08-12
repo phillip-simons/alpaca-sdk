@@ -213,6 +213,18 @@ see ROADMAP.md.
 **wallets**
 - `GET   ` `/v1/wallets/fees/estimate`
 
+## Implemented, and marked deprecated by the spec
+
+Routes this crate calls that Alpaca has flagged. Deprecated is not
+gone — but `/v1/events/trades` was flagged before it was switched off,
+so each of these wants a replacement found before it is needed.
+
+- `GET   ` `/v2/corporate_actions/announcements`
+- `GET   ` `/v2/corporate_actions/announcements/{id}`
+- `GET   ` `/v1/accounts/positions`
+- `GET   ` `/v1/corporate_actions/announcements`
+- `GET   ` `/v1/corporate_actions/announcements/{id}`
+
 ## Called by the crate but not in any spec
 
 Each of these is one of: a route the specs have not caught up with, a

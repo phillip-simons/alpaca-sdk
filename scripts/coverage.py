@@ -42,11 +42,18 @@ def normalize(path: str) -> str:
     return path.rstrip("/") or "/"
 
 
-def spec_operations(spec: pathlib.Path) -> list[tuple[str, str]]:
-    """Every (method, path) in an OpenAPI document's `paths` section."""
+def spec_operations(spec: pathlib.Path) -> tuple[list[tuple[str, str]], set[tuple[str, str]]]:
+    """Every (method, path) in a document's `paths`, and which are deprecated.
+
+    The deprecation set is the reason this reads the spec rather than only
+    listing routes: a route that still exists but is on its way out looks
+    exactly like a healthy one from the crate's side.
+    """
     operations: list[tuple[str, str]] = []
+    deprecated: set[tuple[str, str]] = set()
     in_paths = False
     current: str | None = None
+    method: str | None = None
 
     for line in spec.read_text().splitlines():
         if re.match(r"^paths:\s*$", line):
@@ -57,16 +64,23 @@ def spec_operations(spec: pathlib.Path) -> list[tuple[str, str]]:
         if not in_paths:
             continue
 
-        path = re.match(r"^  (/\S*):\s*$", line)
-        if path:
-            current = path.group(1)
+        path_key = re.match(r"^  (/\S*):\s*$", line)
+        if path_key:
+            current, method = path_key.group(1), None
             continue
 
-        method = re.match(r"^    (\w+):\s*$", line)
-        if method and current and method.group(1).lower() in METHODS:
-            operations.append((method.group(1).lower(), current))
+        method_key = re.match(r"^    (\w+):\s*$", line)
+        if method_key and current and method_key.group(1).lower() in METHODS:
+            method = method_key.group(1).lower()
+            operations.append((method, current))
+            continue
 
-    return operations
+        # `deprecated: true` at operation depth. Deeper ones belong to
+        # parameters and are a different question.
+        if re.match(r"^      deprecated:\s*true\s*$", line) and current and method:
+            deprecated.add((method, current))
+
+    return operations, deprecated
 
 
 # `self.rest.get("/x", ..)`, `self.rest.post(&format!("/x/{y}"), ..)`, and the
@@ -153,14 +167,17 @@ def main() -> int:
     ]
 
     totals = []
+    rotting: list[tuple[str, str]] = []
     for surface in surfaces:
-        operations = spec_operations(args.specs / f"{surface}.yaml")
+        operations, deprecated = spec_operations(args.specs / f"{surface}.yaml")
         covered, gaps = [], []
         for method, path in sorted(operations, key=lambda o: (o[1], o[0])):
             key = (method, normalize(path))
             if key in implemented:
                 matched.add(key)
                 covered.append((method, path))
+                if (method, path) in deprecated:
+                    rotting.append((method, path))
             else:
                 gaps.append((method, path))
 
@@ -187,6 +204,19 @@ def main() -> int:
         else:
             lines += ["Nothing.", ""]
 
+    lines += ["## Implemented, and marked deprecated by the spec", ""]
+    if rotting:
+        lines += [
+            "Routes this crate calls that Alpaca has flagged. Deprecated is not",
+            "gone — but `/v1/events/trades` was flagged before it was switched off,",
+            "so each of these wants a replacement found before it is needed.",
+            "",
+        ]
+        lines += [f"- `{m.upper():6}` `{p}`" for m, p in rotting]
+        lines.append("")
+    else:
+        lines += ["Nothing.", ""]
+
     lines += ["## Called by the crate but not in any spec", ""]
     unmatched = sorted(set(implemented) - matched)
     if unmatched:
@@ -205,6 +235,7 @@ def main() -> int:
     args.out.write_text("\n".join(lines))
     for surface, covered, total in totals:
         print(f"{surface:9} {covered:3}/{total:<3} implemented")
+    print(f"{'deprecated':9} {len(rotting):3}     implemented routes the spec flags")
     print(f"{'unmatched':9} {len(unmatched):3}     crate routes not found in any spec")
     print(f"wrote {args.out}")
     return 0

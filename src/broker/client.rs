@@ -234,6 +234,10 @@ impl BrokerClient {
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Alpaca deprecated this route; it says to use GET /v1/reporting/eod/positions instead, which this crate does not wrap yet"
+    )]
     pub async fn get_all_accounts_positions(&self) -> Result<AllAccountsPositions> {
         self.rest.get("/accounts/positions", &Empty).await
     }

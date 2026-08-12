@@ -188,6 +188,7 @@ async fn all_accounts_positions_is_keyed_by_account() {
         .mount(&server)
         .await;
 
+    #[allow(deprecated)]
     let positions = client(&server).get_all_accounts_positions().await.unwrap();
     assert!(!positions.positions.is_empty());
 }
