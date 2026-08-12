@@ -40,12 +40,17 @@ diff <(grep -oE '^    def [a-z_0-9]+' ../alpaca-py/alpaca/broker/client.py \
         | sed 's/.*fn //' | sort -u)
 ```
 
-### Still open from Phase 6
+### Still open from Phase 6 (nothing route-shaped)
 
 - `create_account`, `update_account` and `list_accounts` take a generic
   `Serialize` body rather than a request type, so `CreateAccountRequest`,
   `UpdateAccountRequest` and `ListAccountsRequest` do not exist here — including
   the last one's `entities` comma-join, which currently falls on the caller.
+- `Weight::percent` is rounded to 2dp by the two constructors only. alpaca-py
+  rounds in a field validator, so it also rounds percentages *Alpaca sent*;
+  this port does not, on the grounds that editing a server's own numbers on the
+  way in is worse than the divergence. A `percent` assigned directly to the
+  field is likewise not rounded.
 - `Error` has no variant for a stream that breaks mid-flight. Both the SSE
   streams and the websocket code report those as `InvalidRequest`, which is
   wrong in the same way for both. Worth one variant covering the two.

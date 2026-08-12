@@ -666,6 +666,13 @@ impl W8BenDocument {
 }
 
 /// One line of a portfolio's target allocation.
+///
+/// alpaca-py rounds `percent` to two decimal places in a field validator, which
+/// fires on responses as well as requests. Here the two constructors round and
+/// nothing else does: a percentage Alpaca sends back is kept exactly as sent,
+/// and a `percent` assigned directly to the field is the caller's to round.
+/// Rounding a value on the way *in* would be the port quietly editing Alpaca's
+/// own numbers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Weight {
     /// Whether this line is cash or a security.
@@ -683,22 +690,28 @@ pub struct Weight {
 
 impl Weight {
     /// A cash line holding `percent` of the portfolio.
+    ///
+    /// `percent` is rounded to two decimal places, which is what Alpaca accepts
+    /// and what alpaca-py's validator does.
     #[must_use]
     pub fn cash(percent: Decimal) -> Self {
         Self {
             weight_type: WeightType::Cash,
             symbol: None,
-            percent,
+            percent: percent.round_dp(2),
         }
     }
 
     /// An asset line holding `percent` of the portfolio in `symbol`.
+    ///
+    /// `percent` is rounded to two decimal places, as for
+    /// [`cash`](Self::cash).
     #[must_use]
     pub fn asset(symbol: impl Into<String>, percent: Decimal) -> Self {
         Self {
             weight_type: WeightType::Asset,
             symbol: Some(symbol.into()),
-            percent,
+            percent: percent.round_dp(2),
         }
     }
 

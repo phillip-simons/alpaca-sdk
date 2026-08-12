@@ -147,6 +147,26 @@ fn a_run_carries_its_orders_skipped_and_placed() {
 // ------------------------------------------------------------- validation
 
 #[test]
+fn the_constructors_round_a_percentage_to_two_places() {
+    // alpaca-py rounds in a field validator; here the constructors do it.
+    assert_eq!(
+        Weight::asset("AAPL", Decimal::new(33333, 3)).percent,
+        Decimal::new(3333, 2)
+    );
+    assert_eq!(
+        Weight::cash(Decimal::new(66667, 3)).percent,
+        Decimal::new(6667, 2)
+    );
+
+    // A percentage Alpaca sent is kept exactly as sent — rounding on the way in
+    // would be the port editing the server's numbers.
+    let weight: Weight =
+        serde_json::from_value(json!({ "type": "cash", "symbol": null, "percent": "5.005" }))
+            .unwrap();
+    assert_eq!(weight.percent, Decimal::new(5005, 3));
+}
+
+#[test]
 fn a_weight_must_be_positive_and_an_asset_weight_must_name_a_symbol() {
     assert!(Weight::asset("AAPL", Decimal::from(35)).validate().is_ok());
     assert!(Weight::cash(Decimal::from(5)).validate().is_ok());
