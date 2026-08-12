@@ -14,12 +14,17 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::broker::enums::{
-    BankAccountType, DocumentType, FeePaymentMethod, IdentifierType, JournalEntryType,
-    JournalStatus, PortfolioStatus, RunType, TradeDocumentType, TransferDirection, TransferTiming,
-    TransferType, UploadDocumentMimeType, UploadDocumentSubType,
+    AccountEntities, AccountSubType, AccountType, BankAccountType, DocumentType, FeePaymentMethod,
+    FundingSource, IdentifierType, JournalEntryType, JournalStatus, PortfolioStatus, RunType,
+    TaxIdType, TradeDocumentType, TransferDirection, TransferTiming, TransferType,
+    UploadDocumentMimeType, UploadDocumentSubType, VisaType,
 };
-use crate::broker::models::{RebalancingCondition, W8BenDocument, Weight};
+use crate::broker::models::{
+    Agreement, Contact, Disclosures, Identity, RebalancingCondition, TrustedContact, W8BenDocument,
+    Weight,
+};
 use crate::error::{Error, Result};
+use crate::trading::{AccountStatus, AssetClass};
 use crate::trading::{ActivityType, OrderType};
 use crate::types::Sort;
 use crate::types::SupportedCurrencies;
@@ -92,6 +97,334 @@ impl OrderRequest {
 
         Ok(())
     }
+}
+
+/// The body that opens a brokerage account.
+///
+/// The four required fields are the ones [the reference][createaccount] marks
+/// required; [`validate`](Self::validate) additionally checks the sub-fields it
+/// lists, since a rejection at that depth is otherwise a round trip away.
+///
+/// [createaccount]: https://docs.alpaca.markets/us/reference/createaccount
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreateAccountRequest {
+    /// How to reach the account holder.
+    pub contact: Contact,
+    /// Who the account holder is.
+    pub identity: Identity,
+    /// The holder's regulatory disclosures.
+    pub disclosures: Disclosures,
+    /// The agreements the holder has signed. At least one is required.
+    pub agreements: Vec<Agreement>,
+    /// Whether this is a trading, custodial or other account.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_type: Option<AccountType>,
+    /// The IRA sub type, for IRA accounts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_sub_type: Option<AccountSubType>,
+    /// Identity documents submitted with the application.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub documents: Option<Vec<UploadDocument>>,
+    /// A secondary contact.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trusted_contact: Option<TrustedContact>,
+    /// The settlement currency. Unset means USD.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub currency: Option<SupportedCurrencies>,
+    /// Which asset classes the account may trade. Unset means Alpaca decides.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled_assets: Option<Vec<AssetClass>>,
+    /// The existing holder to attach this account to, for multi-live accounts.
+    ///
+    /// Documented but absent from alpaca-py. When it is set, Alpaca takes the
+    /// holder's details from that account instead of `contact` and `identity`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary_account_holder_id: Option<String>,
+}
+
+impl CreateAccountRequest {
+    /// An application for `contact`, signed off by `agreements`.
+    #[must_use]
+    pub fn new(
+        contact: Contact,
+        identity: Identity,
+        disclosures: Disclosures,
+        agreements: Vec<Agreement>,
+    ) -> Self {
+        Self {
+            contact,
+            identity,
+            disclosures,
+            agreements,
+            account_type: None,
+            account_sub_type: None,
+            documents: None,
+            trusted_contact: None,
+            currency: None,
+            enabled_assets: None,
+            primary_account_holder_id: None,
+        }
+    }
+
+    /// Checks the sub-fields Alpaca requires on a new account.
+    ///
+    /// Taken from [the reference][createaccount], not from alpaca-py, whose
+    /// equivalent validator checks a different set: it requires `phone_number`,
+    /// which the reference does not, misses six fields that are required, and
+    /// silently drops two of its own checks to a duplicate key in a dict literal.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] naming the first missing field.
+    ///
+    /// [createaccount]: https://docs.alpaca.markets/us/reference/createaccount
+    pub fn validate(&self) -> Result<()> {
+        fn require(present: bool, field: &str) -> Result<()> {
+            if present {
+                Ok(())
+            } else {
+                Err(Error::InvalidRequest(format!(
+                    "{field} is required to open an account"
+                )))
+            }
+        }
+
+        require(
+            !self.contact.email_address.is_empty(),
+            "contact.email_address",
+        )?;
+        require(
+            !self.contact.street_address.is_empty(),
+            "contact.street_address",
+        )?;
+        require(self.contact.city.is_some(), "contact.city")?;
+
+        require(!self.identity.given_name.is_empty(), "identity.given_name")?;
+        require(
+            !self.identity.family_name.is_empty(),
+            "identity.family_name",
+        )?;
+        require(
+            self.identity.date_of_birth.is_some(),
+            "identity.date_of_birth",
+        )?;
+        require(self.identity.tax_id_type.is_some(), "identity.tax_id_type")?;
+        require(
+            self.identity.country_of_tax_residence.is_some(),
+            "identity.country_of_tax_residence",
+        )?;
+        require(
+            !self.identity.funding_source.is_empty(),
+            "identity.funding_source",
+        )?;
+
+        require(
+            self.disclosures.is_control_person.is_some(),
+            "disclosures.is_control_person",
+        )?;
+        require(
+            self.disclosures.is_affiliated_exchange_or_finra.is_some(),
+            "disclosures.is_affiliated_exchange_or_finra",
+        )?;
+        require(
+            self.disclosures.is_politically_exposed.is_some(),
+            "disclosures.is_politically_exposed",
+        )?;
+        require(
+            self.disclosures.immediate_family_exposed.is_some(),
+            "disclosures.immediate_family_exposed",
+        )?;
+
+        require(!self.agreements.is_empty(), "agreements")?;
+        for agreement in &self.agreements {
+            require(agreement.ip_address.is_some(), "agreements[].ip_address")?;
+        }
+
+        Ok(())
+    }
+}
+
+/// Contact details on an account update, where every field is optional.
+///
+/// The response [`Contact`] requires an email address; an update that only
+/// changes a postal code should not have to restate one.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdatableContact {
+    /// Primary email address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email_address: Option<String>,
+    /// Primary phone number, including the country code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phone_number: Option<String>,
+    /// Street address lines.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub street_address: Option<Vec<String>>,
+    /// Unit or apartment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    /// City.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub city: Option<String>,
+    /// State or province. Required when the country is `USA`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    /// Postal code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub postal_code: Option<String>,
+    /// Country, as a three-letter code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub country: Option<String>,
+}
+
+/// Identity details on an account update.
+///
+/// The field list is [the reference's][patchaccount]. alpaca-py's is smaller
+/// than its own docstring claims — the docstring promises `tax_id`,
+/// `tax_id_type` and the `country_of_*` fields, and the class does not declare
+/// them. The reference says they are updatable, so they are here.
+///
+/// Documented as updatable but not yet modelled, because they need enums this
+/// crate does not generate: `marital_status`,
+/// `investment_experience_with_options`, `investment_experience_with_stocks`.
+///
+/// [patchaccount]: https://docs.alpaca.markets/us/reference/patchaccount
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdatableIdentity {
+    /// Given name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub given_name: Option<String>,
+    /// Middle name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub middle_name: Option<String>,
+    /// Family name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub family_name: Option<String>,
+    /// Date of birth.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_of_birth: Option<NaiveDate>,
+    /// Tax identification number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tax_id: Option<String>,
+    /// Which national scheme the tax id belongs to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tax_id_type: Option<TaxIdType>,
+    /// Country of citizenship.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub country_of_citizenship: Option<String>,
+    /// Country of birth.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub country_of_birth: Option<String>,
+    /// Country of tax residence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub country_of_tax_residence: Option<String>,
+    /// Where the account's funds come from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub funding_source: Option<Vec<FundingSource>>,
+    /// Visa category, for non-permanent residents.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visa_type: Option<VisaType>,
+    /// When the visa expires.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visa_expiration_date: Option<NaiveDate>,
+    /// Intended date of departure from the USA.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_of_departure_from_usa: Option<NaiveDate>,
+    /// Whether the holder is a permanent resident.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permanent_resident: Option<bool>,
+    /// How many dependents the holder has.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number_of_dependents: Option<u32>,
+    /// Annual income, lower bound.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub annual_income_min: Option<Decimal>,
+    /// Annual income, upper bound.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub annual_income_max: Option<Decimal>,
+    /// Liquid net worth, lower bound.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub liquid_net_worth_min: Option<Decimal>,
+    /// Liquid net worth, upper bound.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub liquid_net_worth_max: Option<Decimal>,
+    /// Total net worth, lower bound.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_net_worth_min: Option<Decimal>,
+    /// Total net worth, upper bound.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_net_worth_max: Option<Decimal>,
+}
+
+/// The body that changes an existing account.
+///
+/// Every field is optional and unset fields are not sent, so an update touches
+/// only what it names.
+///
+/// [The reference][patchaccount] lists four more top-level fields that this does
+/// not carry — `beneficiaries`, `cash_interest`, `fpsl` and `allow_instant_ach`
+/// — because they belong to broker features this crate has not modelled yet.
+///
+/// [patchaccount]: https://docs.alpaca.markets/us/reference/patchaccount
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdateAccountRequest {
+    /// New contact details.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contact: Option<UpdatableContact>,
+    /// New identity details.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity: Option<UpdatableIdentity>,
+    /// New disclosures. Every field is already optional on this type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disclosures: Option<Disclosures>,
+    /// New secondary contact.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trusted_contact: Option<TrustedContact>,
+    /// Further agreements the holder has signed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agreements: Option<Vec<Agreement>>,
+    /// The holder this account is attached to, for multi-live accounts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary_account_holder_id: Option<String>,
+}
+
+/// Filters for listing accounts.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListAccountsRequest {
+    /// Space-delimited tokens, matched against the account number, phone
+    /// number, name and email address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+    /// Only accounts created at or after this time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_after: Option<DateTime<Utc>>,
+    /// Only accounts created at or before this time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_before: Option<DateTime<Utc>>,
+    /// Only accounts in these statuses.
+    ///
+    /// Sent as one comma-separated parameter. The reference types this as a
+    /// single string rather than a list, so more than one value is untested
+    /// against the live API — alpaca-py models it as a list too.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "crate::types::serde_util::comma_separated"
+    )]
+    pub status: Option<Vec<AccountStatus>>,
+    /// Chronological ordering. Alpaca defaults to descending.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sort: Option<Sort>,
+    /// Which extra records to fill in on each account.
+    ///
+    /// The list route omits most of an account's detail to keep the response
+    /// small; naming entities here fills them back in. Sent as one
+    /// comma-separated parameter, which the reference is explicit about:
+    /// "comma-delimited entity names to include in the response".
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "crate::types::serde_util::comma_separated"
+    )]
+    pub entities: Option<Vec<AccountEntities>>,
 }
 
 /// The body that opens an ACH relationship.

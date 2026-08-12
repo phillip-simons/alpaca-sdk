@@ -35,7 +35,10 @@ pub struct Contact {
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub phone_number: Option<String>,
     /// Street address lines.
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::types::serde_util::null_as_default"
+    )]
     pub street_address: Vec<String>,
     /// Unit or apartment.
     #[serde(default, deserialize_with = "empty_string_as_none")]
@@ -83,7 +86,10 @@ pub struct Identity {
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub country_of_tax_residence: Option<String>,
     /// Where the account's funds come from.
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::types::serde_util::null_as_default"
+    )]
     pub funding_source: Vec<FundingSource>,
     /// Annual income, lower bound.
     #[serde(default)]
@@ -838,7 +844,10 @@ pub struct Portfolio {
     /// When the portfolio last changed.
     pub updated_at: DateTime<Utc>,
     /// The target allocation.
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::types::serde_util::null_as_default"
+    )]
     pub weights: Vec<Weight>,
     /// When to rebalance towards it.
     #[serde(default)]
@@ -899,7 +908,10 @@ pub struct RebalancingRun {
     #[serde(default, with = "crate::types::option_decimal")]
     pub amount: Option<Decimal>,
     /// The weights the run targets.
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::types::serde_util::null_as_default"
+    )]
     pub weights: Vec<Weight>,
     /// Whether Alpaca or the correspondent started the run.
     #[serde(default, deserialize_with = "empty_string_as_none")]
@@ -937,7 +949,10 @@ pub struct RebalancingRun {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubscriptionsPage {
     /// The subscriptions on this page.
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::types::serde_util::null_as_default"
+    )]
     pub subscriptions: Vec<Subscription>,
     /// The token that fetches the next page, when there is one.
     #[serde(default, deserialize_with = "empty_string_as_none")]
@@ -948,7 +963,10 @@ pub struct SubscriptionsPage {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunsPage {
     /// The runs on this page.
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::types::serde_util::null_as_default"
+    )]
     pub runs: Vec<RebalancingRun>,
     /// The token that fetches the next page, when there is one.
     #[serde(default, deserialize_with = "empty_string_as_none")]
@@ -1221,7 +1239,10 @@ pub struct CIPInfo {
     /// The account it belongs to.
     pub account_id: Uuid,
     /// Which KYC providers the information came from.
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::types::serde_util::null_as_default"
+    )]
     pub provider_name: Vec<CIPProvider>,
     /// When the record was first uploaded.
     pub created_at: DateTime<Utc>,

@@ -42,10 +42,6 @@ diff <(grep -oE '^    def [a-z_0-9]+' ../alpaca-py/alpaca/broker/client.py \
 
 ### Still open from Phase 6 (nothing route-shaped)
 
-- `create_account`, `update_account` and `list_accounts` take a generic
-  `Serialize` body rather than a request type, so `CreateAccountRequest`,
-  `UpdateAccountRequest` and `ListAccountsRequest` do not exist here — including
-  the last one's `entities` comma-join, which currently falls on the caller.
 - `Weight::percent` is rounded to 2dp by the two constructors only. alpaca-py
   rounds in a field validator, so it also rounds percentages *Alpaca sent*;
   this port does not, on the grounds that editing a server's own numbers on the
@@ -219,6 +215,28 @@ Six of those were in neither the route lists below nor the reference sweep:
 **Ipo, Ira, Reporting**. Diff against the vendored YAML directly — it is a file,
 not a website.
 
+### What building the account requests from the reference changed
+
+The three account request types were built from the reference rather than from
+alpaca-py, and the two disagree enough to be worth recording:
+
+- **The required-field set is different.** alpaca-py's create validator requires
+  `phone_number`, which the reference does not list; misses `street_address`,
+  `city`, `tax_id_type`, `country_of_tax_residence` and `funding_source`, which
+  it does; and loses two of its own four disclosure checks to a duplicate key in
+  a dict literal, so they never run. `CreateAccountRequest::validate` follows the
+  reference. It deliberately does *not* require a phone number: refusing a
+  request Alpaca would accept is the worse of the two failures.
+- **More is updatable than alpaca-py exposes.** The reference lists ten
+  updatable top-level fields to alpaca-py's four, and an identity field list that
+  includes `tax_id`, `tax_id_type` and the `country_of_*` fields — which
+  alpaca-py's *docstring* promises and its *code* omits. Not yet modelled, because
+  each needs types this crate lacks: `beneficiaries`, `cash_interest`, `fpsl`,
+  `allow_instant_ach`, and identity's `marital_status`,
+  `investment_experience_with_{options,stocks}`.
+- **`primary_account_holder_id`** exists on both create and update, for
+  multi-live accounts, and is absent from alpaca-py entirely.
+
 ### Documentation: cite the API, not the Python SDK
 
 **Partly done.** The framing is fixed — `lib.rs`, `README.md` and `NOTICE` now
@@ -359,6 +377,12 @@ a raw map.
 
 The method that has actually found bugs, in order of value:
 
+0. **A fixture only helps if something parses it.** The account-list payload sat
+   in `fixtures/` from the start with `"funding_source": null` in it, and nothing
+   deserialized it as a list until the account request work needed to. It failed
+   immediately: `#[serde(default)]` covers an *absent* field, not a present-and-
+   null one. Nine `Vec` fields had the same hole. Having the payload was not
+   enough — a test had to read it.
 1. **Captured fixtures beat schemas.** `fixtures/` holds 135 real API responses
    extracted from alpaca-py's test suite by `scripts/extract_fixtures.py`. Every
    model is verified against them. Three bugs came from this that no schema would

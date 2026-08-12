@@ -20,12 +20,13 @@ use crate::broker::models::{
     TradeDocument, Transfer,
 };
 use crate::broker::requests::{
-    CreateACHRelationshipRequest, CreateBankRequest, CreateBatchJournalRequest,
-    CreateJournalRequest, CreateOptionExerciseRequest, CreatePortfolioRequest,
-    CreateReverseBatchJournalRequest, CreateRunRequest, CreateSubscriptionRequest,
-    CreateTransferRequest, GetAccountActivitiesRequest, GetJournalsRequest, GetPortfoliosRequest,
-    GetRunsRequest, GetSubscriptionsRequest, GetTradeDocumentsRequest, GetTransfersRequest,
-    OrderRequest, UpdatePortfolioRequest, UploadDocument,
+    CreateACHRelationshipRequest, CreateAccountRequest, CreateBankRequest,
+    CreateBatchJournalRequest, CreateJournalRequest, CreateOptionExerciseRequest,
+    CreatePortfolioRequest, CreateReverseBatchJournalRequest, CreateRunRequest,
+    CreateSubscriptionRequest, CreateTransferRequest, GetAccountActivitiesRequest,
+    GetJournalsRequest, GetPortfoliosRequest, GetRunsRequest, GetSubscriptionsRequest,
+    GetTradeDocumentsRequest, GetTransfersRequest, ListAccountsRequest, OrderRequest,
+    UpdateAccountRequest, UpdatePortfolioRequest, UploadDocument,
 };
 use crate::config::BaseUrl;
 use crate::error::Result;
@@ -166,33 +167,43 @@ impl BrokerClient {
             .await
     }
 
-    /// Lists accounts matching the query.
+    /// Lists accounts, optionally filtered.
+    ///
+    /// This route returns a reduced view of each account by default; name
+    /// [`entities`](ListAccountsRequest::entities) to fill the rest back in.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
-    pub async fn list_accounts(&self, query: &[(&str, String)]) -> Result<Vec<Account>> {
-        self.rest.get("/accounts", query).await
+    pub async fn list_accounts(
+        &self,
+        filter: Option<&ListAccountsRequest>,
+    ) -> Result<Vec<Account>> {
+        match filter {
+            Some(filter) => self.rest.get("/accounts", filter).await,
+            None => self.rest.get("/accounts", &Empty).await,
+        }
     }
 
     /// Opens a new account.
     ///
     /// # Errors
-    /// Propagates transport, API, and decoding failures.
-    pub async fn create_account<B: serde::Serialize + ?Sized>(
-        &self,
-        account: &B,
-    ) -> Result<Account> {
+    /// Returns [`crate::Error::InvalidRequest`] if a field Alpaca requires on a
+    /// new account is missing; see [`CreateAccountRequest::validate`].
+    pub async fn create_account(&self, account: &CreateAccountRequest) -> Result<Account> {
+        account.validate()?;
         self.rest.post("/accounts", account).await
     }
 
     /// Updates an account.
     ///
+    /// Unset fields are not sent, so an update touches only what it names.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
-    pub async fn update_account<B: serde::Serialize + ?Sized>(
+    pub async fn update_account(
         &self,
         account_id: Uuid,
-        update: &B,
+        update: &UpdateAccountRequest,
     ) -> Result<Account> {
         self.rest
             .patch(&format!("/accounts/{account_id}"), update)

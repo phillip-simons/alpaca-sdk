@@ -186,6 +186,27 @@ pub mod int {
     }
 }
 
+/// Deserializes an explicit `null` as the type's default.
+///
+/// `#[serde(default)]` alone covers a field that is *absent*, not one that is
+/// present and null. Alpaca sends both — `"funding_source": null` appears in the
+/// same list response as a populated one — and the difference is invisible until
+/// a payload with the null form shows up, at which point the whole response
+/// fails to decode.
+///
+/// Pair it with `default` so both forms are handled:
+/// `#[serde(default, deserialize_with = "null_as_default")]`.
+///
+/// # Errors
+/// Propagates the deserializer's own failures.
+pub fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+
 /// Serializes a list as a single comma-separated query parameter.
 ///
 /// Alpaca expects `symbols=AAPL,SPY` rather than a repeated parameter.

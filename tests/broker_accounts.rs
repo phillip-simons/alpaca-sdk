@@ -2,12 +2,17 @@
 
 #![cfg(feature = "broker")]
 
-use alpaca_sdk::broker::{Account, BrokerClient};
+use alpaca_sdk::broker::{
+    Account, AccountEntities, Agreement, AgreementType, BrokerClient, Contact,
+    CreateAccountRequest, Disclosures, FundingSource, Identity, ListAccountsRequest, TaxIdType,
+    UpdatableContact, UpdateAccountRequest,
+};
 use alpaca_sdk::trading::AccountStatus;
+use alpaca_sdk::types::Sort;
 use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use serde_json::json;
 use uuid::Uuid;
-use wiremock::matchers::{header, method, path};
+use wiremock::matchers::{body_json, header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const ACCOUNT_ID: &str = "2a87c088-ffb6-472b-a4a3-cd9305c8605c";
@@ -270,6 +275,237 @@ async fn the_trade_account_and_its_configuration_are_separate_routes() {
         .unwrap();
 
     assert!(configuration.fractional_trading);
+}
+
+#[test]
+fn a_null_list_reads_as_an_empty_one() {
+    // `"funding_source": null` sits in the same list response as a populated
+    // one. #[serde(default)] covers an absent field, not a present-and-null
+    // one, so before this the whole response failed to decode — and the fixture
+    // that proves it had been in the tree the whole time, never parsed as a
+    // list.
+    let accounts: Vec<Account> = parse(
+        "broker/test_accounts_routes__test_list_accounts_parses_entities_if_present__01.json",
+    );
+
+    assert_eq!(accounts.len(), 2);
+    let first = accounts[0].identity.as_ref().expect("identity");
+    assert!(first.funding_source.is_empty());
+    let second = accounts[1].identity.as_ref().expect("identity");
+    assert_eq!(second.funding_source.len(), 1);
+}
+
+// ------------------------------------------------------- account requests
+
+fn valid_application() -> CreateAccountRequest {
+    let mut contact = Contact {
+        email_address: "jane@example.com".to_owned(),
+        street_address: vec!["20 N San Mateo Dr".to_owned()],
+        ..Contact::default()
+    };
+    contact.city = Some("San Mateo".to_owned());
+
+    let identity = Identity {
+        given_name: "Jane".to_owned(),
+        family_name: "Doe".to_owned(),
+        date_of_birth: Some("1990-01-01".parse().unwrap()),
+        tax_id_type: Some(TaxIdType::UsaSsn),
+        country_of_tax_residence: Some("USA".to_owned()),
+        funding_source: vec![FundingSource::EmploymentIncome],
+        ..Identity::default()
+    };
+
+    let disclosures = Disclosures {
+        is_control_person: Some(false),
+        is_affiliated_exchange_or_finra: Some(false),
+        is_politically_exposed: Some(false),
+        immediate_family_exposed: Some(false),
+        ..Disclosures::default()
+    };
+
+    CreateAccountRequest::new(
+        contact,
+        identity,
+        disclosures,
+        vec![Agreement {
+            agreement: AgreementType::Customer,
+            signed_at: "2022-04-28T14:07:04.451420Z".parse().unwrap(),
+            ip_address: Some("127.0.0.1".to_owned()),
+            revision: None,
+        }],
+    )
+}
+
+#[test]
+fn a_complete_application_validates() {
+    valid_application().validate().unwrap();
+}
+
+#[test]
+fn every_field_the_reference_marks_required_is_checked() {
+    // These come from the API reference, not from alpaca-py — whose own
+    // validator requires phone_number (the reference does not), misses six
+    // fields that are required, and loses two of its four disclosure checks to
+    // a duplicate key in a dict literal.
+    /// A field name paired with a way to remove it from a valid application.
+    type Case = (&'static str, Box<dyn Fn(&mut CreateAccountRequest)>);
+
+    let cases: Vec<Case> = vec![
+        (
+            "contact.email_address",
+            Box::new(|r: &mut CreateAccountRequest| r.contact.email_address.clear()),
+        ),
+        (
+            "contact.street_address",
+            Box::new(|r: &mut CreateAccountRequest| r.contact.street_address.clear()),
+        ),
+        (
+            "contact.city",
+            Box::new(|r: &mut CreateAccountRequest| r.contact.city = None),
+        ),
+        (
+            "identity.given_name",
+            Box::new(|r: &mut CreateAccountRequest| r.identity.given_name.clear()),
+        ),
+        (
+            "identity.family_name",
+            Box::new(|r: &mut CreateAccountRequest| r.identity.family_name.clear()),
+        ),
+        (
+            "identity.date_of_birth",
+            Box::new(|r: &mut CreateAccountRequest| r.identity.date_of_birth = None),
+        ),
+        (
+            "identity.tax_id_type",
+            Box::new(|r: &mut CreateAccountRequest| r.identity.tax_id_type = None),
+        ),
+        (
+            "identity.country_of_tax_residence",
+            Box::new(|r: &mut CreateAccountRequest| r.identity.country_of_tax_residence = None),
+        ),
+        (
+            "identity.funding_source",
+            Box::new(|r: &mut CreateAccountRequest| r.identity.funding_source.clear()),
+        ),
+        (
+            "disclosures.is_control_person",
+            Box::new(|r: &mut CreateAccountRequest| r.disclosures.is_control_person = None),
+        ),
+        (
+            "disclosures.is_affiliated_exchange_or_finra",
+            Box::new(|r: &mut CreateAccountRequest| {
+                r.disclosures.is_affiliated_exchange_or_finra = None
+            }),
+        ),
+        (
+            "disclosures.is_politically_exposed",
+            Box::new(|r: &mut CreateAccountRequest| r.disclosures.is_politically_exposed = None),
+        ),
+        (
+            "disclosures.immediate_family_exposed",
+            Box::new(|r: &mut CreateAccountRequest| r.disclosures.immediate_family_exposed = None),
+        ),
+        (
+            "agreements",
+            Box::new(|r: &mut CreateAccountRequest| r.agreements.clear()),
+        ),
+        (
+            "agreements[].ip_address",
+            Box::new(|r: &mut CreateAccountRequest| r.agreements[0].ip_address = None),
+        ),
+    ];
+
+    for (field, break_it) in cases {
+        let mut request = valid_application();
+        break_it(&mut request);
+        let Err(error) = request.validate() else {
+            panic!("{field} must be required");
+        };
+        assert!(
+            format!("{error}").contains(field),
+            "error for {field} should name it, said: {error}"
+        );
+    }
+}
+
+#[test]
+fn a_phone_number_is_not_required_even_though_alpaca_py_demands_one() {
+    // alpaca-py rejects an application with no phone_number. The reference does
+    // not list it as required, and refusing a request Alpaca would accept is
+    // the worse failure of the two.
+    let mut request = valid_application();
+    request.contact.phone_number = None;
+    request.validate().unwrap();
+}
+
+#[tokio::test]
+async fn an_incomplete_application_never_reaches_the_network() {
+    let server = MockServer::start().await;
+    let mut request = valid_application();
+    request.identity.tax_id_type = None;
+
+    let error = client(&server).create_account(&request).await.unwrap_err();
+
+    assert!(matches!(error, alpaca_sdk::Error::InvalidRequest(_)));
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn listing_accounts_sends_entities_as_one_comma_separated_parameter() {
+    // The list route trims each account to keep the response small; `entities`
+    // fills the detail back in. The reference is explicit that it is
+    // "comma-delimited", so a repeated parameter would silently filter nothing.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/accounts"))
+        .and(query_param("entities", "identity,contact"))
+        .and(query_param("sort", "asc"))
+        .and(query_param("query", "jane"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture(
+            "broker/test_accounts_routes__test_list_accounts_parses_entities_if_present__01.json",
+        )))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let filter = ListAccountsRequest {
+        query: Some("jane".to_owned()),
+        sort: Some(Sort::Asc),
+        entities: Some(vec![AccountEntities::Identity, AccountEntities::Contact]),
+        ..Default::default()
+    };
+
+    let accounts = client(&server).list_accounts(Some(&filter)).await.unwrap();
+    assert!(!accounts.is_empty());
+}
+
+#[tokio::test]
+async fn an_update_sends_only_the_fields_it_names() {
+    let server = MockServer::start().await;
+    Mock::given(method("PATCH"))
+        .and(path(format!("/v1/accounts/{ACCOUNT_ID}")))
+        .and(body_json(json!({
+            "contact": { "email_address": "new@example.com" }
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture(
+            "broker/test_accounts_routes__test_update_account__01.json",
+        )))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let update = UpdateAccountRequest {
+        contact: Some(UpdatableContact {
+            email_address: Some("new@example.com".to_owned()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    client(&server)
+        .update_account(Uuid::parse_str(ACCOUNT_ID).unwrap(), &update)
+        .await
+        .unwrap();
 }
 
 // ------------------------------------------- trading on behalf of accounts

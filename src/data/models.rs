@@ -346,7 +346,10 @@ pub struct News {
     ///
     /// The API always sends this, possibly empty, but the live stream can omit
     /// it — so it defaults rather than being required.
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::types::serde_util::null_as_default"
+    )]
     pub symbols: Vec<String>,
     /// Who wrote it.
     #[serde(default)]
@@ -363,7 +366,10 @@ pub struct News {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewsSet {
     /// The articles.
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::types::serde_util::null_as_default"
+    )]
     pub news: Vec<News>,
     /// Token for the next page, when the caller paginates manually.
     #[serde(default)]
