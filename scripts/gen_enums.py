@@ -47,6 +47,16 @@ MODULES = {
 # config.rs and types/common_enums.rs, and PaginationType is replaced by Stream.
 SKIP_ENUMS = {"BaseURL", "PaginationType", "Sort", "SupportedCurrencies"}
 
+# Enums that more than one feature-gated module needs. They live in `types` so
+# a module can use one without depending on the feature that happens to own it
+# upstream -- `data` needs ContractType, but must build with `trading` off.
+# Each is re-exported from its original module so the public path is unchanged.
+SHARED_ENUMS = {"ContractType"}
+SHARED_OUTPUT = (
+    "src/types/shared_enums.rs",
+    "Enums shared by more than one API surface.",
+)
+
 ATTR_LINE = re.compile(r"^\s*(\w+)\s*\((?:str|int)\)\s*:\s*(.*)$")
 BARE_URL = re.compile(r"(?<![<(\w])(https?://[^\s,)\]]+)")
 
@@ -359,21 +369,44 @@ def main() -> int:
     needs_methods: list[str] = []
     by_module: dict[str, list[WireEnum]] = {}
 
+    shared: list[WireEnum] = []
+    shared_sources: list[str] = []
+
     for rel_source, (rel_out, doc) in MODULES.items():
-        enums = parse_module(source_root / rel_source)
-        by_module[Path(rel_out).parent.name] = enums
-        for enum in enums:
+        parsed = parse_module(source_root / rel_source)
+
+        # Route the shared ones out of their owning module.
+        owned = [e for e in parsed if e.name not in SHARED_ENUMS]
+        for enum in parsed:
+            if enum.name in SHARED_ENUMS:
+                shared.append(enum)
+                shared_sources.append(rel_source)
+
+        by_module[Path(rel_out).parent.name] = owned
+        for enum in parsed:
             problems.extend(validate(enum))
             if enum.has_methods:
                 needs_methods.append(f"{rel_source}::{enum.name}")
 
         out_path = out_root / rel_out
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(render_module(doc, rel_source, revision, enums))
+        out_path.write_text(render_module(doc, rel_source, revision, owned))
 
-        members = sum(len(e.variants) for e in enums)
-        total += len(enums)
-        print(f"{rel_out}: {len(enums)} enums, {members} variants")
+        members = sum(len(e.variants) for e in owned)
+        total += len(owned)
+        print(f"{rel_out}: {len(owned)} enums, {members} variants")
+
+    if shared:
+        rel_out, doc = SHARED_OUTPUT
+        out_path = out_root / rel_out
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            render_module(doc, ", ".join(sorted(set(shared_sources))), revision, shared)
+        )
+        by_module["types"] = shared
+        total += len(shared)
+        members = sum(len(e.variants) for e in shared)
+        print(f"{rel_out}: {len(shared)} enums, {members} variants")
 
     parity_path = out_root / "tests" / "enum_parity.rs"
     parity_path.parent.mkdir(parents=True, exist_ok=True)

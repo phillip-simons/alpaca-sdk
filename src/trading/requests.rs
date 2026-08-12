@@ -24,11 +24,10 @@ use uuid::Uuid;
 
 use crate::error::{Error, Result};
 use crate::trading::enums::{
-    AssetClass, AssetExchange, AssetStatus, ContractType, CorporateActionDateType,
-    CorporateActionType, ExerciseStyle, OrderClass, OrderSide, OrderType, PositionIntent,
-    QueryOrderStatus, TimeInForce,
+    AssetClass, AssetExchange, AssetStatus, CorporateActionDateType, CorporateActionType,
+    ExerciseStyle, OrderClass, OrderSide, OrderType, PositionIntent, QueryOrderStatus, TimeInForce,
 };
-use crate::types::Sort;
+use crate::types::{ContractType, Sort};
 
 /// How much of an asset to trade.
 ///

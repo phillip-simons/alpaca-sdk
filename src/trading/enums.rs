@@ -510,16 +510,6 @@ wire_enum! {
 }
 
 wire_enum! {
-    /// Represents the contract type of options
-    pub enum ContractType {
-        /// `call`
-        Call => "call",
-        /// `put`
-        Put => "put",
-    }
-}
-
-wire_enum! {
     /// Represents the exercise style of options
     pub enum ExerciseStyle {
         /// `american`

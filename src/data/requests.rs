@@ -7,9 +7,9 @@ use crate::data::enums::{
     Adjustment, CorporateActionsType, DataFeed, MarketType, MostActivesBy, OptionsFeed,
 };
 use crate::data::timeframe::TimeFrame;
-use crate::trading::ContractType;
+
 use crate::types::serde_util::comma_separated;
-use crate::types::{Sort, SupportedCurrencies};
+use crate::types::{ContractType, Sort, SupportedCurrencies};
 
 /// One symbol or several.
 ///

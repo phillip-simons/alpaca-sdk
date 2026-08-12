@@ -21,11 +21,12 @@ use alpaca_sdk::data::{
 };
 use alpaca_sdk::trading::{
     AccountStatus, ActivityCategory, ActivityType, AssetClass, AssetExchange, AssetStatus,
-    ContractType, CorporateActionDateType, CorporateActionSubType, CorporateActionType, DTBPCheck,
-    ExerciseStyle, NonTradeActivityStatus, OrderClass, OrderSide, OrderStatus, OrderType, PDTCheck,
+    CorporateActionDateType, CorporateActionSubType, CorporateActionType, DTBPCheck, ExerciseStyle,
+    NonTradeActivityStatus, OrderClass, OrderSide, OrderStatus, OrderType, PDTCheck,
     PositionIntent, PositionSide, QueryOrderStatus, TimeInForce, TradeActivityType,
     TradeConfirmationEmail, TradeEvent,
 };
+use alpaca_sdk::types::ContractType;
 
 /// Asserts the known wire values and that each one round-trips.
 macro_rules! assert_wire_values {
@@ -244,11 +245,6 @@ fn trading_p_d_t_check_wire_values() {
 #[test]
 fn trading_trade_confirmation_email_wire_values() {
     assert_wire_values!(TradeConfirmationEmail, ["all", "none"]);
-}
-
-#[test]
-fn trading_contract_type_wire_values() {
-    assert_wire_values!(ContractType, ["call", "put"]);
 }
 
 #[test]
@@ -723,4 +719,9 @@ fn broker_run_status_wire_values() {
             "COMPLETED_ADJUSTED"
         ]
     );
+}
+
+#[test]
+fn types_contract_type_wire_values() {
+    assert_wire_values!(ContractType, ["call", "put"]);
 }

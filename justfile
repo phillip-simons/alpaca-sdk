@@ -7,8 +7,12 @@ alpaca_py := env_var_or_default("ALPACA_PY", "../alpaca-py")
 
 default: check
 
-# The fast gate. Run before every commit.
-check: fmt-check clippy doc test
+# The gate. Run before every commit.
+#
+# `features` is in here rather than only in `ci` because a missing cfg gate is
+# invisible to every other recipe — it compiles fine under --all-features and
+# fails only when a surface is built alone. It costs half a second warm.
+check: fmt-check clippy doc test features
 
 # Rewrite formatting in place.
 fmt:
@@ -75,7 +79,7 @@ semver:
     cargo semver-checks check-release
 
 # Everything CI runs.
-ci: check features msrv deny
+ci: check msrv deny
 
 # Fast inner-loop compile check. Needs `cargo install cargo-watch`.
 watch:

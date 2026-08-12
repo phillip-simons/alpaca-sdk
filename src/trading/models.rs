@@ -16,11 +16,12 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::trading::enums::{
-    AccountStatus, ActivityType, AssetClass, AssetExchange, AssetStatus, ContractType,
-    CorporateActionSubType, CorporateActionType, DTBPCheck, ExerciseStyle, NonTradeActivityStatus,
-    OrderClass, OrderSide, OrderStatus, OrderType, PDTCheck, PositionIntent, PositionSide,
-    TimeInForce, TradeActivityType, TradeConfirmationEmail, TradeEvent,
+    AccountStatus, ActivityType, AssetClass, AssetExchange, AssetStatus, CorporateActionSubType,
+    CorporateActionType, DTBPCheck, ExerciseStyle, NonTradeActivityStatus, OrderClass, OrderSide,
+    OrderStatus, OrderType, PDTCheck, PositionIntent, PositionSide, TimeInForce, TradeActivityType,
+    TradeConfirmationEmail, TradeEvent,
 };
+use crate::types::ContractType;
 use crate::types::serde_util::{self, empty_string_as_none};
 
 /// A tradable security.
