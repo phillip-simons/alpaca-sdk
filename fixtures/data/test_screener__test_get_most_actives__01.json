@@ -1,0 +1,55 @@
+{
+  "last_updated": "2023-06-23T14:19:00.182582147Z",
+  "most_actives": [
+    {
+      "symbol": "MULN",
+      "trade_count": 27058,
+      "volume": 58614890
+    },
+    {
+      "symbol": "PIK",
+      "trade_count": 176643,
+      "volume": 48724364
+    },
+    {
+      "symbol": "SRGA",
+      "trade_count": 81207,
+      "volume": 44628275
+    },
+    {
+      "symbol": "TSLA",
+      "trade_count": 538798,
+      "volume": 41377329
+    },
+    {
+      "symbol": "ONCS",
+      "trade_count": 89046,
+      "volume": 37026359
+    },
+    {
+      "symbol": "SQQQ",
+      "trade_count": 74322,
+      "volume": 34559063
+    },
+    {
+      "symbol": "TQQQ",
+      "trade_count": 147293,
+      "volume": 33886902
+    },
+    {
+      "symbol": "WORX",
+      "trade_count": 44965,
+      "volume": 29964316
+    },
+    {
+      "symbol": "SPCE",
+      "trade_count": 70019,
+      "volume": 23501207
+    },
+    {
+      "symbol": "SOFI",
+      "trade_count": 64437,
+      "volume": 22190348
+    }
+  ]
+}

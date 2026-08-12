@@ -1,0 +1,21 @@
+{
+  "next_page_token": "U1BZMjQwNDI2QzAwNTU1MDAwfDE3MTAyNTE1NDI1NTg0NDcxMDR8Qg==",
+  "trades": {
+    "SPY240426C00555000": [
+      {
+        "c": "I",
+        "p": 0.24,
+        "s": 1,
+        "t": "2024-03-12T13:34:54.178322688Z",
+        "x": "M"
+      },
+      {
+        "c": "j",
+        "p": 0.21,
+        "s": 20,
+        "t": "2024-03-12T13:52:22.558447104Z",
+        "x": "B"
+      }
+    ]
+  }
+}

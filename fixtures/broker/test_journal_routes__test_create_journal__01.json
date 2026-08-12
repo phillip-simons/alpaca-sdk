@@ -1,0 +1,11 @@
+{
+  "id": "a7a50677-2983-4c68-96dc-aff62fe3b8cf",
+  "to_account": "a4c80770-edca-45bc-b35c-cfdf2ed46649",
+  "entry_type": "JNLC",
+  "status": "executed",
+  "from_account": "ff7b9e35-90e7-453d-a410-b508e1971a36",
+  "settle_date": "2020-12-24",
+  "system_date": "2020-12-24",
+  "net_amount": "115.5",
+  "currency": "USD"
+}

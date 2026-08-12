@@ -1,0 +1,947 @@
+[
+  {
+    "fixture": "broker/test_account_activities_routes__test_get_activities_for_account_max_items_and_single_request_date__01.json",
+    "method": "GET",
+    "url": "{expr}",
+    "path": "{expr}",
+    "source": "tests/broker/broker_client/test_account_activities_routes.py::test_get_activities_for_account_max_items_and_single_request_date"
+  },
+  {
+    "fixture": "broker/test_accounts_routes__test_create_account__01.json",
+    "method": "POST",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/accounts",
+    "path": "/v1/accounts",
+    "source": "tests/broker/broker_client/test_accounts_routes.py::test_create_account"
+  },
+  {
+    "fixture": "broker/test_accounts_routes__test_create_ira_account__01.json",
+    "method": "POST",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/accounts",
+    "path": "/v1/accounts",
+    "source": "tests/broker/broker_client/test_accounts_routes.py::test_create_ira_account"
+  },
+  {
+    "fixture": "broker/test_accounts_routes__test_create_lct_account__01.json",
+    "method": "POST",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/accounts",
+    "path": "/v1/accounts",
+    "source": "tests/broker/broker_client/test_accounts_routes.py::test_create_lct_account"
+  },
+  {
+    "fixture": "broker/test_accounts_routes__test_get_account__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/accounts/{account_id}",
+    "path": "/v1/accounts/{account_id}",
+    "source": "tests/broker/broker_client/test_accounts_routes.py::test_get_account"
+  },
+  {
+    "fixture": "broker/test_accounts_routes__test_get_account_account_not_found__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/accounts/{account_id}",
+    "path": "/v1/accounts/{account_id}",
+    "source": "tests/broker/broker_client/test_accounts_routes.py::test_get_account_account_not_found"
+  },
+  {
+    "fixture": "broker/test_accounts_routes__test_get_trade_account_by_id__01.json",
+    "method": "GET",
+    "url": "{expr}",
+    "path": "{expr}",
+    "source": "tests/broker/broker_client/test_accounts_routes.py::test_get_trade_account_by_id"
+  },
+  {
+    "fixture": "broker/test_accounts_routes__test_get_trade_account_by_id_without_deprecated_pdt_fields__01.json",
+    "method": "GET",
+    "url": "{expr}",
+    "path": "{expr}",
+    "source": "tests/broker/broker_client/test_accounts_routes.py::test_get_trade_account_by_id_without_deprecated_pdt_fields"
+  },
+  {
+    "fixture": "broker/test_accounts_routes__test_get_trade_configuration_for_account__01.json",
+    "method": "GET",
+    "url": "{expr}",
+    "path": "{expr}",
+    "source": "tests/broker/broker_client/test_accounts_routes.py::test_get_trade_configuration_for_account"
+  },
+  {
+    "fixture": "broker/test_accounts_routes__test_list_accounts_no_params__01.json",
+    "method": "GET",
+    "url": "{expr}",
+    "path": "{expr}",
+    "source": "tests/broker/broker_client/test_accounts_routes.py::test_list_accounts_no_params"
+  },
+  {
+    "fixture": "broker/test_accounts_routes__test_list_accounts_parses_entities_if_present__01.json",
+    "method": "GET",
+    "url": "{expr}",
+    "path": "{expr}",
+    "source": "tests/broker/broker_client/test_accounts_routes.py::test_list_accounts_parses_entities_if_present"
+  },
+  {
+    "fixture": "broker/test_accounts_routes__test_update_account__01.json",
+    "method": "PATCH",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/accounts/{account_id}",
+    "path": "/v1/accounts/{account_id}",
+    "source": "tests/broker/broker_client/test_accounts_routes.py::test_update_account"
+  },
+  {
+    "fixture": "broker/test_accounts_routes__test_update_trade_configuration_for_account__01.json",
+    "method": "PATCH",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/account/configurations",
+    "path": "/v1/trading/accounts/{account_id}/account/configurations",
+    "source": "tests/broker/broker_client/test_accounts_routes.py::test_update_trade_configuration_for_account"
+  },
+  {
+    "fixture": "broker/test_documents_routes__test_get_trade_document_for_account_by_id__01.json",
+    "method": "GET",
+    "url": "{expr}",
+    "path": "{expr}",
+    "source": "tests/broker/broker_client/test_documents_routes.py::test_get_trade_document_for_account_by_id"
+  },
+  {
+    "fixture": "broker/test_documents_routes__test_get_trade_documents_for_account__01.json",
+    "method": "GET",
+    "url": "{expr}",
+    "path": "{expr}",
+    "source": "tests/broker/broker_client/test_documents_routes.py::test_get_trade_documents_for_account"
+  },
+  {
+    "fixture": "broker/test_funding_routes__test_create_ach_relationship_for_account__01.json",
+    "method": "POST",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/accounts/{account_id}/ach_relationships",
+    "path": "/v1/accounts/{account_id}/ach_relationships",
+    "source": "tests/broker/broker_client/test_funding_routes.py::test_create_ach_relationship_for_account"
+  },
+  {
+    "fixture": "broker/test_funding_routes__test_create_bank_for_account__01.json",
+    "method": "POST",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/accounts/{account_id}/recipient_banks",
+    "path": "/v1/accounts/{account_id}/recipient_banks",
+    "source": "tests/broker/broker_client/test_funding_routes.py::test_create_bank_for_account"
+  },
+  {
+    "fixture": "broker/test_funding_routes__test_create_transfer_for_account__01.json",
+    "method": "POST",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/accounts/{account_id}/transfers",
+    "path": "/v1/accounts/{account_id}/transfers",
+    "source": "tests/broker/broker_client/test_funding_routes.py::test_create_transfer_for_account"
+  },
+  {
+    "fixture": "broker/test_funding_routes__test_get_ach_relationships_for_account__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/accounts/{account_id}/ach_relationships",
+    "path": "/v1/accounts/{account_id}/ach_relationships",
+    "source": "tests/broker/broker_client/test_funding_routes.py::test_get_ach_relationships_for_account"
+  },
+  {
+    "fixture": "broker/test_funding_routes__test_get_ach_relationships_for_account_with_statuses__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/accounts/{account_id}/ach_relationships",
+    "path": "/v1/accounts/{account_id}/ach_relationships",
+    "source": "tests/broker/broker_client/test_funding_routes.py::test_get_ach_relationships_for_account_with_statuses"
+  },
+  {
+    "fixture": "broker/test_funding_routes__test_get_banks_for_account__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/accounts/{account_id}/recipient_banks",
+    "path": "/v1/accounts/{account_id}/recipient_banks",
+    "source": "tests/broker/broker_client/test_funding_routes.py::test_get_banks_for_account"
+  },
+  {
+    "fixture": "broker/test_journal_routes__test_batch_journal__01.json",
+    "method": "POST",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/journals/batch",
+    "path": "/v1/journals/batch",
+    "source": "tests/broker/broker_client/test_journal_routes.py::test_batch_journal"
+  },
+  {
+    "fixture": "broker/test_journal_routes__test_create_journal__01.json",
+    "method": "POST",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/journals",
+    "path": "/v1/journals",
+    "source": "tests/broker/broker_client/test_journal_routes.py::test_create_journal"
+  },
+  {
+    "fixture": "broker/test_journal_routes__test_create_lct_journal__01.json",
+    "method": "POST",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/journals",
+    "path": "/v1/journals",
+    "source": "tests/broker/broker_client/test_journal_routes.py::test_create_lct_journal"
+  },
+  {
+    "fixture": "broker/test_journal_routes__test_get_journal_by_id__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/journals/{journal_id}",
+    "path": "/v1/journals/{journal_id}",
+    "source": "tests/broker/broker_client/test_journal_routes.py::test_get_journal_by_id"
+  },
+  {
+    "fixture": "broker/test_journal_routes__test_get_journals__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/journals",
+    "path": "/v1/journals",
+    "source": "tests/broker/broker_client/test_journal_routes.py::test_get_journals"
+  },
+  {
+    "fixture": "broker/test_journal_routes__test_reverse_batch_journal__01.json",
+    "method": "POST",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/journals/reverse_batch",
+    "path": "/v1/journals/reverse_batch",
+    "source": "tests/broker/broker_client/test_journal_routes.py::test_reverse_batch_journal"
+  },
+  {
+    "fixture": "broker/test_misc_routes__test_get_calendar__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/calendar",
+    "path": "/v1/calendar",
+    "source": "tests/broker/broker_client/test_misc_routes.py::test_get_calendar"
+  },
+  {
+    "fixture": "broker/test_misc_routes__test_get_clock__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/clock",
+    "path": "/v1/clock",
+    "source": "tests/broker/broker_client/test_misc_routes.py::test_get_clock"
+  },
+  {
+    "fixture": "broker/test_rebalancing_routes__test_create_manual_run__01.json",
+    "method": "POST",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/rebalancing/runs",
+    "path": "/v1/rebalancing/runs",
+    "source": "tests/broker/broker_client/test_rebalancing_routes.py::test_create_manual_run"
+  },
+  {
+    "fixture": "broker/test_rebalancing_routes__test_create_portfolio__01.json",
+    "method": "POST",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/rebalancing/portfolios",
+    "path": "/v1/rebalancing/portfolios",
+    "source": "tests/broker/broker_client/test_rebalancing_routes.py::test_create_portfolio"
+  },
+  {
+    "fixture": "broker/test_rebalancing_routes__test_create_subscription__01.json",
+    "method": "POST",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/rebalancing/subscriptions",
+    "path": "/v1/rebalancing/subscriptions",
+    "source": "tests/broker/broker_client/test_rebalancing_routes.py::test_create_subscription"
+  },
+  {
+    "fixture": "broker/test_rebalancing_routes__test_get_all_portfolios__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/rebalancing/portfolios",
+    "path": "/v1/rebalancing/portfolios",
+    "source": "tests/broker/broker_client/test_rebalancing_routes.py::test_get_all_portfolios"
+  },
+  {
+    "fixture": "broker/test_rebalancing_routes__test_get_all_subscriptions__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/rebalancing/subscriptions",
+    "path": "/v1/rebalancing/subscriptions",
+    "source": "tests/broker/broker_client/test_rebalancing_routes.py::test_get_all_subscriptions"
+  },
+  {
+    "fixture": "broker/test_rebalancing_routes__test_get_portfolio_by_id__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/rebalancing/portfolios/{ptf_id}",
+    "path": "/v1/rebalancing/portfolios/{ptf_id}",
+    "source": "tests/broker/broker_client/test_rebalancing_routes.py::test_get_portfolio_by_id"
+  },
+  {
+    "fixture": "broker/test_rebalancing_routes__test_get_run_by_id__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/rebalancing/runs/{run_id}",
+    "path": "/v1/rebalancing/runs/{run_id}",
+    "source": "tests/broker/broker_client/test_rebalancing_routes.py::test_get_run_by_id"
+  },
+  {
+    "fixture": "broker/test_rebalancing_routes__test_get_subscription_by_id__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/rebalancing/subscriptions/{sub_id}",
+    "path": "/v1/rebalancing/subscriptions/{sub_id}",
+    "source": "tests/broker/broker_client/test_rebalancing_routes.py::test_get_subscription_by_id"
+  },
+  {
+    "fixture": "broker/test_rebalancing_routes__test_update_portfolio_by_id__01.json",
+    "method": "PATCH",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/rebalancing/portfolios/{ptf_id}",
+    "path": "/v1/rebalancing/portfolios/{ptf_id}",
+    "source": "tests/broker/broker_client/test_rebalancing_routes.py::test_update_portfolio_by_id"
+  },
+  {
+    "fixture": "broker/test_trading_routes__test_cancel_orders_for_account__01.json",
+    "method": "DELETE",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/orders",
+    "path": "/v1/trading/accounts/{account_id}/orders",
+    "source": "tests/broker/broker_client/test_trading_routes.py::test_cancel_orders_for_account"
+  },
+  {
+    "fixture": "broker/test_trading_routes__test_close_all_positions_for_account__01.json",
+    "method": "DELETE",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/positions",
+    "path": "/v1/trading/accounts/{account_id}/positions",
+    "source": "tests/broker/broker_client/test_trading_routes.py::test_close_all_positions_for_account"
+  },
+  {
+    "fixture": "broker/test_trading_routes__test_close_position_for_account_with_percentage__01.json",
+    "method": "DELETE",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/positions/{asset_id}",
+    "path": "/v1/trading/accounts/{account_id}/positions/{asset_id}",
+    "source": "tests/broker/broker_client/test_trading_routes.py::test_close_position_for_account_with_percentage"
+  },
+  {
+    "fixture": "broker/test_trading_routes__test_close_position_for_account_with_qty__01.json",
+    "method": "DELETE",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/positions/{asset_id}",
+    "path": "/v1/trading/accounts/{account_id}/positions/{asset_id}",
+    "source": "tests/broker/broker_client/test_trading_routes.py::test_close_position_for_account_with_qty"
+  },
+  {
+    "fixture": "broker/test_trading_routes__test_get_all_accounts_positions__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/accounts/positions",
+    "path": "/v1/accounts/positions",
+    "source": "tests/broker/broker_client/test_trading_routes.py::test_get_all_accounts_positions"
+  },
+  {
+    "fixture": "broker/test_trading_routes__test_get_all_positions_for_account__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/positions",
+    "path": "/v1/trading/accounts/{account_id}/positions",
+    "source": "tests/broker/broker_client/test_trading_routes.py::test_get_all_positions_for_account"
+  },
+  {
+    "fixture": "broker/test_trading_routes__test_get_portfolio_history__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/account/portfolio/history",
+    "path": "/v1/trading/accounts/{account_id}/account/portfolio/history",
+    "source": "tests/broker/broker_client/test_trading_routes.py::test_get_portfolio_history"
+  },
+  {
+    "fixture": "broker/test_trading_routes__test_get_portfolio_history_with_filter__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/account/portfolio/history",
+    "path": "/v1/trading/accounts/{account_id}/account/portfolio/history",
+    "source": "tests/broker/broker_client/test_trading_routes.py::test_get_portfolio_history_with_filter"
+  },
+  {
+    "fixture": "broker/test_trading_routes__test_get_portfolio_history_with_null_base_value__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/account/portfolio/history",
+    "path": "/v1/trading/accounts/{account_id}/account/portfolio/history",
+    "source": "tests/broker/broker_client/test_trading_routes.py::test_get_portfolio_history_with_null_base_value"
+  },
+  {
+    "fixture": "broker/test_trading_routes__test_get_portfolio_history_with_null_pl_pct__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/account/portfolio/history",
+    "path": "/v1/trading/accounts/{account_id}/account/portfolio/history",
+    "source": "tests/broker/broker_client/test_trading_routes.py::test_get_portfolio_history_with_null_pl_pct"
+  },
+  {
+    "fixture": "broker/test_watchlist_routes__test_add_asset_to_watchlist__01.json",
+    "method": "POST",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/watchlists/{watchlist_id}",
+    "path": "/v1/trading/accounts/{account_id}/watchlists/{watchlist_id}",
+    "source": "tests/broker/broker_client/test_watchlist_routes.py::test_add_asset_to_watchlist"
+  },
+  {
+    "fixture": "broker/test_watchlist_routes__test_create_watchlist_for_account__01.json",
+    "method": "POST",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/watchlists",
+    "path": "/v1/trading/accounts/{account_id}/watchlists",
+    "source": "tests/broker/broker_client/test_watchlist_routes.py::test_create_watchlist_for_account"
+  },
+  {
+    "fixture": "broker/test_watchlist_routes__test_get_watchlist_for_account_by_id__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/watchlists/{watchlist_id}",
+    "path": "/v1/trading/accounts/{account_id}/watchlists/{watchlist_id}",
+    "source": "tests/broker/broker_client/test_watchlist_routes.py::test_get_watchlist_for_account_by_id"
+  },
+  {
+    "fixture": "broker/test_watchlist_routes__test_get_watchlists_for_account__01.json",
+    "method": "GET",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/watchlists",
+    "path": "/v1/trading/accounts/{account_id}/watchlists",
+    "source": "tests/broker/broker_client/test_watchlist_routes.py::test_get_watchlists_for_account"
+  },
+  {
+    "fixture": "broker/test_watchlist_routes__test_remove_asset_from_watchlist_for_account__01.json",
+    "method": "DELETE",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/watchlists/{watchlist_id}/{symbol}",
+    "path": "/v1/trading/accounts/{account_id}/watchlists/{watchlist_id}/{symbol}",
+    "source": "tests/broker/broker_client/test_watchlist_routes.py::test_remove_asset_from_watchlist_for_account"
+  },
+  {
+    "fixture": "broker/test_watchlist_routes__test_remove_asset_to_watchlist_for_account__01.json",
+    "method": "DELETE",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/watchlists/{watchlist_id}/{symbol}",
+    "path": "/v1/trading/accounts/{account_id}/watchlists/{watchlist_id}/{symbol}",
+    "source": "tests/broker/broker_client/test_watchlist_routes.py::test_remove_asset_to_watchlist_for_account"
+  },
+  {
+    "fixture": "broker/test_watchlist_routes__test_update_watchlist_for_account_by_id__01.json",
+    "method": "PUT",
+    "url": "https://broker-api.sandbox.alpaca.markets/v1/trading/accounts/{account_id}/watchlists/{watchlist_id}",
+    "path": "/v1/trading/accounts/{account_id}/watchlists/{watchlist_id}",
+    "source": "tests/broker/broker_client/test_watchlist_routes.py::test_update_watchlist_for_account_by_id"
+  },
+  {
+    "fixture": "common/test_rest__test_request_sends_user_agent_header__01.json",
+    "method": "GET",
+    "url": "https://paper-api.alpaca.markets/v2/clock",
+    "path": "/v2/clock",
+    "source": "tests/common/test_rest.py::test_request_sends_user_agent_header"
+  },
+  {
+    "fixture": "data/test_corporate_actions__test_get_corporate_actions__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1/corporate-actions?symbols={_symbols_in_url}&cusips={_cusips_in_url}&types={_types_in_url}&start={_start_in_url}&ids={_ids_in_url}&sort={sort}&limit={limit}",
+    "path": "/v1/corporate-actions?symbols={_symbols_in_url}&cusips={_cusips_in_url}&types={_types_in_url}&start={_start_in_url}&ids={_ids_in_url}&sort={sort}&limit={limit}",
+    "source": "tests/data/test_corporate_actions.py::test_get_corporate_actions"
+  },
+  {
+    "fixture": "data/test_corporate_actions__test_get_corporate_actions__02.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1/corporate-actions?symbols={_symbols_in_url}&cusips={_cusips_in_url}&types={_types_in_url}&start={_start_in_url}&ids={_ids_in_url}&sort={sort}&limit={limit2}&page_token={_page_token_in_url}",
+    "path": "/v1/corporate-actions?symbols={_symbols_in_url}&cusips={_cusips_in_url}&types={_types_in_url}&start={_start_in_url}&ids={_ids_in_url}&sort={sort}&limit={limit2}&page_token={_page_token_in_url}",
+    "source": "tests/data/test_corporate_actions.py::test_get_corporate_actions"
+  },
+  {
+    "fixture": "data/test_historical_crypto_data__test_crypto_get_snapshot__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta3/crypto/us/snapshots?symbols={_symbols_in_url}",
+    "path": "/v1beta3/crypto/us/snapshots?symbols={_symbols_in_url}",
+    "source": "tests/data/test_historical_crypto_data.py::test_crypto_get_snapshot"
+  },
+  {
+    "fixture": "data/test_historical_crypto_data__test_crypto_latest_bar__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta3/crypto/us/latest/bars?symbols={symbol}",
+    "path": "/v1beta3/crypto/us/latest/bars?symbols={symbol}",
+    "source": "tests/data/test_historical_crypto_data.py::test_crypto_latest_bar"
+  },
+  {
+    "fixture": "data/test_historical_crypto_data__test_get_crypto_bars__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta3/crypto/us/bars?timeframe={timeframe}&start={_start_in_url}&end={_end_in_url}&symbols={_symbols_in_url}&limit=10000",
+    "path": "/v1beta3/crypto/us/bars?timeframe={timeframe}&start={_start_in_url}&end={_end_in_url}&symbols={_symbols_in_url}&limit=10000",
+    "source": "tests/data/test_historical_crypto_data.py::test_get_crypto_bars"
+  },
+  {
+    "fixture": "data/test_historical_crypto_data__test_get_crypto_latest_quote__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta3/crypto/us/latest/quotes?symbols={symbol}",
+    "path": "/v1beta3/crypto/us/latest/quotes?symbols={symbol}",
+    "source": "tests/data/test_historical_crypto_data.py::test_get_crypto_latest_quote"
+  },
+  {
+    "fixture": "data/test_historical_crypto_data__test_get_crypto_latest_trade__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta3/crypto/us/latest/trades?symbols={symbol}",
+    "path": "/v1beta3/crypto/us/latest/trades?symbols={symbol}",
+    "source": "tests/data/test_historical_crypto_data.py::test_get_crypto_latest_trade"
+  },
+  {
+    "fixture": "data/test_historical_crypto_data__test_get_crypto_quotes__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta3/crypto/us/quotes?start={_start_in_url}&end={_end_in_url}&symbols={_symbols_in_url}&limit=10000",
+    "path": "/v1beta3/crypto/us/quotes?start={_start_in_url}&end={_end_in_url}&symbols={_symbols_in_url}&limit=10000",
+    "source": "tests/data/test_historical_crypto_data.py::test_get_crypto_quotes"
+  },
+  {
+    "fixture": "data/test_historical_crypto_data__test_get_crypto_trades__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta3/crypto/us/trades?start={_start_in_url}&symbols={_symbols_in_url}&limit=10000",
+    "path": "/v1beta3/crypto/us/trades?start={_start_in_url}&symbols={_symbols_in_url}&limit=10000",
+    "source": "tests/data/test_historical_crypto_data.py::test_get_crypto_trades"
+  },
+  {
+    "fixture": "data/test_historical_news_data__test_get_news__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/news?symbols={symbols}&start={_start_in_url}&page_token={_next_page_token_in_url}&limit=50",
+    "path": "/v1beta1/news?symbols={symbols}&start={_start_in_url}&page_token={_next_page_token_in_url}&limit=50",
+    "source": "tests/data/test_historical_news_data.py::test_get_news"
+  },
+  {
+    "fixture": "data/test_historical_news_data__test_get_news__02.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/news?symbols={symbols}&start={_start_in_url}&page_token=MTczMDk3MTEwMTAwMDAwMDAwMHw0MTc5OTExNQ==&limit=50",
+    "path": "/v1beta1/news?symbols={symbols}&start={_start_in_url}&page_token=MTczMDk3MTEwMTAwMDAwMDAwMHw0MTc5OTExNQ==&limit=50",
+    "source": "tests/data/test_historical_news_data.py::test_get_news"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_bars__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/bars?symbols={symbol}&start={_start_in_url}&limit={limit}&timeframe={timeframe}",
+    "path": "/v1beta1/options/bars?symbols={symbol}&start={_start_in_url}&limit={limit}&timeframe={timeframe}",
+    "source": "tests/data/test_historical_option_data.py::test_get_bars"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_bars_multi_empty_response__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/bars?symbols={symbol}&start={_start_in_url}&limit={limit}&timeframe={timeframe}",
+    "path": "/v1beta1/options/bars?symbols={symbol}&start={_start_in_url}&limit={limit}&timeframe={timeframe}",
+    "source": "tests/data/test_historical_option_data.py::test_get_bars_multi_empty_response"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_bars_single_empty_response__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/bars?symbols={symbol}&start={_start_in_url}&limit={limit}&timeframe={timeframe}",
+    "path": "/v1beta1/options/bars?symbols={symbol}&start={_start_in_url}&limit={limit}&timeframe={timeframe}",
+    "source": "tests/data/test_historical_option_data.py::test_get_bars_single_empty_response"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_latest_quote__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/quotes/latest?symbols={symbol}",
+    "path": "/v1beta1/options/quotes/latest?symbols={symbol}",
+    "source": "tests/data/test_historical_option_data.py::test_get_latest_quote"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_latest_quote_multi_empty_response__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/quotes/latest?symbols={symbol}",
+    "path": "/v1beta1/options/quotes/latest?symbols={symbol}",
+    "source": "tests/data/test_historical_option_data.py::test_get_latest_quote_multi_empty_response"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_latest_quote_single_empty_response__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/quotes/latest?symbols={symbol}",
+    "path": "/v1beta1/options/quotes/latest?symbols={symbol}",
+    "source": "tests/data/test_historical_option_data.py::test_get_latest_quote_single_empty_response"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_latest_quote_with_feed__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/quotes/latest?symbols={symbol}&feed=indicative",
+    "path": "/v1beta1/options/quotes/latest?symbols={symbol}&feed=indicative",
+    "source": "tests/data/test_historical_option_data.py::test_get_latest_quote_with_feed"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_latest_trade__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/trades/latest?symbols={symbol}",
+    "path": "/v1beta1/options/trades/latest?symbols={symbol}",
+    "source": "tests/data/test_historical_option_data.py::test_get_latest_trade"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_latest_trade_multi_not_found__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/trades/latest?symbols={symbol}",
+    "path": "/v1beta1/options/trades/latest?symbols={symbol}",
+    "source": "tests/data/test_historical_option_data.py::test_get_latest_trade_multi_not_found"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_latest_trade_with_feed__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/trades/latest?symbols={symbol}&feed=indicative",
+    "path": "/v1beta1/options/trades/latest?symbols={symbol}&feed=indicative",
+    "source": "tests/data/test_historical_option_data.py::test_get_latest_trade_with_feed"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_multisymbol_latest_trade__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/trades/latest?symbols={_symbols_in_url}",
+    "path": "/v1beta1/options/trades/latest?symbols={_symbols_in_url}",
+    "source": "tests/data/test_historical_option_data.py::test_get_multisymbol_latest_trade"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_option_chain__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/snapshots/{symbol}?updated_since=2024-04-25T00%3A00%3A00%2B00%3A00",
+    "path": "/v1beta1/options/snapshots/{symbol}?updated_since=2024-04-25T00%3A00%3A00%2B00%3A00",
+    "source": "tests/data/test_historical_option_data.py::test_get_option_chain"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_snapshot__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/snapshots?symbols={symbol}&limit=1000",
+    "path": "/v1beta1/options/snapshots?symbols={symbol}&limit=1000",
+    "source": "tests/data/test_historical_option_data.py::test_get_snapshot"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_snapshot_latest_quote_only__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/snapshots?symbols={symbol}&limit=1000",
+    "path": "/v1beta1/options/snapshots?symbols={symbol}&limit=1000",
+    "source": "tests/data/test_historical_option_data.py::test_get_snapshot_latest_quote_only"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_snapshot_multi_empty_response__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/snapshots?symbols={symbol}&limit=1000",
+    "path": "/v1beta1/options/snapshots?symbols={symbol}&limit=1000",
+    "source": "tests/data/test_historical_option_data.py::test_get_snapshot_multi_empty_response"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_snapshot_single_empty_response__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/snapshots?symbols={symbol}&limit=1000",
+    "path": "/v1beta1/options/snapshots?symbols={symbol}&limit=1000",
+    "source": "tests/data/test_historical_option_data.py::test_get_snapshot_single_empty_response"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_snapshot_with_feed__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/snapshots?symbols={symbol}&feed=indicative&limit=1000",
+    "path": "/v1beta1/options/snapshots?symbols={symbol}&feed=indicative&limit=1000",
+    "source": "tests/data/test_historical_option_data.py::test_get_snapshot_with_feed"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_trades__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/trades?symbols={symbol}&start={_start_in_url}&limit={limit}",
+    "path": "/v1beta1/options/trades?symbols={symbol}&start={_start_in_url}&limit={limit}",
+    "source": "tests/data/test_historical_option_data.py::test_get_trades"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_trades_multi_empty_response__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/trades?symbols={_symbols_in_url}&start={_start_in_url}&limit={limit}",
+    "path": "/v1beta1/options/trades?symbols={_symbols_in_url}&start={_start_in_url}&limit={limit}",
+    "source": "tests/data/test_historical_option_data.py::test_get_trades_multi_empty_response"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_get_trades_single_empty_response__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/trades?symbols={symbol}&start={_start_in_url}&limit={limit}",
+    "path": "/v1beta1/options/trades?symbols={symbol}&start={_start_in_url}&limit={limit}",
+    "source": "tests/data/test_historical_option_data.py::test_get_trades_single_empty_response"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_multisymbol_get_bars__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/bars?start={_start_in_url}&symbols={_symbols_in_url}&timeframe={timeframe}&limit=10000",
+    "path": "/v1beta1/options/bars?start={_start_in_url}&symbols={_symbols_in_url}&timeframe={timeframe}&limit=10000",
+    "source": "tests/data/test_historical_option_data.py::test_multisymbol_get_bars"
+  },
+  {
+    "fixture": "data/test_historical_option_data__test_multisymbol_get_trades__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/options/trades?start={_start_in_url}&symbols={_symbols_in_url}&limit=10000",
+    "path": "/v1beta1/options/trades?start={_start_in_url}&symbols={_symbols_in_url}&limit=10000",
+    "source": "tests/data/test_historical_option_data.py::test_multisymbol_get_trades"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_get_bars__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/bars?symbols=AAPL&start={_start_in_url}&timeframe={timeframe}&limit={limit}",
+    "path": "/v2/stocks/bars?symbols=AAPL&start={_start_in_url}&timeframe={timeframe}&limit={limit}",
+    "source": "tests/data/test_historical_stock_data.py::test_get_bars"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_get_bars_desc__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/bars?symbols={symbol}&start={_start_in_url}&end={_end_in_url}&timeframe={timeframe}&limit={limit}&sort=desc",
+    "path": "/v2/stocks/bars?symbols={symbol}&start={_start_in_url}&end={_end_in_url}&timeframe={timeframe}&limit={limit}&sort=desc",
+    "source": "tests/data/test_historical_stock_data.py::test_get_bars_desc"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_get_bars_multi_empty_response__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/bars?symbols={symbol}&start={_start_in_url}&timeframe={timeframe}&limit={limit}",
+    "path": "/v2/stocks/bars?symbols={symbol}&start={_start_in_url}&timeframe={timeframe}&limit={limit}",
+    "source": "tests/data/test_historical_stock_data.py::test_get_bars_multi_empty_response"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_get_bars_single_empty_response__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/bars?symbols={symbol}&start={_start_in_url}&timeframe={timeframe}&limit={limit}",
+    "path": "/v2/stocks/bars?symbols={symbol}&start={_start_in_url}&timeframe={timeframe}&limit={limit}",
+    "source": "tests/data/test_historical_stock_data.py::test_get_bars_single_empty_response"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_get_latest_quote__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/quotes/latest?symbols=AAPL",
+    "path": "/v2/stocks/quotes/latest?symbols=AAPL",
+    "source": "tests/data/test_historical_stock_data.py::test_get_latest_quote"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_get_latest_quote_multi_empty_response__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/quotes/latest?symbols={symbol}",
+    "path": "/v2/stocks/quotes/latest?symbols={symbol}",
+    "source": "tests/data/test_historical_stock_data.py::test_get_latest_quote_multi_empty_response"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_get_latest_trade__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/trades/latest?symbols=AAPL&feed=IEX",
+    "path": "/v2/stocks/trades/latest?symbols=AAPL&feed=IEX",
+    "source": "tests/data/test_historical_stock_data.py::test_get_latest_trade"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_get_latest_trade_multi_not_found__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/trades/latest?symbols={symbol}&feed=IEX",
+    "path": "/v2/stocks/trades/latest?symbols={symbol}&feed=IEX",
+    "source": "tests/data/test_historical_stock_data.py::test_get_latest_trade_multi_not_found"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_get_multisymbol_latest_trade__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/trades/latest?symbols={_symbols_in_url}",
+    "path": "/v2/stocks/trades/latest?symbols={_symbols_in_url}",
+    "source": "tests/data/test_historical_stock_data.py::test_get_multisymbol_latest_trade"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_get_quotes__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/quotes?symbols={symbol}&start={_start_in_url}&limit={limit}",
+    "path": "/v2/stocks/quotes?symbols={symbol}&start={_start_in_url}&limit={limit}",
+    "source": "tests/data/test_historical_stock_data.py::test_get_quotes"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_get_quotes_multi_empty_response__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/quotes?symbols={symbol}&start={_start_in_url}&limit={limit}",
+    "path": "/v2/stocks/quotes?symbols={symbol}&start={_start_in_url}&limit={limit}",
+    "source": "tests/data/test_historical_stock_data.py::test_get_quotes_multi_empty_response"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_get_snapshot__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/snapshots?symbols=AAPL",
+    "path": "/v2/stocks/snapshots?symbols=AAPL",
+    "source": "tests/data/test_historical_stock_data.py::test_get_snapshot"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_get_snapshot_multi_empty_response__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/snapshots?symbols={symbol}",
+    "path": "/v2/stocks/snapshots?symbols={symbol}",
+    "source": "tests/data/test_historical_stock_data.py::test_get_snapshot_multi_empty_response"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_get_trades__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/trades?symbols=AAPL&start={_start_in_url}&limit={limit}&asof=2022-03-09",
+    "path": "/v2/stocks/trades?symbols=AAPL&start={_start_in_url}&limit={limit}&asof=2022-03-09",
+    "source": "tests/data/test_historical_stock_data.py::test_get_trades"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_get_trades_multi_empty_response__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/trades?symbols={symbol}&start={_start_in_url}&limit={limit}",
+    "path": "/v2/stocks/trades?symbols={symbol}&start={_start_in_url}&limit={limit}",
+    "source": "tests/data/test_historical_stock_data.py::test_get_trades_multi_empty_response"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_multi_stock_latest_bar__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/bars/latest?symbols={_symbols_in_url}",
+    "path": "/v2/stocks/bars/latest?symbols={_symbols_in_url}",
+    "source": "tests/data/test_historical_stock_data.py::test_multi_stock_latest_bar"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_multisymbol_get_bars__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/bars?timeframe={timeframe}&start={_start_in_url}&end={_end_in_url}&symbols={_symbols_in_url}&limit=10000",
+    "path": "/v2/stocks/bars?timeframe={timeframe}&start={_start_in_url}&end={_end_in_url}&symbols={_symbols_in_url}&limit=10000",
+    "source": "tests/data/test_historical_stock_data.py::test_multisymbol_get_bars"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_multisymbol_get_trades__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/trades?start={_start_in_url}&symbols={_symbols_in_url}&limit=10000",
+    "path": "/v2/stocks/trades?start={_start_in_url}&symbols={_symbols_in_url}&limit=10000",
+    "source": "tests/data/test_historical_stock_data.py::test_multisymbol_get_trades"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_multisymbol_quotes__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/quotes?start={_start_in_url}&symbols={_symbols_in_url}&asof=-&limit=10000",
+    "path": "/v2/stocks/quotes?start={_start_in_url}&symbols={_symbols_in_url}&asof=-&limit=10000",
+    "source": "tests/data/test_historical_stock_data.py::test_multisymbol_quotes"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_stock_latest_bar__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/bars/latest?symbols=SPY",
+    "path": "/v2/stocks/bars/latest?symbols=SPY",
+    "source": "tests/data/test_historical_stock_data.py::test_stock_latest_bar"
+  },
+  {
+    "fixture": "data/test_historical_stock_data__test_stock_latest_bar_multi_empty_response__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v2/stocks/bars/latest?symbols={symbol}",
+    "path": "/v2/stocks/bars/latest?symbols={symbol}",
+    "source": "tests/data/test_historical_stock_data.py::test_stock_latest_bar_multi_empty_response"
+  },
+  {
+    "fixture": "data/test_screener__test_get_market_movers__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/screener/stocks/movers?top={num_movers}",
+    "path": "/v1beta1/screener/stocks/movers?top={num_movers}",
+    "source": "tests/data/test_screener.py::test_get_market_movers"
+  },
+  {
+    "fixture": "data/test_screener__test_get_most_actives__01.json",
+    "method": "GET",
+    "url": "https://data.alpaca.markets/v1beta1/screener/stocks/most-actives?by=volume&top={num_movers}",
+    "path": "/v1beta1/screener/stocks/most-actives?by=volume&top={num_movers}",
+    "source": "tests/data/test_screener.py::test_get_most_actives"
+  },
+  {
+    "fixture": "trading/test_account_routes__test_get_account__01.json",
+    "method": "GET",
+    "url": "https://paper-api.alpaca.markets/v2/account",
+    "path": "/v2/account",
+    "source": "tests/trading/trading_client/test_account_routes.py::test_get_account"
+  },
+  {
+    "fixture": "trading/test_account_routes__test_get_account_configurations__01.json",
+    "method": "GET",
+    "url": "https://paper-api.alpaca.markets/v2/account/configurations",
+    "path": "/v2/account/configurations",
+    "source": "tests/trading/trading_client/test_account_routes.py::test_get_account_configurations"
+  },
+  {
+    "fixture": "trading/test_account_routes__test_get_account_configurations_without_deprecated_pdt_fields__01.json",
+    "method": "GET",
+    "url": "https://paper-api.alpaca.markets/v2/account/configurations",
+    "path": "/v2/account/configurations",
+    "source": "tests/trading/trading_client/test_account_routes.py::test_get_account_configurations_without_deprecated_pdt_fields"
+  },
+  {
+    "fixture": "trading/test_asset_routes__test_get_all_assets__01.json",
+    "method": "GET",
+    "url": "https://paper-api.alpaca.markets/v2/assets?status=active",
+    "path": "/v2/assets?status=active",
+    "source": "tests/trading/trading_client/test_asset_routes.py::test_get_all_assets"
+  },
+  {
+    "fixture": "trading/test_asset_routes__test_get_all_assets_params__01.json",
+    "method": "GET",
+    "url": "https://paper-api.alpaca.markets/v2/assets?status=active&asset_class=us_equity&exchange=NASDAQ&attributes=attribute1%2Cattribute2",
+    "path": "/v2/assets?status=active&asset_class=us_equity&exchange=NASDAQ&attributes=attribute1%2Cattribute2",
+    "source": "tests/trading/trading_client/test_asset_routes.py::test_get_all_assets_params"
+  },
+  {
+    "fixture": "trading/test_asset_routes__test_get_asset__01.json",
+    "method": "GET",
+    "url": "https://paper-api.alpaca.markets/v2/assets/{symbol}",
+    "path": "/v2/assets/{symbol}",
+    "source": "tests/trading/trading_client/test_asset_routes.py::test_get_asset"
+  },
+  {
+    "fixture": "trading/test_corporate_announcements__test_get_announcements__01.json",
+    "method": "GET",
+    "url": "https://paper-api.alpaca.markets/v2/corporate_actions/announcements?ca_types={ca_types}&since={since}&until={until}",
+    "path": "/v2/corporate_actions/announcements?ca_types={ca_types}&since={since}&until={until}",
+    "source": "tests/trading/trading_client/test_corporate_announcements.py::test_get_announcements"
+  },
+  {
+    "fixture": "trading/test_option_routes__test_get_option_contract__01.json",
+    "method": "GET",
+    "url": "https://paper-api.alpaca.markets/v2/options/contracts/{symbol}",
+    "path": "/v2/options/contracts/{symbol}",
+    "source": "tests/trading/trading_client/test_option_routes.py::test_get_option_contract"
+  },
+  {
+    "fixture": "trading/test_option_routes__test_get_option_contracts__01.json",
+    "method": "GET",
+    "url": "https://paper-api.alpaca.markets/v2/options/contracts?underlying_symbols=AAPL",
+    "path": "/v2/options/contracts?underlying_symbols=AAPL",
+    "source": "tests/trading/trading_client/test_option_routes.py::test_get_option_contracts"
+  },
+  {
+    "fixture": "trading/test_option_routes__test_get_option_contracts_with_multiple_symbols__01.json",
+    "method": "GET",
+    "url": "https://paper-api.alpaca.markets/v2/options/contracts?underlying_symbols=AAPL,SPY",
+    "path": "/v2/options/contracts?underlying_symbols=AAPL,SPY",
+    "source": "tests/trading/trading_client/test_option_routes.py::test_get_option_contracts_with_multiple_symbols"
+  },
+  {
+    "fixture": "trading/test_order_routes__test_cancel_orders__01.json",
+    "method": "DELETE",
+    "url": "https://paper-api.alpaca.markets/v2/orders",
+    "path": "/v2/orders",
+    "source": "tests/trading/trading_client/test_order_routes.py::test_cancel_orders"
+  },
+  {
+    "fixture": "trading/test_order_routes__test_get_order_by_client_id__01.json",
+    "method": "GET",
+    "url": "https://paper-api.alpaca.markets/v2/orders:by_client_order_id?client_order_id={client_id}",
+    "path": "/v2/orders:by_client_order_id?client_order_id={client_id}",
+    "source": "tests/trading/trading_client/test_order_routes.py::test_get_order_by_client_id"
+  },
+  {
+    "fixture": "trading/test_order_routes__test_get_order_by_id__01.json",
+    "method": "GET",
+    "url": "https://paper-api.alpaca.markets/v2/orders/{order_id}",
+    "path": "/v2/orders/{order_id}",
+    "source": "tests/trading/trading_client/test_order_routes.py::test_get_order_by_id"
+  },
+  {
+    "fixture": "trading/test_order_routes__test_get_orders__01.json",
+    "method": "GET",
+    "url": "https://paper-api.alpaca.markets/v2/orders",
+    "path": "/v2/orders",
+    "source": "tests/trading/trading_client/test_order_routes.py::test_get_orders"
+  },
+  {
+    "fixture": "trading/test_order_routes__test_limit_order__01.json",
+    "method": "POST",
+    "url": "https://paper-api.alpaca.markets/v2/orders",
+    "path": "/v2/orders",
+    "source": "tests/trading/trading_client/test_order_routes.py::test_limit_order"
+  },
+  {
+    "fixture": "trading/test_order_routes__test_market_order__01.json",
+    "method": "POST",
+    "url": "https://paper-api.alpaca.markets/v2/orders",
+    "path": "/v2/orders",
+    "source": "tests/trading/trading_client/test_order_routes.py::test_market_order"
+  },
+  {
+    "fixture": "trading/test_order_routes__test_order_position_intent__01.json",
+    "method": "POST",
+    "url": "https://paper-api.alpaca.markets/v2/orders",
+    "path": "/v2/orders",
+    "source": "tests/trading/trading_client/test_order_routes.py::test_order_position_intent"
+  },
+  {
+    "fixture": "trading/test_order_routes__test_order_position_intent__02.json",
+    "method": "POST",
+    "url": "https://paper-api.alpaca.markets/v2/orders",
+    "path": "/v2/orders",
+    "source": "tests/trading/trading_client/test_order_routes.py::test_order_position_intent"
+  },
+  {
+    "fixture": "trading/test_order_routes__test_replace_order__01.json",
+    "method": "PATCH",
+    "url": "https://paper-api.alpaca.markets/v2/orders/{order_id}",
+    "path": "/v2/orders/{order_id}",
+    "source": "tests/trading/trading_client/test_order_routes.py::test_replace_order"
+  },
+  {
+    "fixture": "trading/test_position_routes__test_close_all_positions__01.json",
+    "method": "DELETE",
+    "url": "https://paper-api.alpaca.markets/v2/positions",
+    "path": "/v2/positions",
+    "source": "tests/trading/trading_client/test_position_routes.py::test_close_all_positions"
+  },
+  {
+    "fixture": "trading/test_position_routes__test_close_position_with_percentage__01.json",
+    "method": "DELETE",
+    "url": "https://paper-api.alpaca.markets/v2/positions/{asset_id}",
+    "path": "/v2/positions/{asset_id}",
+    "source": "tests/trading/trading_client/test_position_routes.py::test_close_position_with_percentage"
+  },
+  {
+    "fixture": "trading/test_position_routes__test_close_position_with_qty__01.json",
+    "method": "DELETE",
+    "url": "https://paper-api.alpaca.markets/v2/positions/{asset_id}",
+    "path": "/v2/positions/{asset_id}",
+    "source": "tests/trading/trading_client/test_position_routes.py::test_close_position_with_qty"
+  },
+  {
+    "fixture": "trading/test_position_routes__test_get_all_positions__01.json",
+    "method": "GET",
+    "url": "https://paper-api.alpaca.markets/v2/positions",
+    "path": "/v2/positions",
+    "source": "tests/trading/trading_client/test_position_routes.py::test_get_all_positions"
+  }
+]

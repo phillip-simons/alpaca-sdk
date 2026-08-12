@@ -1,0 +1,19 @@
+{
+  "corporate_actions": {
+    "cash_dividends": [
+      {
+        "cusip": "CUSIP1",
+        "id": "a7932b15-f816-4f83-921e-998b524487c3",
+        "ex_date": "2024-08-07",
+        "foreign": true,
+        "payable_date": "2024-08-26",
+        "process_date": "2024-08-26",
+        "rate": 0.086928,
+        "record_date": "2024-08-07",
+        "special": false,
+        "symbol": "ZMTBY"
+      }
+    ]
+  },
+  "next_page_token": null
+}

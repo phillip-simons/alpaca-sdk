@@ -1,0 +1,16 @@
+[
+  {
+    "date": "2022-05-16",
+    "open": "09:30",
+    "close": "16:00",
+    "session_open": "0400",
+    "session_close": "2000"
+  },
+  {
+    "date": "2022-05-17",
+    "open": "09:30",
+    "close": "16:00",
+    "session_open": "0400",
+    "session_close": "2000"
+  }
+]

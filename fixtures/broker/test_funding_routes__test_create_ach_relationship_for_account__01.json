@@ -1,0 +1,11 @@
+{
+  "id": "15ef9978-cb1e-4872-9565-bd0a720b8b76",
+  "account_id": "2a87c088-ffb6-472b-a4a3-cd9305c8605c",
+  "created_at": "2022-04-14T15:51:14.523349Z",
+  "updated_at": "2022-04-14T15:51:14.523349Z",
+  "status": "QUEUED",
+  "account_owner_name": "John Doe",
+  "bank_account_type": "SAVINGS",
+  "bank_account_number": "123456789abc",
+  "bank_routing_number": "123456789"
+}

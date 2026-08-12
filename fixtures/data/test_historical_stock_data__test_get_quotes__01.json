@@ -1,0 +1,33 @@
+{
+  "quotes": {
+    "AAPL": [
+      {
+        "t": "2022-03-09T09:00:00.000059Z",
+        "ax": "K",
+        "ap": 158.65,
+        "as": 1,
+        "bx": "Q",
+        "bp": 159.52,
+        "bs": 4,
+        "c": [
+          "R"
+        ],
+        "z": "C"
+      },
+      {
+        "t": "2022-03-09T09:00:00.000059Z",
+        "ax": "K",
+        "ap": 158.8,
+        "as": 1,
+        "bx": "Q",
+        "bp": 159.52,
+        "bs": 4,
+        "c": [
+          "R"
+        ],
+        "z": "C"
+      }
+    ]
+  },
+  "next_page_token": "QUFQTHwyMDIyLTAzLTA5VDA5OjAwOjAwLjAwMDA1OTAwMFp8Q0ZEQUU5QTg="
+}

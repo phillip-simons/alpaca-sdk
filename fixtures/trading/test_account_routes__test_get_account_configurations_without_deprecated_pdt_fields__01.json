@@ -1,0 +1,9 @@
+{
+  "no_shorting": false,
+  "suspend_trade": false,
+  "fractional_trading": true,
+  "max_margin_multiplier": "4",
+  "trade_confirm_email": "all",
+  "ptp_no_exception_entry": false,
+  "max_options_trading_level": 1
+}

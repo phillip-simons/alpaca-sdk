@@ -1,0 +1,171 @@
+{
+  "corporate_actions": {
+    "reverse_splits": [
+      {
+        "id": "a7932b15-f816-4f83-921e-998b524487b0",
+        "ex_date": "2023-08-24",
+        "new_rate": 1,
+        "old_rate": 50,
+        "new_cusip": "NEWCUSIP1",
+        "old_cusip": "OLDCUSIP1",
+        "process_date": "2023-08-24",
+        "record_date": "2023-08-24",
+        "symbol": "MNTS"
+      }
+    ],
+    "forward_splits": [
+      {
+        "cusip": "CUSIP1",
+        "id": "a7932b15-f816-4f83-921e-998b524487b1",
+        "due_bill_redemption_date": "2023-08-23",
+        "ex_date": "2023-08-22",
+        "new_rate": 2,
+        "old_rate": 1,
+        "payable_date": "2023-08-21",
+        "process_date": "2023-08-22",
+        "record_date": "2023-08-14",
+        "symbol": "SRE"
+      }
+    ],
+    "unit_splits": [
+      {
+        "id": "a7932b15-f816-4f83-921e-998b524487b2",
+        "alternate_cusip": "ALTCUSIP1",
+        "alternate_rate": 0.3333,
+        "alternate_symbol": "LVROW",
+        "effective_date": "2023-03-01",
+        "new_cusip": "NEWCUSIP1",
+        "new_rate": 1,
+        "new_symbol": "LVRO",
+        "old_cusip": "OLDCUSIP1",
+        "old_rate": 1,
+        "old_symbol": "TPBAU",
+        "process_date": "2023-03-01"
+      }
+    ],
+    "stock_dividends": [
+      {
+        "cusip": "CUSIP1",
+        "id": "a7932b15-f816-4f83-921e-998b524487b3",
+        "ex_date": "2023-05-19",
+        "payable_date": "2023-05-05",
+        "process_date": "2023-05-19",
+        "rate": 0.05,
+        "record_date": "2023-05-22",
+        "symbol": "MSBC"
+      }
+    ],
+    "cash_dividends": [
+      {
+        "cusip": "CUSIP1",
+        "id": "a7932b15-f816-4f83-921e-998b524487b4",
+        "ex_date": "2023-05-04",
+        "foreign": false,
+        "payable_date": "2023-05-19",
+        "process_date": "2023-05-19",
+        "rate": 0.125,
+        "record_date": "2023-05-05",
+        "special": false,
+        "symbol": "FCF"
+      }
+    ],
+    "spin_offs": [
+      {
+        "id": "a7932b15-f816-4f83-921e-998b524487b5",
+        "ex_date": "2023-08-15",
+        "new_cusip": "NEWCUSIP1",
+        "new_rate": 1,
+        "new_symbol": "SRM",
+        "process_date": "2023-08-15",
+        "record_date": "2023-08-15",
+        "source_cusip": "SOURCECUSIP1",
+        "source_rate": 19.35,
+        "source_symbol": "JUPW"
+      }
+    ],
+    "cash_mergers": [
+      {
+        "id": "a7932b15-f816-4f83-921e-998b524487b6",
+        "acquiree_symbol": "GLOP",
+        "acquiree_cusip": "ACQUIREECUSIP1",
+        "effective_date": "2023-07-17",
+        "payable_date": "2023-07-17",
+        "process_date": "2023-07-17",
+        "rate": 5.37
+      }
+    ],
+    "stock_mergers": [
+      {
+        "id": "a7932b15-f816-4f83-921e-998b524487b7",
+        "acquiree_cusip": "ACQUIREECUSIP1",
+        "acquiree_rate": 1,
+        "acquiree_symbol": "LSI",
+        "acquirer_cusip": "ACQUIRERCUSIP1",
+        "acquirer_rate": 0.895,
+        "acquirer_symbol": "EXR",
+        "effective_date": "2023-07-20",
+        "payable_date": "2023-07-20",
+        "process_date": "2023-07-20"
+      }
+    ],
+    "stock_and_cash_mergers": [
+      {
+        "id": "a7932b15-f816-4f83-921e-998b524487b8",
+        "acquiree_cusip": "ACQUIREECUSIP1",
+        "acquiree_rate": 1,
+        "acquiree_symbol": "MLVF",
+        "acquirer_cusip": "ACQUIRERCUSIP1",
+        "acquirer_rate": 0.7733,
+        "acquirer_symbol": "FRBA",
+        "cash_rate": 7.8,
+        "effective_date": "2023-07-18",
+        "payable_date": "2023-07-18",
+        "process_date": "2023-07-18"
+      }
+    ],
+    "redemptions": [
+      {
+        "id": "a7932b15-f816-4f83-921e-998b524487b9",
+        "payable_date": "2023-06-13",
+        "process_date": "2023-06-13",
+        "cusip": "CUSIP1",
+        "rate": 0.141134,
+        "symbol": "ORPHY"
+      }
+    ],
+    "name_changes": [
+      {
+        "id": "a7932b15-f816-4f83-921e-998b524487c0",
+        "new_cusip": "NEWCUSIP1",
+        "new_symbol": "VFS",
+        "old_cusip": "OLDCUSIP1",
+        "old_symbol": "BSAQ",
+        "process_date": "2023-08-15"
+      }
+    ],
+    "worthless_removals": [
+      {
+        "id": "a7932b15-f816-4f83-921e-998b524487c1",
+        "cusip": "CUSIP1",
+        "symbol": "ATNXQ",
+        "process_date": "2023-10-11"
+      }
+    ],
+    "rights_distributions": [
+      {
+        "id": "a7932b15-f816-4f83-921e-998b524487c2",
+        "source_cusip": "SOURCECUSIP1",
+        "source_symbol": "IFN",
+        "new_cusip": "NEWCUSIP1",
+        "new_symbol": "IFN.RTWI",
+        "rate": 1,
+        "ex_date": "2024-04-17",
+        "record_date": "2024-04-18",
+        "payable_date": "2024-04-19",
+        "process_date": "2024-04-19",
+        "expiration_date": "2024-05-14"
+      }
+    ]
+  },
+  "next_page_token": "MDA3Q1ZSMDIwfDIwMjQtMDItMTV8NjBiZjkxYzItMDc0Ni00ZDliLThjOWUtYTgwYmIzMDhmZDkx"
+}

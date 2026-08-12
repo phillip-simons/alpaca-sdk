@@ -1,0 +1,20 @@
+{
+  "news": [
+    {
+      "author": "Benzinga Newsdesk",
+      "content": "",
+      "created_at": "2024-11-07T09:16:41Z",
+      "headline": "Piper Sandler Maintains Neutral on Clearwater Analytics Hldg, Raises Price Target to $28",
+      "id": 41799100,
+      "images": [],
+      "source": "benzinga",
+      "summary": "",
+      "symbols": [
+        "CWAN"
+      ],
+      "updated_at": "2024-11-07T09:16:41Z",
+      "url": "https://www.benzinga.com/news/24/11/41799100/piper-sandler-maintains-neutral-on-clearwater-analytics-hldg-raises-price-target-to-28"
+    }
+  ],
+  "next_page_token": null
+}

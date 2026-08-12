@@ -1,0 +1,24 @@
+{
+  "option_contracts": [
+    {
+      "id": "00000000-0000-0000-0000-000000000000",
+      "symbol": "AAPL231103C00170000",
+      "name": "AAPL Nov 03 2023 170 Call",
+      "status": "active",
+      "tradable": true,
+      "expiration_date": "2023-11-03",
+      "root_symbol": "AAPL",
+      "underlying_symbol": "AAPL",
+      "underlying_asset_id": "00000000-0000-0000-0000-000000000000",
+      "type": "call",
+      "style": "american",
+      "strike_price": "170",
+      "size": "100",
+      "open_interest": "0",
+      "open_interest_date": "2023-11-03",
+      "close_price": null,
+      "close_price_date": null
+    }
+  ],
+  "next_page_token": "MA=="
+}

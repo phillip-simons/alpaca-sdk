@@ -1,0 +1,42 @@
+{
+  "id": "2ad28f83-796c-4c4d-895e-d360aeb95297",
+  "type": "full_rebalance",
+  "amount": null,
+  "initiated_from": "system",
+  "status": "CANCELED",
+  "reason": "create OMS order: create closed order exceeded max retries: order not a filled state",
+  "account_id": "cf175fbc-ca19-4741-88ed-70d6c133f8d7",
+  "portfolio_id": "ac89fa84-e3bb-48ff-9b81-d5f313e77463",
+  "weights": [
+    {
+      "type": "cash",
+      "symbol": null,
+      "percent": "5"
+    },
+    {
+      "type": "asset",
+      "symbol": "SPY",
+      "percent": "60"
+    },
+    {
+      "type": "asset",
+      "symbol": "TLT",
+      "percent": "35"
+    }
+  ],
+  "orders": [],
+  "skipped_orders": [
+    {
+      "symbol": "SPY",
+      "side": "buy",
+      "notional": "0",
+      "currency": "USD",
+      "reason": "ORDER_LESS_THAN_MIN_NOTIONAL",
+      "reason_details": "order notional value ($0) is less than min-notional set for correspondent ($1)"
+    }
+  ],
+  "completed_at": null,
+  "canceled_at": null,
+  "created_at": "2022-04-14T10:46:08.045817Z",
+  "updated_at": "2022-04-14T13:11:07.84719Z"
+}

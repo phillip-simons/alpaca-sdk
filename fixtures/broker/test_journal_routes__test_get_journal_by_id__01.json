@@ -1,0 +1,14 @@
+{
+  "id": "0a9152c4-d232-4b00-9102-5fa19aca40cb",
+  "entry_type": "JNLC",
+  "from_account": "94fa473d-9a92-40cd-908c-25da9fba1e65",
+  "to_account": "d7017fd9-60dd-425b-a09a-63ff59368b62",
+  "symbol": "",
+  "qty": null,
+  "price": null,
+  "status": "pending",
+  "settle_date": null,
+  "system_date": null,
+  "net_amount": "10",
+  "description": ""
+}

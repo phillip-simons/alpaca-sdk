@@ -1,0 +1,16 @@
+{
+  "id": "9a7fb9b5-1f4d-420f-b6d4-0fd32008cec8",
+  "account_id": "2a87c088-ffb6-472b-a4a3-cd9305c8605c",
+  "name": "my bank detail",
+  "status": "QUEUED",
+  "country": "",
+  "state_province": "",
+  "postal_code": "",
+  "city": "",
+  "street_address": "",
+  "account_number": "123456789abc",
+  "bank_code": "123456789",
+  "bank_code_type": "ABA",
+  "created_at": "2021-01-09T12:14:18.683915267Z",
+  "updated_at": "2021-01-09T12:14:18.683915267Z"
+}

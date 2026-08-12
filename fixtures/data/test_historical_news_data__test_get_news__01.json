@@ -1,0 +1,34 @@
+{
+  "news": [
+    {
+      "author": "John",
+      "content": "",
+      "created_at": "2024-08-18T20:15:44Z",
+      "headline": "headline",
+      "id": 40432158,
+      "images": [
+        {
+          "size": "large",
+          "url": "https://"
+        },
+        {
+          "size": "small",
+          "url": "https://"
+        },
+        {
+          "size": "thumb",
+          "url": "https://"
+        }
+      ],
+      "source": "source",
+      "summary": "summary",
+      "symbols": [
+        "AAPL",
+        "QCOM"
+      ],
+      "updated_at": "2024-08-18T20:15:44Z",
+      "url": "https://"
+    }
+  ],
+  "next_page_token": "MTczMDk3MTEwMTAwMDAwMDAwMHw0MTc5OTExNQ=="
+}

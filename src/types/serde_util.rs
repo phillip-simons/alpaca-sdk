@@ -32,6 +32,185 @@ where
     }
 }
 
+/// Serde codec for integers Alpaca sends inconsistently as numbers or strings.
+///
+/// The trading account endpoint returns `"options_approved_level": "1"` but
+/// `"daytrade_count": 0` in the same payload. alpaca-py types both `int` and
+/// relies on pydantic coercing the string; a plain `i64` here would reject the
+/// response outright.
+pub mod int {
+    use std::fmt;
+
+    use serde::de::{self, Unexpected, Visitor};
+    use serde::{Deserializer, Serializer};
+
+    struct IntVisitor;
+
+    impl Visitor<'_> for IntVisitor {
+        type Value = i64;
+
+        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("an integer as a number or string")
+        }
+
+        fn visit_i64<E: de::Error>(self, value: i64) -> Result<Self::Value, E> {
+            Ok(value)
+        }
+
+        fn visit_u64<E: de::Error>(self, value: u64) -> Result<Self::Value, E> {
+            i64::try_from(value).map_err(|_| E::invalid_value(Unexpected::Unsigned(value), &self))
+        }
+
+        fn visit_f64<E: de::Error>(self, value: f64) -> Result<Self::Value, E> {
+            if value.fract() == 0.0 {
+                // Alpaca sends whole numbers as floats in a few places.
+                #[allow(clippy::cast_possible_truncation)]
+                return Ok(value as i64);
+            }
+            Err(E::invalid_value(Unexpected::Float(value), &self))
+        }
+
+        fn visit_str<E: de::Error>(self, value: &str) -> Result<Self::Value, E> {
+            value
+                .trim()
+                .parse()
+                .map_err(|_| E::invalid_value(Unexpected::Str(value), &self))
+        }
+    }
+
+    /// Deserializes an integer from a number or string.
+    ///
+    /// # Errors
+    /// Returns an error if the value is neither, or does not parse.
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64, D::Error> {
+        deserializer.deserialize_any(IntVisitor)
+    }
+
+    /// Serializes an integer as a number.
+    ///
+    /// # Errors
+    /// Propagates the serializer's own failures.
+    pub fn serialize<S: Serializer>(value: &i64, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_i64(*value)
+    }
+
+    /// The same codec for optional fields, where `null` and `""` mean absent.
+    pub mod option {
+        use super::{Deserializer, IntVisitor, Serializer, Visitor, de, fmt};
+
+        struct OptionVisitor;
+
+        impl<'de> Visitor<'de> for OptionVisitor {
+            type Value = Option<i64>;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("an integer as a number or string, or null")
+            }
+
+            fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
+                Ok(None)
+            }
+
+            fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+                Ok(None)
+            }
+
+            fn visit_some<D: Deserializer<'de>>(
+                self,
+                deserializer: D,
+            ) -> Result<Self::Value, D::Error> {
+                struct MaybeEmpty;
+
+                impl Visitor<'_> for MaybeEmpty {
+                    type Value = Option<i64>;
+
+                    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        f.write_str("an integer as a number or string")
+                    }
+
+                    fn visit_i64<E: de::Error>(self, value: i64) -> Result<Self::Value, E> {
+                        IntVisitor.visit_i64(value).map(Some)
+                    }
+
+                    fn visit_u64<E: de::Error>(self, value: u64) -> Result<Self::Value, E> {
+                        IntVisitor.visit_u64(value).map(Some)
+                    }
+
+                    fn visit_f64<E: de::Error>(self, value: f64) -> Result<Self::Value, E> {
+                        IntVisitor.visit_f64(value).map(Some)
+                    }
+
+                    fn visit_str<E: de::Error>(self, value: &str) -> Result<Self::Value, E> {
+                        if value.trim().is_empty() {
+                            return Ok(None);
+                        }
+                        IntVisitor.visit_str(value).map(Some)
+                    }
+
+                    fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
+                        Ok(None)
+                    }
+
+                    fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+                        Ok(None)
+                    }
+                }
+
+                deserializer.deserialize_any(MaybeEmpty)
+            }
+        }
+
+        /// Deserializes an optional integer from a number, string, or null.
+        ///
+        /// # Errors
+        /// Returns an error if a present value does not parse as an integer.
+        pub fn deserialize<'de, D: Deserializer<'de>>(
+            deserializer: D,
+        ) -> Result<Option<i64>, D::Error> {
+            deserializer.deserialize_option(OptionVisitor)
+        }
+
+        /// Serializes an optional integer as a number or null.
+        ///
+        /// # Errors
+        /// Propagates the serializer's own failures.
+        pub fn serialize<S: Serializer>(
+            value: &Option<i64>,
+            serializer: S,
+        ) -> Result<S::Ok, S::Error> {
+            match value {
+                Some(int) => serializer.serialize_i64(*int),
+                None => serializer.serialize_none(),
+            }
+        }
+    }
+}
+
+/// Serializes a list as a single comma-separated query parameter.
+///
+/// Alpaca expects `symbols=AAPL,SPY` rather than a repeated parameter, and
+/// alpaca-py joins these lists by hand at each call site in the client.
+///
+/// # Errors
+/// Propagates the serializer's own failures.
+pub fn comma_separated<S, T>(values: &Option<Vec<T>>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+    T: Display,
+{
+    match values {
+        Some(values) => {
+            let joined = values
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",");
+            serializer.serialize_str(&joined)
+        }
+        None => serializer.serialize_none(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde::Deserialize;

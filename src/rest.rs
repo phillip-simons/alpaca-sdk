@@ -258,14 +258,20 @@ impl RestClient {
         // alpaca-py's loop runs `attempts` retries *after* the first request.
         let total_attempts = retry.attempts + 1;
 
+        // The original builder is sent first and a copy is kept for the next
+        // attempt. Cloning up front instead would swallow a builder-level error
+        // — a query string that failed to serialize, say — behind a `None` from
+        // `try_clone`, reporting it as an unretryable body.
+        let mut current = request;
+
         for attempt in 1..=total_attempts {
-            let Some(attempt_request) = request.try_clone() else {
-                return Err(Error::InvalidRequest(
-                    "request body cannot be retried because it is a stream".to_owned(),
-                ));
+            let next = if attempt < total_attempts {
+                current.try_clone()
+            } else {
+                None
             };
 
-            let response = attempt_request.send().await.map_err(Error::Transport)?;
+            let response = current.send().await.map_err(Error::Transport)?;
             let status = response.status().as_u16();
 
             if response.status().is_success() {
@@ -285,6 +291,16 @@ impl RestClient {
                     last: api_error,
                 });
             }
+
+            let Some(next) = next else {
+                // Only reachable with a streaming body, which this crate never
+                // sends; keep the retry loop honest rather than silently
+                // returning the last error as if it were final.
+                return Err(Error::InvalidRequest(
+                    "request cannot be retried because its body is a stream".to_owned(),
+                ));
+            };
+            current = next;
 
             tracing::debug!(
                 path,
