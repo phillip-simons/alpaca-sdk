@@ -187,6 +187,91 @@ async fn all_accounts_positions_is_keyed_by_account() {
     assert!(!positions.positions.is_empty());
 }
 
+#[tokio::test]
+async fn closing_an_account_posts_to_the_close_action() {
+    // Not a DELETE: the account's records survive, and alpaca-py's
+    // `delete_account` is a deprecated alias that posts here too.
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!("/v1/accounts/{ACCOUNT_ID}/actions/close")))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    client(&server)
+        .close_account(Uuid::parse_str(ACCOUNT_ID).unwrap())
+        .await
+        .unwrap();
+}
+
+#[test]
+fn the_trade_account_carries_the_fields_only_the_broker_api_returns() {
+    // alpaca-py subclasses the trading TradeAccount to add these; here the
+    // trading record is flattened in, so both halves must survive one parse.
+    let account: alpaca_sdk::broker::TradeAccount =
+        parse("broker/test_accounts_routes__test_get_trade_account_by_id__01.json");
+
+    assert_eq!(account.account.account_number, "684486106");
+    assert_eq!(account.cash_withdrawable.unwrap().to_string(), "0");
+    assert_eq!(account.cash_transferable.unwrap().to_string(), "0");
+    assert_eq!(
+        account.clearing_broker,
+        Some(alpaca_sdk::broker::ClearingBroker::Velox)
+    );
+    assert!(account.previous_close.is_some());
+    assert_eq!(account.last_daytrade_count, Some(0));
+}
+
+#[test]
+fn the_trade_account_tolerates_the_pdt_fields_alpaca_removed() {
+    // Alpaca stopped sending these on 2026-07-06 in the FINRA intraday-margin
+    // migration. They are absent from this payload, on both halves of the
+    // flattened record.
+    let account: alpaca_sdk::broker::TradeAccount = parse(
+        "broker/test_accounts_routes__test_get_trade_account_by_id_without_deprecated_pdt_fields__01.json",
+    );
+
+    assert_eq!(account.last_daytrading_buying_power, None);
+    assert_eq!(account.last_daytrade_count, None);
+    assert_eq!(account.account.daytrading_buying_power, None);
+    assert_eq!(account.account.pattern_day_trader, None);
+}
+
+#[tokio::test]
+async fn the_trade_account_and_its_configuration_are_separate_routes() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/trading/accounts/{ACCOUNT_ID}/account")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture(
+            "broker/test_accounts_routes__test_get_trade_account_by_id__01.json",
+        )))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/v1/trading/accounts/{ACCOUNT_ID}/account/configurations"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture(
+            "broker/test_accounts_routes__test_get_trade_configuration_for_account__01.json",
+        )))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let account_id = Uuid::parse_str(ACCOUNT_ID).unwrap();
+    let client = client(&server);
+
+    client.get_trade_account_by_id(account_id).await.unwrap();
+    let configuration = client
+        .get_trade_configuration_for_account(account_id)
+        .await
+        .unwrap();
+
+    assert!(configuration.fractional_trading);
+}
+
 // ------------------------------------------- trading on behalf of accounts
 
 #[tokio::test]

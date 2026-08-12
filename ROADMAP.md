@@ -35,6 +35,31 @@ Captured fixtures exist for all of these under `fixtures/broker/`.
 The broker spec has **154 operations**; alpaca-py has **76**. Phase 6 targets the
 76. The rest is Phase 6.5.
 
+**Count the routes, not the sections.** This list once read as though only these
+were left, while 16 order, asset, announcement and account-lifecycle routes were
+also missing — the diff to run is alpaca-py's `broker/client.py` method names
+against `src/broker/client.rs`, not this file's memory of them.
+
+### The broker's models are not the trading models
+
+Three of them extend their trading counterparts, and returning the trading type
+silently drops the extra fields:
+
+- `broker::Order` = `trading::Order` + `commission`
+- `broker::TradeAccount` = `trading::TradeAccount` + 12 fields (`cash_withdrawable`,
+  the `last_*` previous-session values, `clearing_broker`)
+- `broker::OrderRequest` = `trading::OrderRequest` + `commission` + `currency`,
+  and a non-USD order must be a market order
+
+They use `#[serde(flatten)]` over the trading struct rather than transcribing it,
+which is the closest thing to alpaca-py's subclassing. Check for this whenever a
+broker route appears to reuse a trading model.
+
+`commission` arrives as a JSON *number* on order responses and as a *string* in
+the spec's trade-update events; `Decimal` reads both and writes a string. If a
+live broker sandbox ever rejects a commission on an order request, that is the
+thing to look at first.
+
 ## Phase 6.5 — the API gaps
 
 Scope changed on 2026-08-12 from *alpaca-py parity* to *API coverage*. alpaca-py

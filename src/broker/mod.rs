@@ -6,7 +6,9 @@
 mod client;
 mod enums;
 mod models;
+mod requests;
 
 pub use client::BrokerClient;
 pub use enums::*;
 pub use models::*;
+pub use requests::*;

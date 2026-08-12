@@ -285,6 +285,78 @@ pub struct Account {
     pub kyc_results: Option<KycResults>,
 }
 
+/// The trading view of a brokerage account.
+///
+/// The broker API answers `/trading/accounts/{id}/account` with everything the
+/// trading API's [`crate::trading::TradeAccount`] carries plus the fields below,
+/// so that record is flattened in rather than transcribed — alpaca-py subclasses
+/// it for the same reason. Reach the shared fields through
+/// [`account`](Self::account).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TradeAccount {
+    /// Every field the trading API also returns.
+    #[serde(flatten)]
+    pub account: crate::trading::TradeAccount,
+    /// Cash available to withdraw from the account.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub cash_withdrawable: Option<Decimal>,
+    /// Cash available to transfer out by journal.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub cash_transferable: Option<Decimal>,
+    /// When the previous session closed.
+    #[serde(default)]
+    pub previous_close: Option<DateTime<Utc>>,
+    /// Long market value at 16:00 ET on the previous trading day.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub last_long_market_value: Option<Decimal>,
+    /// Short market value at 16:00 ET on the previous trading day.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub last_short_market_value: Option<Decimal>,
+    /// Cash at 16:00 ET on the previous trading day.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub last_cash: Option<Decimal>,
+    /// Initial margin at 16:00 ET on the previous trading day.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub last_initial_margin: Option<Decimal>,
+    /// Regulation T buying power at 16:00 ET on the previous trading day.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub last_regt_buying_power: Option<Decimal>,
+    /// Day trade buying power at 16:00 ET on the previous trading day.
+    ///
+    /// Removed from Alpaca responses on 2026-07-06 in the FINRA intraday-margin
+    /// migration, so this is now absent in practice.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub last_daytrading_buying_power: Option<Decimal>,
+    /// Day trade count at 16:00 ET on the previous trading day.
+    ///
+    /// Removed from Alpaca responses on 2026-07-06.
+    #[serde(default, with = "crate::types::serde_util::int::option")]
+    pub last_daytrade_count: Option<i64>,
+    /// Buying power at 16:00 ET on the previous trading day.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub last_buying_power: Option<Decimal>,
+    /// The clearing broker this account is assigned to.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub clearing_broker: Option<ClearingBroker>,
+}
+
+/// An order placed on behalf of a brokerage account.
+///
+/// Identical to the trading API's [`crate::trading::Order`] but for the
+/// commission the correspondent charged, which only the broker API reports.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Order {
+    /// Every field the trading API also returns.
+    #[serde(flatten)]
+    pub order: crate::trading::Order,
+    /// The commission charged to the end user, in dollars.
+    ///
+    /// Arrives as a JSON number on order responses and as a string on trade
+    /// update events; [`Decimal`] reads both.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub commission: Option<Decimal>,
+}
+
 /// Positions held across every account, as of the last market close.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AllAccountsPositions {
