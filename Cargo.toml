@@ -19,7 +19,10 @@ default = ["trading", "data", "rustls-tls"]
 # API surfaces.
 trading = ["_ws"]
 data = ["_ws", "dep:rmp-serde", "dep:rmpv"]
-broker = ["dep:eventsource-stream"]
+# The broker API acts on behalf of trading accounts and reuses their models
+# (orders, positions, watchlists), exactly as alpaca-py's broker module imports
+# from alpaca.trading.
+broker = ["trading", "dep:eventsource-stream"]
 
 # Ergonomics.
 blocking = ["tokio/rt-multi-thread"]
