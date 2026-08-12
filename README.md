@@ -25,6 +25,9 @@ Under active development. Ported phase by phase against alpaca-py commit `cc4cb3
 | Trade update stream | ✅ |
 | Broker API | 🚧 |
 
+See [ROADMAP.md](ROADMAP.md) for what is left, how the port is verified, and the
+conventions that keep it honest.
+
 ## What changes from alpaca-py
 
 The port preserves behavior, not API shape. Several Python patterns have no Rust

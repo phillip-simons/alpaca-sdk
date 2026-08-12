@@ -134,6 +134,10 @@ pinned source=alpaca_py:
 live:
     # They are #[ignore]d so a normal run never spends network time or
     # credentials. Needs APCA_API_KEY_ID and APCA_API_SECRET_KEY set.
+    #
+    # The login shell does not export them; they come from .envrc via direnv.
+    # If this fails with "APCA_API_KEY_ID is not set", run:
+    #     direnv exec . just live
     cargo test --all-features --locked -- --ignored --test-threads=1
 
 # ---------------------------------------------------------------------------
