@@ -1,4 +1,6 @@
-//! Bar aggregation intervals, ported from `alpaca/data/timeframe.py`.
+//! Bar aggregation intervals.
+//!
+//! Ported from `alpaca/data/timeframe.py`.
 
 use std::fmt;
 use std::str::FromStr;

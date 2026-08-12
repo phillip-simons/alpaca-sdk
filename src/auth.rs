@@ -1,6 +1,9 @@
 //! Credentials and the request headers they produce.
 //!
-//! alpaca-py validates a `(api_key, secret_key, oauth_token)` triple at runtime and
+//! Alpaca accepts three credential forms — a key pair, HTTP basic auth, and an
+//! OAuth token — documented at
+//! <https://docs.alpaca.markets/us/docs/authentication>. alpaca-py takes an
+//! `(api_key, secret_key, oauth_token)` triple and validates it at runtime, and
 //! raises `ValueError` on the three invalid combinations. Modelling the same thing
 //! as an enum makes those states unrepresentable, so the checks disappear entirely.
 

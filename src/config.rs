@@ -1,4 +1,6 @@
-//! Endpoints, retry policy, and the constants ported from `alpaca/common/constants.py`.
+//! Endpoints, retry policy, and shared constants.
+//!
+//! Ported from `alpaca/common/constants.py`.
 
 use std::time::Duration;
 
@@ -22,7 +24,7 @@ pub const DEFAULT_RETRY_STATUS_CODES: &[u16] = &[429, 504];
 
 /// The `User-Agent` sent with every request.
 ///
-/// Mirrors alpaca-py's `APCA-PY/<sdk> Python/<runtime>` shape as
+/// Mirrors the `APCA-PY/<sdk> Python/<runtime>` shape alpaca-py sends, as
 /// `APCA-RS/<sdk> Rust/<rustc>`; the compiler version is captured in `build.rs`.
 #[must_use]
 pub fn user_agent() -> &'static str {
@@ -34,7 +36,7 @@ pub fn user_agent() -> &'static str {
     )
 }
 
-/// The Alpaca API endpoints, ported from `alpaca.common.enums.BaseURL`.
+/// The Alpaca API endpoints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum BaseUrl {
@@ -130,8 +132,18 @@ impl From<BaseUrl> for String {
 
 /// How the client retries requests that fail with a retryable status.
 ///
-/// The defaults reproduce alpaca-py exactly: up to 3 retries after the initial
-/// request — 4 requests total — with a flat 3-second wait, on HTTP 429 and 504.
+/// The defaults are up to 3 retries after the initial request — 4 requests total
+/// — with a flat 3-second wait, on HTTP 429 and 504.
+///
+/// **These do not follow Alpaca's own advice.** [The rate-limit
+/// documentation][rate-limits] says to "stop, wait, and retry using exponential
+/// backoff", doubling from about a second and adding jitter. This flat wait is
+/// inherited from alpaca-py, and is kept only because changing a retry policy
+/// silently changes how a caller's application behaves under load. A caller who
+/// wants Alpaca's shape should build a [`RetryConfig`] for it; the crate should
+/// grow one and default to it.
+///
+/// [rate-limits]: https://docs.alpaca.markets/us/docs/broker-api-rate-limits
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RetryConfig {
     /// Number of retries after the first attempt.

@@ -1,4 +1,6 @@
-//! Corporate action models, ported from `alpaca/data/models/corporate_actions.py`.
+//! Corporate action models.
+//!
+//! Ported from `alpaca/data/models/corporate_actions.py`.
 //!
 //! The endpoint groups actions by type under `corporate_actions`, with one array
 //! per kind. alpaca-py flattens them into `Dict[str, List[CorporateAction]]`

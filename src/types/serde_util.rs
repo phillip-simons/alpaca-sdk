@@ -188,8 +188,7 @@ pub mod int {
 
 /// Serializes a list as a single comma-separated query parameter.
 ///
-/// Alpaca expects `symbols=AAPL,SPY` rather than a repeated parameter, and
-/// alpaca-py joins these lists by hand at each call site in the client.
+/// Alpaca expects `symbols=AAPL,SPY` rather than a repeated parameter.
 ///
 /// # Errors
 /// Propagates the serializer's own failures.

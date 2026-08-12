@@ -1,4 +1,9 @@
-//! Request types for the trading API, ported from `alpaca/trading/requests.py`.
+//! Request types for the trading API.
+//!
+//! See [orders at Alpaca](https://docs.alpaca.markets/us/docs/orders-at-alpaca)
+//! for what the order classes and time-in-force values mean.
+//!
+//! Ported from `alpaca/trading/requests.py`.
 //!
 //! alpaca-py builds these with keyword arguments and validates the combinations
 //! in `model_validator` hooks. Rust has no kwargs, so each Python subclass

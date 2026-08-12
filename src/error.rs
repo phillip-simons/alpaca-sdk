@@ -1,9 +1,12 @@
 //! Error types for every fallible operation in this crate.
 //!
-//! alpaca-py raises `APIError`, whose `code` and `message` properties re-parse the
-//! response body as JSON on every access — and panic when the body is not JSON.
-//! Here the body is parsed once, at construction, and a non-JSON body degrades to
-//! [`ApiError::body`] with `code` left as `None`.
+//! Alpaca reports a failure as a JSON body carrying `code` and `message`, but
+//! not every failure reaches the caller that way: a gateway can answer 502 with
+//! HTML. The body is parsed once here, at construction, and a non-JSON body
+//! degrades to [`ApiError::body`] with `code` left as `None`.
+//!
+//! alpaca-py's `APIError` re-parses the body on every access to `code` or
+//! `message`, and raises `json.JSONDecodeError` when the body is not JSON.
 
 use std::fmt;
 

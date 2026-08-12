@@ -1,8 +1,10 @@
 //! Exponential backoff with equal jitter for websocket reconnects.
 //!
-//! A direct port of `alpaca.common.utils.reconnect_delay`. The jitter matters:
-//! Alpaca permits a single stream connection, so a fixed delay turns a stale
-//! connection being reaped into a tight reconnect/HTTP 429 storm.
+//! The jitter matters: Alpaca permits a single stream connection, so a fixed
+//! delay turns a stale connection being reaped into a tight reconnect/HTTP 429
+//! storm.
+//!
+//! Ported from `alpaca.common.utils.reconnect_delay`.
 
 use std::time::Duration;
 

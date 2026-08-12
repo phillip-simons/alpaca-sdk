@@ -1,4 +1,6 @@
-//! The four concrete market data streams, ported from `alpaca/data/live/`.
+//! The four concrete market data streams.
+//!
+//! Ported from `alpaca/data/live/`.
 //!
 //! Each wraps a [`DataStream`] with the endpoint its asset class uses and the
 //! subscription methods alpaca-py exposes for it.

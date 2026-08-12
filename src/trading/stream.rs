@@ -1,4 +1,6 @@
-//! The trade update websocket, ported from `alpaca/trading/stream.py`.
+//! The trade update websocket.
+//!
+//! Ported from `alpaca/trading/stream.py`.
 //!
 //! Same reconnect discipline as the market data stream, different protocol. Four
 //! things differ on the wire, and all four are easy to get wrong by assuming the

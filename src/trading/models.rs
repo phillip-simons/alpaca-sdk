@@ -1,4 +1,6 @@
-//! Response models for the trading API, ported from `alpaca/trading/models.py`.
+//! Response models for the trading API.
+//!
+//! Ported from `alpaca/trading/models.py`.
 //!
 //! Field-for-field with the Python, with two systematic changes: money that
 //! arrives as a string is [`Decimal`] rather than `str`, and integers Alpaca

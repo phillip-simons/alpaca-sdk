@@ -1,5 +1,6 @@
-//! Request bodies and filters unique to the broker API, ported from
-//! `alpaca/broker/requests.py`.
+//! Request bodies and filters unique to the broker API.
+//!
+//! Ported from `alpaca/broker/requests.py`.
 //!
 //! Routes that act on behalf of an account reuse the trading API's request
 //! types — an order submitted through `/trading/accounts/{id}/orders` takes the

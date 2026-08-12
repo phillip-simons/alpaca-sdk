@@ -1,4 +1,6 @@
-//! Enums shared by more than one API surface, from `alpaca/common/enums.py`.
+//! Enums shared by more than one API surface.
+//!
+//! Ported from `alpaca/common/enums.py`.
 //!
 //! `PaginationType` is deliberately absent: its three modes are expressed here as
 //! a `Stream` plus `try_collect`, so an enum selecting between them would have
@@ -19,7 +21,7 @@ wire_enum! {
 wire_enum! {
     /// Currencies supported for local currency trading.
     ///
-    /// See <https://alpaca.markets/support/local-currency-trading-faq>.
+    /// See <https://docs.alpaca.markets/us/docs/local-currency-trading-lct>.
     pub enum SupportedCurrencies {
         /// United States dollar.
         Usd => "USD",

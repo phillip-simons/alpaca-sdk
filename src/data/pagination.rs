@@ -1,4 +1,6 @@
-//! The market data pagination loop, ported from `RESTClient._get_marketdata`.
+//! The market data pagination loop.
+//!
+//! Ported from `RESTClient._get_marketdata`.
 //!
 //! Every historical endpoint answers with at most `page_limit` items and a
 //! `next_page_token`. alpaca-py walks the tokens and merges the pages into one

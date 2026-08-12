@@ -6,9 +6,13 @@ This product includes software derived from alpaca-py
 licensed under the Apache License, Version 2.0.
 
 The type definitions, request and response models, endpoint paths, retry
-policy, and streaming reconnection semantics in this crate are ported from
-that project. Behavioral parity with alpaca-py is an explicit goal, and
-inline comments reference the Python source they were derived from.
+policy, and streaming reconnection semantics in this crate were ported from
+that project, and the generated enums are still produced from its source.
+
+Behavioral parity with alpaca-py was the original goal and is no longer the
+goal: this crate targets the Alpaca API, and diverges from alpaca-py where
+alpaca-py is incomplete or out of date. Comments cite the Python source where
+the derivation is the point, and cite Alpaca's own documentation otherwise.
 
 This is an unofficial, community-maintained port. It is not affiliated with,
 authorized by, endorsed by, or sponsored by Alpaca Securities LLC or any of

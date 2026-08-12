@@ -1,4 +1,6 @@
-//! Market data models, ported from `alpaca/data/models/`.
+//! Market data models.
+//!
+//! Ported from `alpaca/data/models/`.
 //!
 //! The wire format uses single-letter keys — `t`, `o`, `h`, `l`, `c`, `v` — which
 //! alpaca-py translates through the lookup tables in `alpaca/data/mappings.py`.

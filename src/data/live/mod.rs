@@ -1,4 +1,6 @@
-//! The live market data websocket, ported from `alpaca/data/live/`.
+//! The [live market data](https://docs.alpaca.markets/us/docs/streaming-market-data) websocket.
+//!
+//! Ported from `alpaca/data/live/`.
 //!
 //! # Shape
 //!

@@ -2,11 +2,12 @@
 
 /// Defines a string-valued enum with a catch-all `Unknown` variant.
 ///
-/// alpaca-py models these as `class X(str, Enum)`, which makes pydantic reject a
-/// payload outright the moment Alpaca introduces a value the SDK has not been
-/// updated for — a new order status can break deserialization in production. The
-/// generated `Unknown(String)` variant keeps the raw wire value instead, so an
-/// unrecognized status is inspectable rather than fatal.
+/// Alpaca introduces new enum values without a version bump, and an SDK that
+/// models them as a closed set rejects the whole payload the first time it meets
+/// one — a new order status breaking deserialization in production. That is what
+/// alpaca-py's `class X(str, Enum)` does. The generated `Unknown(String)` variant
+/// keeps the raw wire value instead, so an unrecognized status is inspectable
+/// rather than fatal.
 ///
 /// `Serialize`/`Deserialize` are hand-rolled rather than derived. Derive-based
 /// catch-alls (`#[serde(other)]`, variant-level `#[serde(untagged)]`) rely on

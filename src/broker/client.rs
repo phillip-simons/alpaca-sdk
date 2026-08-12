@@ -1,4 +1,6 @@
-//! The broker API client, ported from `alpaca/broker/client.py`.
+//! The [broker API](https://docs.alpaca.markets/us/docs/about-broker-api) client.
+//!
+//! Ported from `alpaca/broker/client.py`.
 //!
 //! Two things differ from every other client in this crate. It authenticates
 //! with HTTP basic auth rather than the `APCA-*` headers, and it acts *on behalf

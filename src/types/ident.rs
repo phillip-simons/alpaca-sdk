@@ -74,7 +74,7 @@ impl From<Uuid> for AssetIdent {
 
 impl From<String> for AssetIdent {
     /// A string that parses as a UUID becomes [`AssetIdent::Id`], matching
-    /// alpaca-py's behavior of upcasting UUID strings.
+    /// a string that parses as a UUID is treated as an id, not a symbol.
     fn from(value: String) -> Self {
         match Uuid::parse_str(&value) {
             Ok(id) => Self::Id(id),

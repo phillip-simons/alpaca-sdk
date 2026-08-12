@@ -1,13 +1,25 @@
 //! Unofficial Rust SDK for the [Alpaca](https://alpaca.markets) trading, market
 //! data, and broker APIs.
 //!
-//! This is a port of the official Python SDK, [alpaca-py], with the same feature
-//! surface expressed through Rust's type system: money is [`rust_decimal::Decimal`]
-//! rather than a string-or-float union, unknown API enum values deserialize into an
-//! `Unknown` variant instead of failing, and pagination is a `Stream` rather than a
-//! three-way mode flag.
+//! Targets the Alpaca API itself, documented at [docs.alpaca.markets]. Where these
+//! docs describe what an endpoint does, they describe the API; where they describe
+//! how this crate represents it, that is a choice made here. Money is
+//! [`rust_decimal::Decimal`] rather than a string-or-float union, unknown API enum
+//! values deserialize into an `Unknown` variant instead of failing, and paginated
+//! endpoints offer both a single page and a walk.
 //!
 //! It is not affiliated with or endorsed by Alpaca Securities LLC.
+//!
+//! # Coming from alpaca-py
+//!
+//! This crate began as a port of the official Python SDK, [alpaca-py], and is a
+//! derivative work of it (see `NOTICE`). It no longer tracks that SDK: alpaca-py
+//! is the least complete of Alpaca's official SDKs, and in at least one place it
+//! still calls an endpoint Alpaca has retired. Where the two disagree, this crate
+//! follows the API.
+//!
+//! The shape is close enough to migrate mechanically. The differences that need a
+//! decision rather than a rename are collected in `ROADMAP.md`.
 //!
 //! # Feature flags
 //!
@@ -22,6 +34,7 @@
 //! | `native-tls` | no | TLS via the platform library |
 //!
 //! [alpaca-py]: https://github.com/alpacahq/alpaca-py
+//! [docs.alpaca.markets]: https://docs.alpaca.markets/us/reference/
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 

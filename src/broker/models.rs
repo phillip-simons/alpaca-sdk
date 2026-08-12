@@ -1,4 +1,6 @@
-//! Broker API models, ported from `alpaca/broker/models/`.
+//! Broker API models.
+//!
+//! Ported from `alpaca/broker/models/`.
 //!
 //! Grounded in the payloads alpaca-py captured, then cross-checked against
 //! `broker-api.json`. Where the two disagree the fixture wins: the spec has

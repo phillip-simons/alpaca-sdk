@@ -1,9 +1,14 @@
-//! The shared HTTP transport, ported from `alpaca/common/rest.py`.
+//! The shared HTTP transport.
 //!
 //! Every REST client in this crate wraps a [`RestClient`]. It is public so the
-//! raw request methods stay available as an escape hatch — the typed replacement
-//! for alpaca-py's `raw_data=True` constructor flag, which cannot exist in Rust
-//! because a boolean may not change a function's return type.
+//! raw request methods stay available as an escape hatch for routes this crate
+//! does not wrap.
+//!
+//! Migrating from alpaca-py: this is where `raw_data=True` went. A boolean
+//! cannot change a function's return type in Rust, so the escape hatch is a
+//! method — [`RestClient::request_raw`] — rather than a constructor flag.
+//!
+//! Ported from `alpaca/common/rest.py`.
 
 use std::time::Duration;
 
@@ -32,7 +37,12 @@ pub struct RestConfig {
     pub api_version: String,
     /// How retryable failures are handled.
     pub retry: RetryConfig,
-    /// Per-request timeout. `None` matches alpaca-py, which sets no timeout.
+    /// Per-request timeout.
+    ///
+    /// `None` by default, and deliberately: Alpaca publishes no latency
+    /// guarantee to pick a number from, and a timeout short enough to be useful
+    /// on a quiet endpoint will fire on a slow one. Set it per client if the
+    /// caller has a deadline of their own.
     pub timeout: Option<Duration>,
 }
 
@@ -88,7 +98,8 @@ impl RestClient {
     /// Redirects are disabled deliberately. Because the base URL is overridable,
     /// an `http://` endpoint that redirects to `https://` would replay a POST body
     /// — and its auth headers — over cleartext, so the request must fail loudly
-    /// instead. alpaca-py sets `allow_redirects=False` for the same reason.
+    /// instead. The one route that legitimately redirects, the broker document
+    /// download, uses its own client.
     ///
     /// # Errors
     /// Returns [`Error::Credentials`] if the credentials cannot be encoded as
@@ -99,9 +110,8 @@ impl RestClient {
 
     /// Builds a client that sends no authentication headers.
     ///
-    /// Alpaca's crypto market data endpoints serve unauthenticated requests, and
-    /// alpaca-py overrides `_validate_credentials` on `CryptoHistoricalDataClient`
-    /// so it can be constructed without keys. Every other endpoint requires them.
+    /// Alpaca's crypto market data endpoints serve unauthenticated requests.
+    /// Every other endpoint requires credentials.
     ///
     /// # Errors
     /// Returns [`Error::Transport`] if the underlying HTTP client fails to build.
@@ -155,7 +165,8 @@ impl RestClient {
 
     /// Issues a `DELETE`, sending `query` as URL parameters.
     ///
-    /// alpaca-py sends `DELETE` parameters in the query string, not the body.
+    /// `DELETE` parameters go in the query string, not the body — which is what
+    /// the endpoints taking them (`cancel_orders`, `close_position`) expect.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -237,8 +248,10 @@ impl RestClient {
         self.send(method, path, query, body).await
     }
 
-    /// Builds the absolute URL for `path`, mirroring alpaca-py's
-    /// `base_url + "/" + version + path` concatenation.
+    /// Builds the absolute URL for `path`.
+    ///
+    /// Plain concatenation of `base_url`, the API version segment, and the path.
+    /// Not `Url::join`, which would treat a path as relative and drop segments.
     fn url(&self, path: &str) -> String {
         format!(
             "{}/{}{path}",
@@ -273,7 +286,8 @@ impl RestClient {
     /// than per request type.
     async fn execute(&self, request: RequestBuilder, path: &str) -> Result<String> {
         let retry = &self.config.retry;
-        // alpaca-py's loop runs `attempts` retries *after* the first request.
+        // `attempts` counts retries *after* the first request, so a value of 3
+        // means up to 4 requests in total.
         let total_attempts = retry.attempts + 1;
 
         // The original builder is sent first and a copy is kept for the next
@@ -337,8 +351,8 @@ impl RestClient {
     /// Deserializes a body, treating an empty body as `null`.
     ///
     /// Alpaca answers several endpoints (notably `DELETE`) with `204 No Content`.
-    /// alpaca-py returns `None` there; here `T` is typically `()` or an `Option`,
-    /// both of which deserialize from `null`.
+    /// `T` is typically `()` or an `Option` there, both of which deserialize
+    /// from `null`.
     fn decode<T: DeserializeOwned>(&self, path: &str, body: String) -> Result<T> {
         let source = if body.trim().is_empty() {
             "null"

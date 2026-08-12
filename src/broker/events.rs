@@ -1,4 +1,4 @@
-//! The broker API's server-sent event streams.
+//! The broker API's [server-sent event streams](https://docs.alpaca.markets/us/docs/sse-events).
 //!
 //! Five endpoints push events as they happen: account status changes, trades,
 //! journal status, transfer status, and non-trading activity. They are plain

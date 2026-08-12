@@ -1,4 +1,6 @@
-//! The trading API client, ported from `alpaca/trading/client.py`.
+//! The [trading API](https://docs.alpaca.markets/us/docs/trading-api) client.
+//!
+//! Ported from `alpaca/trading/client.py`.
 
 use reqwest::Method;
 use uuid::Uuid;

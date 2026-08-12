@@ -51,6 +51,13 @@ diff <(grep -oE '^    def [a-z_0-9]+' ../alpaca-py/alpaca/broker/client.py \
   this port does not, on the grounds that editing a server's own numbers on the
   way in is worse than the divergence. A `percent` assigned directly to the
   field is likewise not rounded.
+- **The REST retry ignores Alpaca's own advice.** The rate-limit documentation
+  says to retry 429s "using exponential backoff", doubling from ~1s with jitter.
+  `RetryConfig` waits a flat 3 seconds, inherited from alpaca-py. `backoff.rs`
+  already implements exponential-with-jitter for stream reconnects, so the
+  machinery exists; the REST path just does not use it. Changing the default
+  changes how callers behave under load, so it wants a deliberate release rather
+  than a drive-by fix.
 - `Error` has no variant for a stream that breaks mid-flight. Both the SSE
   streams and the websocket code report those as `InvalidRequest`, which is
   wrong in the same way for both. Worth one variant covering the two.
@@ -213,6 +220,36 @@ Six of those were in neither the route lists below nor the reference sweep:
 not a website.
 
 ### Documentation: cite the API, not the Python SDK
+
+**Partly done.** The framing is fixed — `lib.rs`, `README.md` and `NOTICE` now
+say the crate targets the API and diverges from alpaca-py where alpaca-py is
+stale, and 18 module headers lead with what the module is rather than which
+Python file it came from. 25 links to `docs.alpaca.markets` were added where
+there were none. Doing it turned up a real divergence: the REST retry uses a
+flat wait where Alpaca's rate-limit page asks for exponential backoff.
+
+**The count barely moved, and that is the honest result.** Most of the ~140
+references were already in the right form: they lead with the wire fact and cite
+alpaca-py as contrast or as the source of a divergence, which is what should
+happen. What remains falls into three groups, and only the third is work:
+
+1. *Provenance* — "Ported from `alpaca/broker/client.py`". Keep. `just regen`,
+   `just pinned` and the end-of-port upstream diff all need the mapping.
+2. *alpaca-py as the subject* — "alpaca-py registers a callback per symbol and
+   dispatches from a task", "alpaca-py fragments one message at 32 KiB". These
+   are about alpaca-py's design, and rewriting them to be about the API would
+   make them false.
+3. *Rules attributed to alpaca-py* — "alpaca-py enforces this in a model
+   validator", "alpaca-py defaults this to active". Roughly 40 of these back a
+   `validate()` or a default in this crate. They are claims about what **Alpaca**
+   requires, resting on what alpaca-py believes. That is the same footing the
+   retired event streams stood on. They are left attributed rather than promoted
+   to API facts — visible hearsay beats laundered hearsay — and verifying them
+   is part of the reference reconciliation above.
+
+Do not mass-rewrite group 3 without checking each against the reference. An
+unverified claim that *says* it is unverified is worth more than a confident one
+that is wrong.
 
 The doc comments explain this crate in terms of alpaca-py: 140 references across
 `src/`, another ~53 across `tests/`. That was reasonable while the goal was

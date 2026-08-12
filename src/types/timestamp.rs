@@ -2,8 +2,7 @@
 //!
 //! The same models serve two wire formats. The REST APIs send RFC 3339 strings;
 //! the live market data stream is msgpack and sends timestamps as extension type
-//! `-1`, which alpaca-py converts by calling `.to_datetime()` on every field
-//! before handing the payload to pydantic.
+//! `-1`.
 //!
 //! Nothing decodes that extension out of the box — not `DateTime<Utc>`, not
 //! `String`, not even `serde_json::Value`; `rmp-serde` surfaces it as a newtype

@@ -1,4 +1,6 @@
-//! Request types for the market data API, ported from `alpaca/data/requests.py`.
+//! Request types for the market data API.
+//!
+//! Ported from `alpaca/data/requests.py`.
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};

@@ -5,15 +5,16 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Unofficial Rust SDK for the [Alpaca](https://alpaca.markets) trading, market data,
-and broker APIs — a port of the official Python SDK, [alpaca-py], with the same
-feature surface expressed through Rust's type system.
+and broker APIs, targeting [the API itself][docs] rather than any one SDK's idea
+of it.
 
 > **Unofficial.** Not affiliated with, endorsed by, or sponsored by Alpaca
 > Securities LLC. See [NOTICE](NOTICE).
 
 ## Status
 
-Under active development. Ported phase by phase against alpaca-py commit `cc4cb3b`.
+Under active development. Built phase by phase, verified against captured API
+responses at every step.
 
 | Area | State |
 |---|---|
@@ -23,23 +24,32 @@ Under active development. Ported phase by phase against alpaca-py commit `cc4cb3
 | Historical market data | ✅ |
 | Live market data streams | ✅ |
 | Trade update stream | ✅ |
-| Broker API | 🚧 |
+| Broker API | ✅ |
 
 See [ROADMAP.md](ROADMAP.md) for what is left, how the port is verified, and the
 conventions that keep it honest.
 
-## What changes from alpaca-py
+## Coming from alpaca-py
 
-The port preserves behavior, not API shape. Several Python patterns have no Rust
-equivalent, and the replacements are where the strong typing pays off:
+This crate began as a port of [alpaca-py] and is a derivative work of it. It no
+longer tracks that SDK — alpaca-py is the least complete of Alpaca's official
+SDKs, and in at least one place still calls an endpoint Alpaca has retired — so
+where the two disagree, this crate follows the API.
+
+The shape is close enough to migrate mechanically. What needs a decision rather
+than a rename:
 
 - **Money is `rust_decimal::Decimal`**, not `Optional[Union[str, float]]`. Alpaca
   sends order quantities and prices as strings; a custom deserializer accepts both
   strings and numbers. Market-data floats that arrive as JSON numbers stay `f64`.
-- **Unknown enum values deserialize into `Unknown`** rather than failing. pydantic
-  hard-errors when Alpaca introduces a new order status; this crate does not.
-- **Pagination is a `Stream`.** alpaca-py's `PaginationType::{NONE, FULL, ITERATOR}`
-  all fall out of one lazy stream plus `.try_collect()`.
+  Several fields alpaca-py declares `float` arrive as strings on the wire, and
+  reading them as floats loses precision.
+- **Unknown enum values deserialize into `Unknown`** rather than failing. Alpaca
+  adds values without warning; pydantic hard-errors on a new order status, and
+  this crate keeps the raw string instead.
+- **Paginated endpoints offer two methods, not a mode flag.** `get_x` fetches one
+  page; `get_all_x` walks every page with an optional cap. That covers alpaca-py's
+  `PaginationType::{NONE, FULL}`; the lazy `ITERATOR` mode has no equivalent yet.
 - **`raw_data=True` becomes `request_raw`.** A boolean cannot change a function's
   return type in Rust, so the escape hatch is a separate method.
 - **Async-first.** A `blocking` feature provides a synchronous façade.
@@ -64,6 +74,8 @@ off by default.
 
 ## License
 
-Apache-2.0, matching [alpaca-py], from which this crate is derived.
+Apache-2.0, matching [alpaca-py], from which this crate is derived. See
+[NOTICE](NOTICE).
 
 [alpaca-py]: https://github.com/alpacahq/alpaca-py
+[docs]: https://docs.alpaca.markets/us/reference/
