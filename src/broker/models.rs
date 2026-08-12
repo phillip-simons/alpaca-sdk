@@ -5,6 +5,7 @@
 //! already been wrong about field optionality elsewhere in this port.
 
 use std::collections::HashMap;
+use std::net::IpAddr;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
@@ -15,7 +16,8 @@ use uuid::Uuid;
 use crate::broker::enums::{
     ACHRelationshipStatus, AccountType, AgreementType, BankAccountType, BankStatus, ClearingBroker,
     DocumentType, FeePaymentMethod, FundingSource, IdentifierType, JournalEntryType, JournalStatus,
-    TaxIdType, TransferDirection, TransferStatus, TransferType, VisaType,
+    TaxIdType, TradeDocumentSubType, TradeDocumentType, TransferDirection, TransferStatus,
+    TransferType, VisaType,
 };
 use crate::trading::AccountStatus;
 use crate::types::serde_util::empty_string_as_none;
@@ -551,6 +553,114 @@ pub struct BatchJournalResponse {
     /// Why this entry failed, when it did.
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub error_message: Option<String>,
+}
+
+/// A statement, confirmation, or tax form belonging to a trading account.
+///
+/// Distinct from [`AccountDocument`], which is the identity paperwork attached
+/// to the brokerage account itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TradeDocument {
+    /// Alpaca's id for the document.
+    pub id: Uuid,
+    /// The document's name. Often empty.
+    #[serde(default)]
+    pub name: String,
+    /// What kind of document this is.
+    #[serde(rename = "type")]
+    pub document_type: TradeDocumentType,
+    /// A more specific classification.
+    ///
+    /// Alpaca sends `""` when there is none, which reads as absent here — the
+    /// same transformation alpaca-py makes in its constructor.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub sub_type: Option<TradeDocumentSubType>,
+    /// The date the document covers.
+    pub date: NaiveDate,
+}
+
+/// A W-8BEN form filled in field by field rather than uploaded as a file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct W8BenDocument {
+    /// The country the applicant is a citizen of.
+    pub country_citizen: String,
+    /// The date the form was signed.
+    pub date: NaiveDate,
+    /// The applicant's date of birth.
+    pub date_of_birth: NaiveDate,
+    /// The applicant's full name.
+    pub full_name: String,
+    /// The IP address the form was signed from.
+    pub ip_address: IpAddr,
+    /// Permanent address: city and state.
+    pub permanent_address_city_state: String,
+    /// Permanent address: country.
+    pub permanent_address_country: String,
+    /// Permanent address: street.
+    pub permanent_address_street: String,
+    /// The revision of the form.
+    pub revision: String,
+    /// The full name of the signer.
+    pub signer_full_name: String,
+    /// When the form data was gathered.
+    pub timestamp: DateTime<Utc>,
+    /// Any additional conditions claimed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub additional_conditions: Option<String>,
+    /// The applicant's tax id in their home country.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub foreign_tax_id: Option<String>,
+    /// Set when neither tax id is supplied.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ftin_not_required: Option<bool>,
+    /// The type of income claimed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub income_type: Option<String>,
+    /// Mailing address: city and state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mailing_address_city_state: Option<String>,
+    /// Mailing address: country.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mailing_address_country: Option<String>,
+    /// Mailing address: street.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mailing_address_street: Option<String>,
+    /// The treaty paragraph claimed under.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paragraph_number: Option<String>,
+    /// The withholding rate claimed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub percent_rate_withholding: Option<String>,
+    /// A reference number for the form.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference_number: Option<String>,
+    /// The applicant's country of residency.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub residency: Option<String>,
+    /// The applicant's US tax id or SSN.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tax_id_ssn: Option<String>,
+}
+
+impl W8BenDocument {
+    /// Checks that the form identifies the applicant for tax purposes.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if none of `foreign_tax_id`,
+    /// `tax_id_ssn` and `ftin_not_required` is set. alpaca-py enforces the same
+    /// rule in a model validator.
+    pub fn validate(&self) -> crate::error::Result<()> {
+        if self.foreign_tax_id.is_none()
+            && self.tax_id_ssn.is_none()
+            && self.ftin_not_required.is_none()
+        {
+            return Err(crate::Error::InvalidRequest(
+                "ftin_not_required must be set when neither foreign_tax_id nor tax_id_ssn is"
+                    .to_owned(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// Positions held across every account, as of the last market close.

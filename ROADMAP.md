@@ -24,7 +24,6 @@ alpaca-py checkout.
 
 Captured fixtures exist for all of these under `fixtures/broker/`.
 
-- Documents: list, download, and the base64 upload (10-document limit)
 - Rebalancing: portfolios, subscriptions, runs
 - CIP / KYC submission — note alpaca-py's two methods are literally `pass` and
   no fixture exists, so this one cannot follow "the fixture wins". Build it from
@@ -117,6 +116,12 @@ a raw map.
   `TaxIdType::ARG_AR_CUIT` (ours) against the spec's `ARG_AG_CUIT` on a live
   response — one is a typo.
 - **docs.rs build** for 0.0.0 has not been checked.
+- **`BrokerClient` carries a second `reqwest::Client`**, only for the document
+  download: that route answers `301` to a presigned storage URL, and
+  `RestClient` refuses redirects on purpose. The second client follows them and
+  sheds the credentials when one crosses hosts. That shedding is reqwest's
+  behaviour, not ours, so `broker_documents.rs` asserts it against a pair of
+  mock servers rather than trusting it to stay true across upgrades.
 
 ## How this port is built
 

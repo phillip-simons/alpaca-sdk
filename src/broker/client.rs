@@ -11,17 +11,21 @@ use crate::auth::Credentials;
 use crate::broker::enums::ACHRelationshipStatus;
 use crate::broker::models::{
     ACHRelationship, Account, AllAccountsPositions, Bank, BatchJournalResponse, Journal, Order,
-    TradeAccount, Transfer,
+    TradeAccount, TradeDocument, Transfer,
 };
 use crate::broker::requests::{
     CreateACHRelationshipRequest, CreateBankRequest, CreateBatchJournalRequest,
     CreateJournalRequest, CreateOptionExerciseRequest, CreateReverseBatchJournalRequest,
-    CreateTransferRequest, GetJournalsRequest, GetTransfersRequest, OrderRequest,
+    CreateTransferRequest, GetJournalsRequest, GetTradeDocumentsRequest, GetTransfersRequest,
+    OrderRequest, UploadDocument,
 };
 use crate::config::BaseUrl;
 use crate::error::Result;
 use crate::rest::{Empty, RestClient, RestConfig};
 use crate::trading::{Position, Watchlist};
+
+/// The most documents Alpaca accepts in one upload.
+const DOCUMENT_UPLOAD_LIMIT: usize = 10;
 
 /// A client for Alpaca's broker API.
 ///
@@ -40,6 +44,14 @@ use crate::trading::{Position, Watchlist};
 #[derive(Debug, Clone)]
 pub struct BrokerClient {
     rest: RestClient,
+    /// A second HTTP client, for the one route that redirects.
+    ///
+    /// [`RestClient`] disables redirects deliberately, so it cannot fetch a
+    /// document: that route answers `301` to a presigned storage URL. This
+    /// client follows redirects, and drops the credentials when one crosses to
+    /// another host — which is what `requests` does for alpaca-py, and what
+    /// keeps broker keys off a storage provider.
+    downloads: reqwest::Client,
 }
 
 impl BrokerClient {
@@ -65,8 +77,27 @@ impl BrokerClient {
         // alpaca-py sets use_basic_auth=True on BrokerClient and nothing else.
         let credentials = credentials.clone().into_basic();
         Ok(Self {
+            downloads: Self::download_client(&credentials, &config)?,
             rest: RestClient::new(&credentials, config)?,
         })
+    }
+
+    /// Builds the redirect-following client used by the document download.
+    fn download_client(credentials: &Credentials, config: &RestConfig) -> Result<reqwest::Client> {
+        let mut headers = reqwest::header::HeaderMap::new();
+        credentials.apply(&mut headers)?;
+        headers.insert(
+            reqwest::header::USER_AGENT,
+            reqwest::header::HeaderValue::from_static(crate::config::user_agent()),
+        );
+
+        let mut builder = reqwest::Client::builder()
+            .default_headers(headers)
+            .redirect(reqwest::redirect::Policy::limited(10));
+        if let Some(timeout) = config.timeout {
+            builder = builder.timeout(timeout);
+        }
+        Ok(builder.build()?)
     }
 
     /// The underlying transport, for routes this client does not wrap.
@@ -359,6 +390,145 @@ impl BrokerClient {
             Method::DELETE,
             &format!("/accounts/{account_id}/transfers/{transfer_id}"),
             None::<&Empty>,
+        )
+        .await
+    }
+
+    // --------------------------------------------------------- documents
+
+    /// Lists an account's trade documents: statements, confirmations, tax forms.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if the filter's date window is
+    /// the wrong way round.
+    pub async fn get_trade_documents_for_account(
+        &self,
+        account_id: Uuid,
+        filter: Option<&GetTradeDocumentsRequest>,
+    ) -> Result<Vec<TradeDocument>> {
+        let path = format!("/accounts/{account_id}/documents");
+        match filter {
+            Some(filter) => {
+                filter.validate()?;
+                self.rest.get(&path, filter).await
+            }
+            None => self.rest.get(&path, &Empty).await,
+        }
+    }
+
+    /// Fetches one trade document's metadata.
+    ///
+    /// This is the record, not the file; see
+    /// [`download_trade_document_for_account_by_id`](Self::download_trade_document_for_account_by_id)
+    /// for the contents.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_trade_document_for_account_by_id(
+        &self,
+        account_id: Uuid,
+        document_id: Uuid,
+    ) -> Result<TradeDocument> {
+        self.rest
+            .get(
+                &format!("/accounts/{account_id}/documents/{document_id}"),
+                &Empty,
+            )
+            .await
+    }
+
+    /// Downloads a trade document's contents.
+    ///
+    /// This route answers `301` with a presigned storage URL rather than the
+    /// file, so it cannot go through [`RestClient`], which refuses redirects on
+    /// purpose. It uses a second client that follows them and sheds the broker
+    /// credentials on the way — a presigned URL carries its own authorisation
+    /// and has no business seeing an API key.
+    ///
+    /// alpaca-py streams this straight to a path; the bytes are returned here so
+    /// the caller decides where they go.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures. Retries follow the client's retry
+    /// configuration, as every other route does.
+    pub async fn download_trade_document_for_account_by_id(
+        &self,
+        account_id: Uuid,
+        document_id: Uuid,
+    ) -> Result<Vec<u8>> {
+        let path = format!("/accounts/{account_id}/documents/{document_id}/download");
+        let config = self.rest.config();
+        let url = format!(
+            "{}/{}{path}",
+            config.base_url.trim_end_matches('/'),
+            config.api_version
+        );
+
+        let retry = &config.retry;
+        let total_attempts = retry.attempts + 1;
+
+        for attempt in 1..=total_attempts {
+            let response = self
+                .downloads
+                .get(&url)
+                .send()
+                .await
+                .map_err(crate::Error::Transport)?;
+            let status = response.status().as_u16();
+
+            if response.status().is_success() {
+                return Ok(response
+                    .bytes()
+                    .await
+                    .map_err(crate::Error::Transport)?
+                    .to_vec());
+            }
+
+            let body = response.text().await.unwrap_or_default();
+            let api_error = crate::error::ApiError::from_body(status, &path, body);
+
+            if !retry.should_retry(status) {
+                return Err(crate::Error::Api(api_error));
+            }
+            if attempt == total_attempts {
+                return Err(crate::Error::RetriesExhausted {
+                    attempts: total_attempts,
+                    last: api_error,
+                });
+            }
+            tokio::time::sleep(retry.wait).await;
+        }
+
+        unreachable!("retry loop exited without returning")
+    }
+
+    /// Uploads up to ten documents to an account.
+    ///
+    /// Contents are base64-encoded, and capped at 10MB each when Alpaca does the
+    /// KYC. The route answers `204`, so a success returns nothing.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if more than ten documents are
+    /// passed, or if any of them fails [`UploadDocument::validate`].
+    pub async fn upload_documents_to_account(
+        &self,
+        account_id: Uuid,
+        documents: &[UploadDocument],
+    ) -> Result<()> {
+        if documents.len() > DOCUMENT_UPLOAD_LIMIT {
+            return Err(crate::Error::InvalidRequest(format!(
+                "at most {DOCUMENT_UPLOAD_LIMIT} documents may be uploaded at once, got {}",
+                documents.len()
+            )));
+        }
+        for document in documents {
+            document.validate()?;
+        }
+
+        self.send_void(
+            Method::POST,
+            &format!("/accounts/{account_id}/documents/upload"),
+            Some(documents),
         )
         .await
     }

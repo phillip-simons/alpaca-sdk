@@ -13,9 +13,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::broker::enums::{
-    BankAccountType, FeePaymentMethod, IdentifierType, JournalEntryType, JournalStatus,
-    TransferDirection, TransferTiming, TransferType,
+    BankAccountType, DocumentType, FeePaymentMethod, IdentifierType, JournalEntryType,
+    JournalStatus, TradeDocumentType, TransferDirection, TransferTiming, TransferType,
+    UploadDocumentMimeType, UploadDocumentSubType,
 };
+use crate::broker::models::W8BenDocument;
 use crate::error::{Error, Result};
 use crate::trading::OrderType;
 use crate::types::SupportedCurrencies;
@@ -688,6 +690,202 @@ pub struct GetJournalsRequest {
     /// Only journals out of this account.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from_account: Option<Uuid>,
+}
+
+/// Filters for listing an account's trade documents.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GetTradeDocumentsRequest {
+    /// Only documents dated on or after this date.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<NaiveDate>,
+    /// Only documents dated on or before this date.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<NaiveDate>,
+    /// Only documents of this kind.
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub document_type: Option<TradeDocumentType>,
+}
+
+impl GetTradeDocumentsRequest {
+    /// Checks the date window is the right way round.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if `start` is after `end`.
+    pub fn validate(&self) -> Result<()> {
+        if let (Some(start), Some(end)) = (self.start, self.end)
+            && start > end
+        {
+            return Err(Error::InvalidRequest(
+                "start must not be after end".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// One document in an upload.
+///
+/// W-8BEN forms take a different shape from every other document — they may be
+/// sent as structured fields rather than an encoded file — and alpaca-py raises
+/// if either class is used for the other's document type. The enum makes that
+/// mix-up unrepresentable.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum UploadDocument {
+    /// Any document other than a W-8BEN.
+    Document(UploadDocumentRequest),
+    /// A W-8BEN, as an encoded file or as fields.
+    W8Ben(UploadW8BenDocumentRequest),
+}
+
+impl UploadDocument {
+    /// Checks the document is internally consistent.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if a general upload claims to be a
+    /// W-8BEN, or a W-8BEN upload sets neither or both of its content fields.
+    pub fn validate(&self) -> Result<()> {
+        match self {
+            Self::Document(document) => document.validate(),
+            Self::W8Ben(document) => document.validate(),
+        }
+    }
+}
+
+/// A document uploaded as base64-encoded content.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UploadDocumentRequest {
+    /// What kind of document this is.
+    pub document_type: DocumentType,
+    /// A more specific classification, where the type supports one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document_sub_type: Option<UploadDocumentSubType>,
+    /// The document itself, base64-encoded.
+    pub content: String,
+    /// The format of the encoded content.
+    pub mime_type: UploadDocumentMimeType,
+}
+
+impl UploadDocumentRequest {
+    /// A document of `document_type` carrying base64 `content`.
+    #[must_use]
+    pub fn new(
+        document_type: DocumentType,
+        content: impl Into<String>,
+        mime_type: UploadDocumentMimeType,
+    ) -> Self {
+        Self {
+            document_type,
+            document_sub_type: None,
+            content: content.into(),
+            mime_type,
+        }
+    }
+
+    /// Checks this is not a W-8BEN in disguise.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if the type or sub type says W-8BEN;
+    /// those go through [`UploadW8BenDocumentRequest`], which alpaca-py also
+    /// insists on.
+    pub fn validate(&self) -> Result<()> {
+        if self.document_type == DocumentType::W8ben
+            || self.document_sub_type == Some(UploadDocumentSubType::FormW8Ben)
+        {
+            return Err(Error::InvalidRequest(
+                "use UploadW8BenDocumentRequest to upload a W-8BEN".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// A W-8BEN upload, as an encoded file or as structured fields.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UploadW8BenDocumentRequest {
+    /// Always [`DocumentType::W8ben`]; Alpaca requires it in the body.
+    pub document_type: DocumentType,
+    /// Always [`UploadDocumentSubType::FormW8Ben`].
+    pub document_sub_type: UploadDocumentSubType,
+    /// The form as base64-encoded content. Set this or `content_data`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    /// The form as fields. Set this or `content`.
+    ///
+    /// Boxed because it dwarfs every other field here, and this type is one
+    /// variant of [`UploadDocument`] — an unboxed form would make every upload
+    /// in a batch as large as the largest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_data: Option<Box<W8BenDocument>>,
+    /// The format of the content. Always JSON when `content_data` is set.
+    pub mime_type: UploadDocumentMimeType,
+}
+
+impl UploadW8BenDocumentRequest {
+    /// A W-8BEN uploaded as an encoded file.
+    #[must_use]
+    pub fn from_content(content: impl Into<String>, mime_type: UploadDocumentMimeType) -> Self {
+        Self {
+            document_type: DocumentType::W8ben,
+            document_sub_type: UploadDocumentSubType::FormW8Ben,
+            content: Some(content.into()),
+            content_data: None,
+            mime_type,
+        }
+    }
+
+    /// A W-8BEN filled in field by field. Always sent as JSON.
+    #[must_use]
+    pub fn from_fields(document: W8BenDocument) -> Self {
+        Self {
+            document_type: DocumentType::W8ben,
+            document_sub_type: UploadDocumentSubType::FormW8Ben,
+            content: None,
+            content_data: Some(Box::new(document)),
+            mime_type: UploadDocumentMimeType::Json,
+        }
+    }
+
+    /// Checks exactly one content form is set, and that the pieces agree.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if neither or both of `content` and
+    /// `content_data` are set, if the type or sub type has been changed, if
+    /// `content_data` is paired with a mime type other than JSON, or if the
+    /// form itself fails [`W8BenDocument::validate`].
+    pub fn validate(&self) -> Result<()> {
+        match (&self.content, &self.content_data) {
+            (None, None) => {
+                return Err(Error::InvalidRequest(
+                    "a W-8BEN upload needs either content or content_data".to_owned(),
+                ));
+            }
+            (Some(_), Some(_)) => {
+                return Err(Error::InvalidRequest(
+                    "a W-8BEN upload takes content or content_data, not both".to_owned(),
+                ));
+            }
+            (Some(_), None) => {}
+            (None, Some(document)) => {
+                if self.mime_type != UploadDocumentMimeType::Json {
+                    return Err(Error::InvalidRequest(
+                        "content_data must be sent as application/json".to_owned(),
+                    ));
+                }
+                document.validate()?;
+            }
+        }
+
+        if self.document_type != DocumentType::W8ben
+            || self.document_sub_type != UploadDocumentSubType::FormW8Ben
+        {
+            return Err(Error::InvalidRequest(
+                "a W-8BEN upload must keep the W8BEN document type and sub type".to_owned(),
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 /// The body of an option exercise request.
