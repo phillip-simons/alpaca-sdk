@@ -31,7 +31,7 @@ pub struct Bar {
     #[serde(default, skip_deserializing)]
     pub symbol: String,
     /// The opening timestamp of the interval.
-    #[serde(rename = "t")]
+    #[serde(rename = "t", with = "crate::types::timestamp")]
     pub timestamp: DateTime<Utc>,
     /// The opening price.
     #[serde(rename = "o")]
@@ -63,7 +63,7 @@ pub struct Quote {
     #[serde(default, skip_deserializing)]
     pub symbol: String,
     /// When the quote was generated.
-    #[serde(rename = "t")]
+    #[serde(rename = "t", with = "crate::types::timestamp")]
     pub timestamp: DateTime<Utc>,
     /// The highest buy offer.
     #[serde(rename = "bp")]
@@ -100,7 +100,7 @@ pub struct Trade {
     #[serde(default, skip_deserializing)]
     pub symbol: String,
     /// When the trade executed.
-    #[serde(rename = "t")]
+    #[serde(rename = "t", with = "crate::types::timestamp")]
     pub timestamp: DateTime<Utc>,
     /// Exchange the trade executed on.
     #[serde(rename = "x", default)]
@@ -132,7 +132,7 @@ pub struct TradingStatus {
     #[serde(default, skip_deserializing)]
     pub symbol: String,
     /// When the status changed.
-    #[serde(rename = "t")]
+    #[serde(rename = "t", with = "crate::types::timestamp")]
     pub timestamp: DateTime<Utc>,
     /// The status code.
     #[serde(rename = "sc")]
@@ -158,7 +158,7 @@ pub struct TradeCancel {
     #[serde(default, skip_deserializing)]
     pub symbol: String,
     /// When the cancellation was issued.
-    #[serde(rename = "t")]
+    #[serde(rename = "t", with = "crate::types::timestamp")]
     pub timestamp: DateTime<Utc>,
     /// Exchange the cancelled trade was on.
     #[serde(rename = "x")]
@@ -187,7 +187,7 @@ pub struct TradeCorrection {
     #[serde(default, skip_deserializing)]
     pub symbol: String,
     /// When the correction was issued.
-    #[serde(rename = "t")]
+    #[serde(rename = "t", with = "crate::types::timestamp")]
     pub timestamp: DateTime<Utc>,
     /// Exchange the corrected trade was on.
     #[serde(rename = "x")]
@@ -239,7 +239,7 @@ pub struct Orderbook {
     #[serde(default, skip_deserializing)]
     pub symbol: String,
     /// When the book was captured.
-    #[serde(rename = "t")]
+    #[serde(rename = "t", with = "crate::types::timestamp")]
     pub timestamp: DateTime<Utc>,
     /// Bid levels, best first.
     #[serde(rename = "b", default)]
@@ -335,8 +335,10 @@ pub struct News {
     #[serde(default)]
     pub summary: String,
     /// When the article was created.
+    #[serde(with = "crate::types::timestamp")]
     pub created_at: DateTime<Utc>,
     /// When the article was last updated.
+    #[serde(with = "crate::types::timestamp")]
     pub updated_at: DateTime<Utc>,
     /// Symbols the article concerns.
     ///

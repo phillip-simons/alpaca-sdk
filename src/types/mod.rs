@@ -7,6 +7,7 @@ pub mod decimal;
 mod ident;
 pub mod serde_util;
 mod shared_enums;
+pub mod timestamp;
 
 pub use common_enums::{Sort, SupportedCurrencies};
 pub use ident::AssetIdent;
