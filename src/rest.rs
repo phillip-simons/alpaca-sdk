@@ -94,8 +94,26 @@ impl RestClient {
     /// Returns [`Error::Credentials`] if the credentials cannot be encoded as
     /// headers, or [`Error::Transport`] if the underlying HTTP client fails to build.
     pub fn new(credentials: &Credentials, config: RestConfig) -> Result<Self> {
+        Self::build(Some(credentials), config)
+    }
+
+    /// Builds a client that sends no authentication headers.
+    ///
+    /// Alpaca's crypto market data endpoints serve unauthenticated requests, and
+    /// alpaca-py overrides `_validate_credentials` on `CryptoHistoricalDataClient`
+    /// so it can be constructed without keys. Every other endpoint requires them.
+    ///
+    /// # Errors
+    /// Returns [`Error::Transport`] if the underlying HTTP client fails to build.
+    pub fn unauthenticated(config: RestConfig) -> Result<Self> {
+        Self::build(None, config)
+    }
+
+    fn build(credentials: Option<&Credentials>, config: RestConfig) -> Result<Self> {
         let mut headers = HeaderMap::new();
-        credentials.apply(&mut headers)?;
+        if let Some(credentials) = credentials {
+            credentials.apply(&mut headers)?;
+        }
         headers.insert(USER_AGENT, HeaderValue::from_static(user_agent()));
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 

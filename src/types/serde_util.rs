@@ -211,6 +211,65 @@ where
     }
 }
 
+/// Deserializes a field that may be a single string or a list of them.
+///
+/// Trade and quote condition codes come back as a list for stocks and as a bare
+/// string for crypto. alpaca-py types this `Union[List[str], str]` and leaves
+/// the caller to branch; normalizing to a list here means they do not have to.
+///
+/// # Errors
+/// Returns an error if the value is neither a string nor a list of strings.
+pub fn string_or_list<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct StringOrList;
+
+    impl<'de> serde::de::Visitor<'de> for StringOrList {
+        type Value = Option<Vec<String>>;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("a string, a list of strings, or null")
+        }
+
+        fn visit_str<E: de::Error>(self, value: &str) -> Result<Self::Value, E> {
+            Ok(Some(vec![value.to_owned()]))
+        }
+
+        fn visit_string<E: de::Error>(self, value: String) -> Result<Self::Value, E> {
+            Ok(Some(vec![value]))
+        }
+
+        fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_some<D: Deserializer<'de>>(
+            self,
+            deserializer: D,
+        ) -> Result<Self::Value, D::Error> {
+            deserializer.deserialize_any(self)
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            let mut values = Vec::new();
+            while let Some(value) = seq.next_element::<String>()? {
+                values.push(value);
+            }
+            Ok(Some(values))
+        }
+    }
+
+    deserializer.deserialize_option(StringOrList)
+}
+
 #[cfg(test)]
 mod tests {
     use serde::Deserialize;
