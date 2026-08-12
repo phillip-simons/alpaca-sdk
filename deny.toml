@@ -12,6 +12,12 @@ allow = [
   "Apache-2.0 WITH LLVM-exception",
   "BSD-2-Clause",
   "BSD-3-Clause",
+  # ryu, via serde_json.
+  "BSL-1.0",
+  # dunce, a build dependency of the rustls platform verifier.
+  "CC0-1.0",
+  # webpki-roots: the Mozilla CA bundle, which ships under a data license.
+  "CDLA-Permissive-2.0",
   "ISC",
   "MIT",
   "MPL-2.0",

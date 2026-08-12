@@ -42,6 +42,11 @@ equivalent, and the replacements are where the strong typing pays off:
 - **Async-first.** A `blocking` feature provides a synchronous façade.
 - **`.df` needs the `polars` feature**, off by default so the dependency is opt-in.
 
+## Minimum supported Rust version
+
+1.88. Enabling `polars` raises it to 1.95, which is why that feature is
+off by default.
+
 ## Feature flags
 
 | Feature | Default | Enables |

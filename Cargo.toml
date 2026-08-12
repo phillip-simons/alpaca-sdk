@@ -2,7 +2,7 @@
 name = "alpaca-sdk"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 description = "Unofficial Rust SDK for the Alpaca trading, market data, and broker APIs"
 authors = ["Phillip Simons <phillip@simons.gg>"]
 license = "Apache-2.0"

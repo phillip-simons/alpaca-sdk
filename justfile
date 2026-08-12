@@ -1,0 +1,143 @@
+# alpaca-sdk task runner. `just check` is the gate — run it before every commit.
+# `just ci` additionally runs the slower jobs GitHub Actions does.
+
+# Where the alpaca-py checkout lives. The codegen recipes read from it.
+# Override with ALPACA_PY=/path/to/alpaca-py, or `just gen-enums /some/path`.
+alpaca_py := env_var_or_default("ALPACA_PY", "../alpaca-py")
+
+default: check
+
+# The fast gate. Run before every commit.
+check: fmt-check clippy doc test
+
+# Rewrite formatting in place.
+fmt:
+    cargo fmt --all
+
+# Fail if anything is unformatted.
+fmt-check:
+    cargo fmt --all -- --check
+
+# Lint every target and feature, warnings denied.
+clippy:
+    cargo clippy --all-targets --all-features -- -D warnings
+
+# Build the docs with rustdoc lints denied.
+doc:
+    # These lints only fire here — clippy does not run rustdoc, so without this
+    # recipe `missing_docs` and the intra-doc link lints are decoration.
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --locked
+
+# Build and open the docs, to review a module's public surface.
+doc-open:
+    cargo doc --no-deps --all-features --open
+
+# Run the full test suite, including doctests.
+test:
+    # Deliberately no `--all-targets`: adding it silently drops the Doc-tests
+    # pass — the doctests still compile, and stop ever being run.
+    cargo test --all-features --locked
+
+# Run a subset by name, e.g. `just test-one mleg` or `just test-one decimal`.
+test-one *args:
+    cargo test --all-features {{ args }}
+
+# Auto-fix what is mechanically fixable, then show what is left.
+fix:
+    cargo fmt --all
+    cargo clippy --all-targets --all-features --fix --allow-dirty --allow-staged
+    just check
+
+# Check that each API surface still builds on its own.
+features:
+    # This crate is heavily cfg-gated, and a missing `#[cfg(feature = ...)]`
+    # compiles fine under --all-features and only fails here.
+    cargo check --no-default-features --features rustls-tls
+    cargo check --no-default-features --features trading,rustls-tls
+    cargo check --no-default-features --features data,rustls-tls
+    cargo check --no-default-features --features broker,rustls-tls
+    cargo check --no-default-features --features trading,data,broker,blocking,polars,native-tls
+
+# Build against the MSRV. Needs `rustup toolchain install 1.88.0`.
+msrv:
+    # Every feature except polars, which drags in sysinfo and needs 1.95. An
+    # off-by-default convenience feature should not set the crate's floor, so
+    # the declared rust-version covers everything else.
+    cargo +1.88.0 check --no-default-features \
+        --features trading,data,broker,blocking,rustls-tls --locked
+
+# License and advisory audit. Needs `cargo install cargo-deny`.
+deny:
+    cargo deny check
+
+# Check public API compatibility. Needs `cargo install cargo-semver-checks`.
+semver:
+    cargo semver-checks check-release
+
+# Everything CI runs.
+ci: check features msrv deny
+
+# Fast inner-loop compile check. Needs `cargo install cargo-watch`.
+watch:
+    cargo watch -x 'clippy --all-targets --all-features -- -D warnings'
+
+# ---------------------------------------------------------------------------
+# Porting from alpaca-py
+#
+# Both generators overwrite their output wholesale. Hand-written code never
+# lives in generated files: enum methods belong in the `enums_ext.rs` next
+# door, and fixtures are captured API responses that should only change when
+# the upstream revision does.
+# ---------------------------------------------------------------------------
+
+# Regenerate the wire enums and their parity test.
+gen-enums source=alpaca_py:
+    python3 scripts/gen_enums.py {{ source }}
+    cargo fmt --all
+
+# Re-extract the captured API responses from alpaca-py's test suite.
+fixtures source=alpaca_py:
+    python3 scripts/extract_fixtures.py {{ source }}
+
+# Regenerate everything, then verify nothing broke.
+regen source=alpaca_py: (gen-enums source) (fixtures source)
+    just check
+
+# Compare the pinned upstream revision against the local alpaca-py checkout.
+pinned source=alpaca_py:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    generated=$(grep -o 'revision `[^`]*`' src/trading/enums.rs | head -1 | tr -d '`' | cut -d' ' -f2)
+    upstream=$(git -C "{{ source }}" rev-parse --short HEAD 2>/dev/null || echo "unavailable")
+    echo "generated from: ${generated}"
+    echo "alpaca-py HEAD: ${upstream}"
+    if [ "${generated}" = "${upstream}" ]; then
+        echo "up to date"
+    else
+        echo "MISMATCH — run \`just regen\`"
+    fi
+
+# ---------------------------------------------------------------------------
+# Live API
+# ---------------------------------------------------------------------------
+
+# Run the tests that hit real paper endpoints, which `just test` skips.
+live:
+    # They are #[ignore]d so a normal run never spends network time or
+    # credentials. Needs APCA_API_KEY_ID and APCA_API_SECRET_KEY set.
+    cargo test --all-features --locked -- --ignored --test-threads=1
+
+# ---------------------------------------------------------------------------
+# Release
+# ---------------------------------------------------------------------------
+
+# List exactly what `cargo publish` would upload.
+package:
+    # Checks the `exclude` list in Cargo.toml before a release rather than
+    # after. --allow-dirty because this is for inspection mid-change; the real
+    # publish path goes through publish-dry, which does not pass it.
+    cargo package --list --all-features --allow-dirty
+
+# Full pre-release verification, without publishing.
+publish-dry: ci semver
+    cargo publish --dry-run --locked

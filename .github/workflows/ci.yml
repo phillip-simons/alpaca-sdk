@@ -63,9 +63,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: dtolnay/rust-toolchain@1.88.0
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --all-features
+      # polars pulls sysinfo, which needs 1.95. It is off by default, so it
+      # does not set the crate's floor; every other feature is covered here.
+      - run: >
+          cargo check --no-default-features
+          --features trading,data,broker,blocking,rustls-tls
 
   deny:
     name: cargo-deny
