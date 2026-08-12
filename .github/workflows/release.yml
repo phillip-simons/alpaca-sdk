@@ -1,0 +1,84 @@
+# Publishes to crates.io from a `v*` tag, using trusted publishing.
+#
+# No API token is stored anywhere. The job proves its identity to crates.io over
+# OIDC and receives a token that lives for 30 minutes and is revoked in a post
+# step when the job ends.
+#
+# **The filename is load-bearing.** crates.io's trusted publisher configuration
+# names this file, so renaming it silently breaks publishing until the
+# configuration is updated to match.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+# Read-only by default; the publish job asks for the OIDC token it needs.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # `just ci` builds against the MSRV as well as stable, via `cargo
+      # +1.88.0`. Installed first so that stable, installed second, stays the
+      # default — otherwise every other recipe would quietly run on 1.88 too.
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-deny,cargo-semver-checks
+
+      - name: Tag must match the crate version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          crate="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
+          if [ "$tag" != "$crate" ]; then
+            echo "::error::tag is v$tag but Cargo.toml says $crate"
+            exit 1
+          fi
+          echo "releasing $crate"
+
+      # The repo's own definition of ready-to-publish: `just ci` (fmt, clippy,
+      # rustdoc, tests, feature combinations, MSRV, cargo-deny) plus
+      # cargo-semver-checks and a packaging dry run.
+      - run: just publish-dry
+
+      # Printed so the tarball contents are on the record next to the approval,
+      # rather than something to go and check afterwards.
+      - name: What would be uploaded
+        run: cargo package --list --all-features
+
+  publish:
+    name: publish
+    needs: verify
+    runs-on: ubuntu-latest
+    # Gated: the job waits here for a reviewer, and the same environment name is
+    # part of the trust configuration on crates.io.
+    environment: release
+    permissions:
+      # Must be job-level. This is what lets the runner mint an OIDC token.
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
+      - run: cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

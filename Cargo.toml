@@ -11,7 +11,10 @@ repository = "https://github.com/phillip-simons/alpaca-sdk"
 documentation = "https://docs.rs/alpaca-sdk"
 keywords = ["alpaca", "trading", "stocks", "crypto", "finance"]
 categories = ["api-bindings", "finance"]
-exclude = [".github/", "fixtures/"]
+# `fixtures/` is deliberately included: `tests/` ships too, and every one of
+# those tests reads a captured payload out of it at runtime. Shipping tests
+# that cannot run would be worse than shipping neither. It costs 135KB.
+exclude = [".github/"]
 
 [features]
 default = ["trading", "data", "rustls-tls"]
