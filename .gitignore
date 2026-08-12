@@ -1,3 +1,13 @@
 target/
 Cargo.lock.bak
 .DS_Store
+
+# Never commit credentials. A secrets.env belonging to another project was
+# swept in by `git add -A` once; these patterns make that impossible to repeat
+# silently.
+secrets.env
+*.env
+!*.env.example
+.envrc
+*.pem
+*.key
