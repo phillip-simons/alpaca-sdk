@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::auth::Credentials;
 use crate::broker::enums::ACHRelationshipStatus;
-use crate::broker::events::{BrokerEvent, GetEventsRequest};
+use crate::broker::events::{BrokerEvent, EventVersion, GetEventsRequest};
 use crate::broker::models::{
     ACHRelationship, Account, AllAccountsPositions, Bank, BatchJournalResponse, CIPInfo, Journal,
     Order, Portfolio, RebalancingRun, RunsPage, Subscription, SubscriptionsPage, TradeAccount,
@@ -428,6 +428,8 @@ impl BrokerClient {
 
     /// Streams account status changes as they happen.
     ///
+    /// A v1 stream, and current: Alpaca publishes no v2 successor.
+    ///
     /// # Errors
     /// Propagates transport failures and any non-success status the server
     /// answers the subscription with.
@@ -435,10 +437,15 @@ impl BrokerClient {
         &self,
         filter: Option<&GetEventsRequest>,
     ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
-        self.events("/events/accounts/status", filter).await
+        self.events(EventVersion::V1, "/events/accounts/status", filter)
+            .await
     }
 
     /// Streams trade events as they happen.
+    ///
+    /// Subscribes to `/v2/events/trades`. alpaca-py still calls the v1 route,
+    /// which Alpaca documents as "fully deprecated and no longer available" —
+    /// porting it faithfully would have shipped a route that does not answer.
     ///
     /// # Errors
     /// Propagates transport failures and any non-success status the server
@@ -447,10 +454,17 @@ impl BrokerClient {
         &self,
         filter: Option<&GetEventsRequest>,
     ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
-        self.events("/events/trades", filter).await
+        self.events(EventVersion::V2, "/events/trades", filter)
+            .await
     }
 
     /// Streams journal status changes as they happen.
+    ///
+    /// Subscribes to `/v2/events/journals/status`. The v1 stream still exists
+    /// but is legacy, and Alpaca warns the two are not interchangeable: "there
+    /// is no compatibility between /v1/events/journals/status and
+    /// /v2/events/journals/status, the ids (ulid) are always different". A
+    /// cursor saved from the v1 stream is meaningless here.
     ///
     /// # Errors
     /// Propagates transport failures and any non-success status the server
@@ -459,10 +473,19 @@ impl BrokerClient {
         &self,
         filter: Option<&GetEventsRequest>,
     ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
-        self.events("/events/journals/status", filter).await
+        self.events(EventVersion::V2, "/events/journals/status", filter)
+            .await
     }
 
-    /// Streams transfer status changes as they happen.
+    /// Streams funding status changes as they happen.
+    ///
+    /// Subscribes to `/v2/events/funding/status`, which supersedes the v1
+    /// transfer stream alpaca-py calls. That route is deprecated and open only
+    /// to broker partners who already had it; new partners cannot use it at all.
+    ///
+    /// The v2 stream is also broader than its name here suggests: it covers bank
+    /// relationships, wire banks and funding wallets as well as transfers. The
+    /// method keeps alpaca-py's name so the mapping stays findable.
     ///
     /// # Errors
     /// Propagates transport failures and any non-success status the server
@@ -471,10 +494,15 @@ impl BrokerClient {
         &self,
         filter: Option<&GetEventsRequest>,
     ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
-        self.events("/events/transfers/status", filter).await
+        self.events(EventVersion::V2, "/events/funding/status", filter)
+            .await
     }
 
     /// Streams non-trading activity events as they happen.
+    ///
+    /// A v1 stream, and current. Alpaca documents two filters this crate does
+    /// not expose — `include_preprocessing` and `group_id` — which are unique to
+    /// this stream.
     ///
     /// # Errors
     /// Propagates transport failures and any non-success status the server
@@ -483,16 +511,21 @@ impl BrokerClient {
         &self,
         filter: Option<&GetEventsRequest>,
     ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
-        self.events("/events/nta", filter).await
+        self.events(EventVersion::V1, "/events/nta", filter).await
     }
 
     /// Opens one of the five event streams.
+    ///
+    /// The version comes from the stream rather than from the client's
+    /// `api_version`: Alpaca versions these endpoints individually, so two of
+    /// the five are v1 and three are v2.
     ///
     /// The subscription itself is awaited so a rejected one — bad credentials, a
     /// filter the server dislikes — surfaces as an error here rather than as a
     /// single item on an otherwise empty stream.
     async fn events(
         &self,
+        version: EventVersion,
         path: &str,
         filter: Option<&GetEventsRequest>,
     ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
@@ -500,7 +533,7 @@ impl BrokerClient {
         let url = format!(
             "{}/{}{path}",
             config.base_url.trim_end_matches('/'),
-            config.api_version
+            version.segment()
         );
 
         let mut request = self
@@ -512,7 +545,9 @@ impl BrokerClient {
             .header(reqwest::header::CONTENT_TYPE, "text/event-stream")
             .header(reqwest::header::ACCEPT, "text/event-stream");
         if let Some(filter) = filter {
-            request = request.query(filter);
+            // Rendered per version: the cursor parameter is named differently
+            // on each, and means something different under the v1 name.
+            request = request.query(&version.query(filter));
         }
 
         let response = request.send().await.map_err(crate::Error::Transport)?;

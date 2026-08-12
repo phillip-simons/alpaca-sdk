@@ -162,24 +162,34 @@ Surfaced by one read of `llms.txt`, not yet checked against the port or costed:
 Confirmed already covered, so the reference is not all gaps: news, market movers,
 most actives, tokenisation, locates.
 
-### The event streams need correcting, not extending
+### What the first pass already found and fixed
 
-The first pass over the reference found that the five SSE streams shipped in
-Phase 6 — ported faithfully from alpaca-py — do not all still exist. alpaca-py
-is stale here and the port inherited it:
+The reference check paid for itself immediately: of the five SSE streams shipped
+in Phase 6 — ported faithfully from alpaca-py — one was calling a route Alpaca
+had switched off, and two more were legacy. **Fixed**, and worth reading as the
+argument for doing the rest of this reconciliation:
 
-| Stream | What we ship | What the reference says |
-|---|---|---|
-| Account status | `/v1/events/accounts/status` | current; `since_id`/`until_id` deprecated, sunset 2027-02-15, use `since_ulid` |
-| Trades | `/v1/events/trades` | **"fully deprecated and no longer available"** — use `/v2/events/trades` |
-| Journals | `/v1/events/journals/status` | legacy; `/v2/events/journals/status` exists, and the ids are *not* compatible between them |
-| Transfers | `/v1/events/transfers/status` | deprecated, existing broker partners only; new partners must use `/v2/events/funding/status` |
-| Non-trading activity | `/v1/events/nta` | not yet checked |
+| Stream | alpaca-py calls | We now call | Why |
+|---|---|---|---|
+| Account status | `/v1/events/accounts/status` | unchanged | current, no v2 exists |
+| Trades | `/v1/events/trades` | `/v2/events/trades` | v1 is "fully deprecated and no longer available" |
+| Journals | `/v1/events/journals/status` | `/v2/events/journals/status` | v1 is legacy; ids are *not* compatible across the two |
+| Transfers | `/v1/events/transfers/status` | `/v2/events/funding/status` | v1 is deprecated and closed to new broker partners; v2 also covers banks and wallets |
+| Non-trading activity | `/v1/events/nta` | unchanged | current, no v2 exists |
 
-`get_trade_events` therefore points at a route that is switched off. That is a
-Phase 6 defect rather than a Phase 6.5 gap and should be fixed first. The
-v2 streams also take `since_id`/`until_id` as ULIDs, which the v1 filter shape
-does not express.
+**The cursor parameter is a trap.** The v1 streams take the ULID as
+`since_ulid`/`until_ulid`; their `since_id`/`until_id` are a legacy *integer*
+form, deprecated 2023-08-01 and sunsetting 2027-02-15. The v2 streams take the
+ULID as `since_id`/`until_id`. Same names, different meanings, opposite
+versions. `GetEventsRequest` names the field for the concept and the client
+renders it for the stream it is calling; the deprecated integer form is not
+exposed at all.
+
+Still not exposed: `include_preprocessing` and `group_id`, which only the
+non-trading-activity stream takes.
+
+This is what porting an SDK rather than reading the API costs, and it is the
+reason the reconciliation above is Phase 6.5's first job rather than its last.
 
 **Market data** — all confirmed present in `market-data-api.json`:
 

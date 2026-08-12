@@ -93,9 +93,11 @@ async fn server_for(expected_path: &str) -> MockServer {
 
 #[tokio::test]
 async fn every_stream_has_its_own_path() {
-    // Five endpoints, and nothing in the response distinguishes them, so a
-    // transposed path would be invisible without this. Each method returns its
-    // own opaque stream type, so these cannot share a loop body.
+    // Five endpoints across two API versions, and nothing in the response
+    // distinguishes them, so a transposed path would be invisible without this.
+    // The versions are per stream, not per client: account status and NTA are
+    // v1, trades, journals and funding are v2. Each method returns its own
+    // opaque stream type, so these cannot share a loop body.
     let server = server_for("/v1/events/accounts/status").await;
     let events: Vec<_> = client(&server)
         .get_account_status_events(None)
@@ -105,7 +107,7 @@ async fn every_stream_has_its_own_path() {
         .await;
     assert_eq!(events.len(), 2);
 
-    let server = server_for("/v1/events/trades").await;
+    let server = server_for("/v2/events/trades").await;
     let events: Vec<_> = client(&server)
         .get_trade_events(None)
         .await
@@ -114,7 +116,7 @@ async fn every_stream_has_its_own_path() {
         .await;
     assert_eq!(events.len(), 2);
 
-    let server = server_for("/v1/events/journals/status").await;
+    let server = server_for("/v2/events/journals/status").await;
     let events: Vec<_> = client(&server)
         .get_journal_events(None)
         .await
@@ -123,7 +125,7 @@ async fn every_stream_has_its_own_path() {
         .await;
     assert_eq!(events.len(), 2);
 
-    let server = server_for("/v1/events/transfers/status").await;
+    let server = server_for("/v2/events/funding/status").await;
     let events: Vec<_> = client(&server)
         .get_transfer_events(None)
         .await
@@ -146,7 +148,7 @@ async fn every_stream_has_its_own_path() {
 async fn the_subscription_sends_the_sse_headers_and_the_filter() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/v1/events/trades"))
+        .and(path("/v2/events/trades"))
         .and(header("accept", "text/event-stream"))
         .and(header("cache-control", "no-cache"))
         .and(header("content-type", "text/event-stream"))
@@ -163,9 +165,9 @@ async fn the_subscription_sends_the_sse_headers_and_the_filter() {
         .await;
 
     let filter = GetEventsRequest {
-        id: None,
         since: Some("2022-02-01".parse().unwrap()),
         until: Some("2022-02-28".parse().unwrap()),
+        ..GetEventsRequest::default()
     };
 
     // The mock's `expect(1)` is the assertion; the stream itself is not needed.
@@ -181,7 +183,7 @@ async fn the_subscription_sends_the_sse_headers_and_the_filter() {
 async fn resuming_sends_the_event_id_that_was_last_seen() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/v1/events/journals/status"))
+        .and(path("/v2/events/journals/status"))
         .and(query_param("id", "42"))
         .respond_with(stream_response())
         .expect(1)
@@ -196,6 +198,76 @@ async fn resuming_sends_the_event_id_that_was_last_seen() {
             .await
             .unwrap(),
     );
+}
+
+#[tokio::test]
+async fn the_ulid_cursor_is_spelled_for_the_version_being_called() {
+    // On v2 the ULID goes out as since_id. On v1 that name belongs to a
+    // deprecated integer form, so the ULID has to go out as since_ulid instead.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v2/events/trades"))
+        .and(query_param("since_id", "01ARZ3NDEKTSV4RRFFQ69G5FAV"))
+        .respond_with(stream_response())
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    drop(
+        client(&server)
+            .get_trade_events(Some(&GetEventsRequest::after_ulid(
+                "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            )))
+            .await
+            .unwrap(),
+    );
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/events/accounts/status"))
+        .and(query_param("since_ulid", "01ARZ3NDEKTSV4RRFFQ69G5FAV"))
+        .respond_with(stream_response())
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    drop(
+        client(&server)
+            .get_account_status_events(Some(&GetEventsRequest::after_ulid(
+                "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            )))
+            .await
+            .unwrap(),
+    );
+}
+
+#[tokio::test]
+async fn the_streams_alpaca_retired_are_not_called() {
+    // alpaca-py subscribes to /v1/events/trades, which Alpaca documents as
+    // fully deprecated and no longer available, and to the legacy v1 journal
+    // and transfer streams. Mounting *only* the retired paths means any request
+    // to one fails the test — the client must not go near them.
+    for retired in [
+        "/v1/events/trades",
+        "/v1/events/journals/status",
+        "/v1/events/transfers/status",
+    ] {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(retired))
+            .respond_with(stream_response())
+            .expect(0)
+            .mount(&server)
+            .await;
+
+        // Every one of these now targets a v2 path, so the mock server answers
+        // 404 and the subscription fails rather than silently hitting a dead
+        // route.
+        let client = client(&server);
+        assert!(client.get_trade_events(None).await.is_err(), "{retired}");
+        assert!(client.get_journal_events(None).await.is_err(), "{retired}");
+        assert!(client.get_transfer_events(None).await.is_err(), "{retired}");
+    }
 }
 
 #[tokio::test]
