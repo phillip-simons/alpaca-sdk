@@ -413,6 +413,54 @@ fn calendar_combines_the_date_with_the_time_strings() {
     assert_eq!(day.date.to_string(), "2022-04-13");
     assert_eq!(day.open.to_string(), "2022-04-13 09:30:00");
     assert_eq!(day.close.to_string(), "2022-04-13 16:00:00");
+    // Absent from this payload, and from every alpaca-py model.
+    assert_eq!(day.session_open, None);
+    assert_eq!(day.settlement_date, None);
+}
+
+#[test]
+fn calendar_reads_the_session_fields_the_real_api_sends() {
+    // Exactly what /v2/calendar returns, which no alpaca-py model declares.
+    // The session times are HHMM with no separator, unlike open and close.
+    let calendars: Vec<Calendar> = serde_json::from_str(
+        r#"[{
+            "date": "2026-08-12",
+            "open": "09:30",
+            "close": "16:00",
+            "session_open": "0400",
+            "session_close": "2000",
+            "settlement_date": "2026-08-13"
+        }]"#,
+    )
+    .unwrap();
+
+    let day = &calendars[0];
+    assert_eq!(day.open.to_string(), "2026-08-12 09:30:00");
+    assert_eq!(
+        day.session_open.unwrap().to_string(),
+        "2026-08-12 04:00:00",
+        "extended-hours open"
+    );
+    assert_eq!(
+        day.session_close.unwrap().to_string(),
+        "2026-08-12 20:00:00",
+        "extended-hours close"
+    );
+    assert_eq!(day.settlement_date.unwrap().to_string(), "2026-08-13");
+}
+
+#[test]
+fn calendar_rejects_a_session_time_in_the_wrong_format() {
+    // If the separator ever appears here, that is a wire change worth failing on
+    // rather than silently dropping the field.
+    let result = serde_json::from_str::<Vec<Calendar>>(
+        r#"[{"date":"2026-08-12","open":"09:30","close":"16:00","session_open":"04:00"}]"#,
+    );
+
+    assert!(
+        result.is_err(),
+        "expected the HH:MM session time to be rejected"
+    );
 }
 
 #[test]

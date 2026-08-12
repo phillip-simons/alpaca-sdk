@@ -84,9 +84,34 @@ async fn clock_and_calendar_read_back() {
     // were wrong, this is where it shows.
     let calendar = client.get_calendar(None).await.unwrap();
     assert!(!calendar.is_empty());
-    println!(
-        "calendar[0] {} {} → {}",
-        calendar[0].date, calendar[0].open, calendar[0].close
+
+    let day = &calendar[0];
+    println!("calendar[0] {} {} → {}", day.date, day.open, day.close);
+
+    // The session fields and settlement_date exist in real responses but in no
+    // alpaca-py model, and the session times use a different format from
+    // open/close. This is the only place that gets checked against the real API.
+    let session_open = day
+        .session_open
+        .expect("the live API sends session_open; parsing it must have failed");
+    let session_close = day.session_close.expect("the live API sends session_close");
+    let settlement = day
+        .settlement_date
+        .expect("the live API sends settlement_date");
+
+    println!("  extended hours {session_open} → {session_close}, settles {settlement}");
+
+    assert!(
+        session_open < day.open,
+        "the extended-hours session should open before the regular one"
+    );
+    assert!(
+        session_close > day.close,
+        "the extended-hours session should close after the regular one"
+    );
+    assert!(
+        settlement >= day.date,
+        "settlement cannot precede the trade date"
     );
 }
 

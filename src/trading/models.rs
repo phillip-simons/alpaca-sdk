@@ -402,20 +402,29 @@ pub struct Clock {
     pub next_close: DateTime<Utc>,
 }
 
-/// Market open and close times for a single day.
+/// Market hours for a single trading day.
 ///
-/// The API sends `open` and `close` as bare `HH:MM` strings in eastern time.
-/// alpaca-py combines them with `date` into naive datetimes in its constructor,
-/// and [`Calendar`]'s `Deserialize` impl does the same so the fields are usable
-/// without the caller re-parsing them.
+/// The API sends every time as a bare string in eastern time, which alpaca-py
+/// combines with `date` into naive datetimes in its constructor; this does the
+/// same, so the fields are usable without the caller re-parsing them.
+///
+/// The two session fields and `settlement_date` appear in real responses but in
+/// no alpaca-py model. They are optional here because older responses, and the
+/// captured fixtures, do not carry them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Calendar {
     /// The trading day.
     pub date: NaiveDate,
-    /// When the market opens, as a naive eastern-time datetime.
+    /// When the regular session opens, as a naive eastern-time datetime.
     pub open: NaiveDateTime,
-    /// When the market closes, as a naive eastern-time datetime.
+    /// When the regular session closes, as a naive eastern-time datetime.
     pub close: NaiveDateTime,
+    /// When the extended-hours session opens, typically 04:00.
+    pub session_open: Option<NaiveDateTime>,
+    /// When the extended-hours session closes, typically 20:00.
+    pub session_close: Option<NaiveDateTime>,
+    /// When trades executed on this day settle.
+    pub settlement_date: Option<NaiveDate>,
 }
 
 impl<'de> Deserialize<'de> for Calendar {
@@ -425,17 +434,34 @@ impl<'de> Deserialize<'de> for Calendar {
             date: NaiveDate,
             open: String,
             close: String,
+            #[serde(default)]
+            session_open: Option<String>,
+            #[serde(default)]
+            session_close: Option<String>,
+            #[serde(default)]
+            settlement_date: Option<NaiveDate>,
         }
 
         let raw = Raw::deserialize(deserializer)?;
-        let combine = |time: &str, field: &str| {
-            NaiveDateTime::parse_from_str(&format!("{} {time}", raw.date), "%Y-%m-%d %H:%M")
+
+        let combine = |time: &str, format: &str, field: &str| {
+            NaiveDateTime::parse_from_str(&format!("{} {time}", raw.date), format)
                 .map_err(|e| de::Error::custom(format!("{field}: {e}")))
         };
 
+        // `open` and `close` are `HH:MM`; the session times are `HHMM`, with no
+        // separator. Reusing one format for both silently fails to parse.
+        let session = |time: Option<&String>, field: &str| match time {
+            Some(time) => combine(time, "%Y-%m-%d %H%M", field).map(Some),
+            None => Ok(None),
+        };
+
         Ok(Self {
-            open: combine(&raw.open, "open")?,
-            close: combine(&raw.close, "close")?,
+            open: combine(&raw.open, "%Y-%m-%d %H:%M", "open")?,
+            close: combine(&raw.close, "%Y-%m-%d %H:%M", "close")?,
+            session_open: session(raw.session_open.as_ref(), "session_open")?,
+            session_close: session(raw.session_close.as_ref(), "session_close")?,
+            settlement_date: raw.settlement_date,
             date: raw.date,
         })
     }
