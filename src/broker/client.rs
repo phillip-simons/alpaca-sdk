@@ -11,13 +11,16 @@ use crate::auth::Credentials;
 use crate::broker::enums::ACHRelationshipStatus;
 use crate::broker::models::{
     ACHRelationship, Account, AllAccountsPositions, Bank, BatchJournalResponse, Journal, Order,
-    TradeAccount, TradeDocument, Transfer,
+    Portfolio, RebalancingRun, RunsPage, Subscription, SubscriptionsPage, TradeAccount,
+    TradeDocument, Transfer,
 };
 use crate::broker::requests::{
     CreateACHRelationshipRequest, CreateBankRequest, CreateBatchJournalRequest,
-    CreateJournalRequest, CreateOptionExerciseRequest, CreateReverseBatchJournalRequest,
-    CreateTransferRequest, GetJournalsRequest, GetTradeDocumentsRequest, GetTransfersRequest,
-    OrderRequest, UploadDocument,
+    CreateJournalRequest, CreateOptionExerciseRequest, CreatePortfolioRequest,
+    CreateReverseBatchJournalRequest, CreateRunRequest, CreateSubscriptionRequest,
+    CreateTransferRequest, GetJournalsRequest, GetPortfoliosRequest, GetRunsRequest,
+    GetSubscriptionsRequest, GetTradeDocumentsRequest, GetTransfersRequest, OrderRequest,
+    UpdatePortfolioRequest, UploadDocument,
 };
 use crate::config::BaseUrl;
 use crate::error::Result;
@@ -26,6 +29,21 @@ use crate::trading::{Position, Watchlist};
 
 /// The most documents Alpaca accepts in one upload.
 const DOCUMENT_UPLOAD_LIMIT: usize = 10;
+
+/// alpaca-py's default page size for the token-paginated broker routes.
+const DEFAULT_PAGE_SIZE: u32 = 100;
+
+/// The page size to ask for, given a cap on the total.
+///
+/// alpaca-py narrows the last request to exactly what is still wanted rather
+/// than fetching a full page and discarding the tail. Returns `None` when there
+/// is no cap, leaving the caller's own page size alone.
+fn page_limit(configured: &Option<u32>, max_items: Option<usize>, collected: usize) -> Option<u32> {
+    let max_items = max_items?;
+    let page_size = configured.unwrap_or(DEFAULT_PAGE_SIZE);
+    let remaining = u32::try_from(max_items.saturating_sub(collected)).unwrap_or(u32::MAX);
+    Some(page_size.min(remaining))
+}
 
 /// A client for Alpaca's broker API.
 ///
@@ -529,6 +547,265 @@ impl BrokerClient {
             Method::POST,
             &format!("/accounts/{account_id}/documents/upload"),
             Some(documents),
+        )
+        .await
+    }
+
+    // ------------------------------------------------------- rebalancing
+
+    /// Creates a portfolio accounts can be rebalanced towards.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if any weight is not positive
+    /// or an asset weight names no symbol.
+    pub async fn create_portfolio(&self, portfolio: &CreatePortfolioRequest) -> Result<Portfolio> {
+        portfolio.validate()?;
+        self.rest.post("/rebalancing/portfolios", portfolio).await
+    }
+
+    /// Lists portfolios, optionally filtered.
+    ///
+    /// This route answers with a bare array — unlike subscriptions and runs, it
+    /// does not paginate.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_all_portfolios(
+        &self,
+        filter: Option<&GetPortfoliosRequest>,
+    ) -> Result<Vec<Portfolio>> {
+        match filter {
+            Some(filter) => self.rest.get("/rebalancing/portfolios", filter).await,
+            None => self.rest.get("/rebalancing/portfolios", &Empty).await,
+        }
+    }
+
+    /// Fetches one portfolio.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_portfolio_by_id(&self, portfolio_id: Uuid) -> Result<Portfolio> {
+        self.rest
+            .get(&format!("/rebalancing/portfolios/{portfolio_id}"), &Empty)
+            .await
+    }
+
+    /// Changes a portfolio.
+    ///
+    /// Changing the weights or the conditions re-evaluates every subscribed
+    /// account at the next opportunity, subject to the cooldown.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if any weight the update sets is
+    /// not positive or an asset weight names no symbol.
+    pub async fn update_portfolio_by_id(
+        &self,
+        portfolio_id: Uuid,
+        update: &UpdatePortfolioRequest,
+    ) -> Result<Portfolio> {
+        update.validate()?;
+        self.rest
+            .patch(&format!("/rebalancing/portfolios/{portfolio_id}"), update)
+            .await
+    }
+
+    /// Retires a portfolio.
+    ///
+    /// Permitted only when nothing subscribes to it and no active portfolio
+    /// lists it as a weight. The record survives; it just stops being usable.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn inactivate_portfolio_by_id(&self, portfolio_id: Uuid) -> Result<()> {
+        self.send_void(
+            Method::DELETE,
+            &format!("/rebalancing/portfolios/{portfolio_id}"),
+            None::<&Empty>,
+        )
+        .await
+    }
+
+    /// Subscribes an account to a portfolio.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn create_subscription(
+        &self,
+        subscription: &CreateSubscriptionRequest,
+    ) -> Result<Subscription> {
+        self.rest
+            .post("/rebalancing/subscriptions", subscription)
+            .await
+    }
+
+    /// Fetches one page of subscriptions.
+    ///
+    /// The page carries the token for the next one; see
+    /// [`get_all_subscriptions`](Self::get_all_subscriptions) to walk them all.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_subscriptions(
+        &self,
+        filter: Option<&GetSubscriptionsRequest>,
+    ) -> Result<SubscriptionsPage> {
+        match filter {
+            Some(filter) => self.rest.get("/rebalancing/subscriptions", filter).await,
+            None => self.rest.get("/rebalancing/subscriptions", &Empty).await,
+        }
+    }
+
+    /// Walks every page of subscriptions.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_all_subscriptions(
+        &self,
+        filter: Option<&GetSubscriptionsRequest>,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Subscription>> {
+        let mut filter = filter.cloned().unwrap_or_default();
+        let mut collected: Vec<Subscription> = Vec::new();
+
+        loop {
+            if let Some(limit) = page_limit(&filter.limit, max_items, collected.len()) {
+                filter.limit = Some(limit);
+            }
+
+            let page: SubscriptionsPage =
+                self.rest.get("/rebalancing/subscriptions", &filter).await?;
+
+            if page.subscriptions.is_empty() {
+                break;
+            }
+            collected.extend(page.subscriptions);
+
+            if let Some(max_items) = max_items
+                && collected.len() >= max_items
+            {
+                collected.truncate(max_items);
+                break;
+            }
+
+            // No token means this was the last page.
+            match page.next_page_token {
+                Some(token) => filter.page_token = Some(token),
+                None => break,
+            }
+        }
+
+        Ok(collected)
+    }
+
+    /// Fetches one subscription.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_subscription_by_id(&self, subscription_id: Uuid) -> Result<Subscription> {
+        self.rest
+            .get(
+                &format!("/rebalancing/subscriptions/{subscription_id}"),
+                &Empty,
+            )
+            .await
+    }
+
+    /// Ends a subscription, stopping the account's rebalancing.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn unsubscribe_account(&self, subscription_id: Uuid) -> Result<()> {
+        self.send_void(
+            Method::DELETE,
+            &format!("/rebalancing/subscriptions/{subscription_id}"),
+            None::<&Empty>,
+        )
+        .await
+    }
+
+    /// Starts a rebalancing run by hand.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if any weight is not positive
+    /// or an asset weight names no symbol.
+    pub async fn create_manual_run(&self, run: &CreateRunRequest) -> Result<RebalancingRun> {
+        run.validate()?;
+        self.rest.post("/rebalancing/runs", run).await
+    }
+
+    /// Fetches one page of rebalancing runs.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_runs(&self, filter: Option<&GetRunsRequest>) -> Result<RunsPage> {
+        match filter {
+            Some(filter) => self.rest.get("/rebalancing/runs", filter).await,
+            None => self.rest.get("/rebalancing/runs", &Empty).await,
+        }
+    }
+
+    /// Walks every page of rebalancing runs.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_all_runs(
+        &self,
+        filter: Option<&GetRunsRequest>,
+        max_items: Option<usize>,
+    ) -> Result<Vec<RebalancingRun>> {
+        let mut filter = filter.cloned().unwrap_or_default();
+        let mut collected: Vec<RebalancingRun> = Vec::new();
+
+        loop {
+            if let Some(limit) = page_limit(&filter.limit, max_items, collected.len()) {
+                filter.limit = Some(limit);
+            }
+
+            let page: RunsPage = self.rest.get("/rebalancing/runs", &filter).await?;
+
+            if page.runs.is_empty() {
+                break;
+            }
+            collected.extend(page.runs);
+
+            if let Some(max_items) = max_items
+                && collected.len() >= max_items
+            {
+                collected.truncate(max_items);
+                break;
+            }
+
+            match page.next_page_token {
+                Some(token) => filter.page_token = Some(token),
+                None => break,
+            }
+        }
+
+        Ok(collected)
+    }
+
+    /// Fetches one rebalancing run.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_run_by_id(&self, run_id: Uuid) -> Result<RebalancingRun> {
+        self.rest
+            .get(&format!("/rebalancing/runs/{run_id}"), &Empty)
+            .await
+    }
+
+    /// Cancels a rebalancing run.
+    ///
+    /// Only queued and in-progress runs can be cancelled, and any orders already
+    /// submitted are cancelled on a best-effort basis.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn cancel_run_by_id(&self, run_id: Uuid) -> Result<()> {
+        self.send_void(
+            Method::DELETE,
+            &format!("/rebalancing/runs/{run_id}"),
+            None::<&Empty>,
         )
         .await
     }

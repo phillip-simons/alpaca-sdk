@@ -24,7 +24,6 @@ alpaca-py checkout.
 
 Captured fixtures exist for all of these under `fixtures/broker/`.
 
-- Rebalancing: portfolios, subscriptions, runs
 - CIP / KYC submission — note alpaca-py's two methods are literally `pass` and
   no fixture exists, so this one cannot follow "the fixture wins". Build it from
   `models/cip.py` and the spec, and say in the docs that it is unverified.
@@ -61,6 +60,22 @@ silently drops the extra fields:
 They use `#[serde(flatten)]` over the trading struct rather than transcribing it,
 which is the closest thing to alpaca-py's subclassing. Check for this whenever a
 broker route appears to reuse a trading model.
+
+### Three pagination schemes, not one
+
+The broker API pages three different ways, and the fixtures disagree with each
+other about which:
+
+- **Offset**, no envelope, empty array to stop: transfers.
+- **Page token**, envelope (`{"subscriptions": [...], "next_page_token": …}`),
+  absent token to stop: rebalancing subscriptions and runs, account activities.
+- **None at all**, bare array: rebalancing portfolios.
+
+Each paginated route has both a single-page method and a `get_all_*` that walks,
+which covers alpaca-py's `PaginationType.NONE` and `.FULL`. The lazy `.ITERATOR`
+mode is not ported; a `Stream` is its Rust equivalent if a caller ever wants one.
+Every walk stops on an empty page even when a token says otherwise — a token
+pointing at an empty page would otherwise loop forever.
 
 `commission` arrives as a JSON *number* on order responses and as a *string* in
 the spec's trade-update events; `Decimal` reads both and writes a string. If a

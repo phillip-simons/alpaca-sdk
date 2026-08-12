@@ -14,10 +14,10 @@ use uuid::Uuid;
 
 use crate::broker::enums::{
     BankAccountType, DocumentType, FeePaymentMethod, IdentifierType, JournalEntryType,
-    JournalStatus, TradeDocumentType, TransferDirection, TransferTiming, TransferType,
-    UploadDocumentMimeType, UploadDocumentSubType,
+    JournalStatus, PortfolioStatus, RunType, TradeDocumentType, TransferDirection, TransferTiming,
+    TransferType, UploadDocumentMimeType, UploadDocumentSubType,
 };
-use crate::broker::models::W8BenDocument;
+use crate::broker::models::{RebalancingCondition, W8BenDocument, Weight};
 use crate::error::{Error, Result};
 use crate::trading::OrderType;
 use crate::types::SupportedCurrencies;
@@ -886,6 +886,203 @@ impl UploadW8BenDocumentRequest {
 
         Ok(())
     }
+}
+
+/// The body that creates a portfolio.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreatePortfolioRequest {
+    /// A name for the portfolio.
+    pub name: String,
+    /// What the portfolio is for.
+    pub description: String,
+    /// The target allocation. Percentages should total 100.
+    pub weights: Vec<Weight>,
+    /// Days to wait after a rebalance before rebalancing again.
+    pub cooldown_days: u32,
+    /// When to rebalance towards the target.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rebalance_conditions: Option<Vec<RebalancingCondition>>,
+}
+
+impl CreatePortfolioRequest {
+    /// A portfolio targeting `weights`.
+    #[must_use]
+    pub fn new(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        weights: Vec<Weight>,
+        cooldown_days: u32,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            description: description.into(),
+            weights,
+            cooldown_days,
+            rebalance_conditions: None,
+        }
+    }
+
+    /// Checks every weight.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if any weight is not positive or an
+    /// asset weight names no symbol.
+    pub fn validate(&self) -> Result<()> {
+        for weight in &self.weights {
+            weight.validate()?;
+        }
+        Ok(())
+    }
+}
+
+/// The body that changes a portfolio.
+///
+/// Changing the weights or the conditions re-evaluates every subscribed account
+/// at the next opportunity, subject to the cooldown.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdatePortfolioRequest {
+    /// A new name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// A new description.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// A new target allocation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weights: Option<Vec<Weight>>,
+    /// A new cooldown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cooldown_days: Option<u32>,
+    /// New rebalancing conditions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rebalance_conditions: Option<Vec<RebalancingCondition>>,
+}
+
+impl UpdatePortfolioRequest {
+    /// Checks every weight the update sets.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if any weight is not positive or an
+    /// asset weight names no symbol.
+    pub fn validate(&self) -> Result<()> {
+        for weight in self.weights.iter().flatten() {
+            weight.validate()?;
+        }
+        Ok(())
+    }
+}
+
+/// Filters for listing portfolios.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GetPortfoliosRequest {
+    /// Only portfolios with this name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Only portfolios with this description.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Only portfolios holding this security.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<String>,
+    /// Only this portfolio.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub portfolio_id: Option<Uuid>,
+    /// Only portfolios in this status.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<PortfolioStatus>,
+}
+
+/// The body that subscribes an account to a portfolio.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreateSubscriptionRequest {
+    /// The account to rebalance.
+    pub account_id: Uuid,
+    /// The portfolio to rebalance it towards.
+    pub portfolio_id: Uuid,
+}
+
+impl CreateSubscriptionRequest {
+    /// Subscribes `account_id` to `portfolio_id`.
+    #[must_use]
+    pub fn new(account_id: Uuid, portfolio_id: Uuid) -> Self {
+        Self {
+            account_id,
+            portfolio_id,
+        }
+    }
+}
+
+/// Filters for listing subscriptions.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GetSubscriptionsRequest {
+    /// Only this account's subscription.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<Uuid>,
+    /// Only subscriptions to this portfolio.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub portfolio_id: Option<Uuid>,
+    /// Page size.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    /// The page to fetch. Set by the paginating helper on each pass.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_token: Option<String>,
+}
+
+/// The body that starts a rebalancing run by hand.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreateRunRequest {
+    /// The account to rebalance.
+    pub account_id: Uuid,
+    /// Whether to rebalance fully or invest cash.
+    #[serde(rename = "type")]
+    pub run_type: RunType,
+    /// The weights to rebalance towards.
+    pub weights: Vec<Weight>,
+}
+
+impl CreateRunRequest {
+    /// A run moving `account_id` towards `weights`.
+    #[must_use]
+    pub fn new(account_id: Uuid, run_type: RunType, weights: Vec<Weight>) -> Self {
+        Self {
+            account_id,
+            run_type,
+            weights,
+        }
+    }
+
+    /// Checks every weight.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if any weight is not positive or an
+    /// asset weight names no symbol.
+    pub fn validate(&self) -> Result<()> {
+        for weight in &self.weights {
+            weight.validate()?;
+        }
+        Ok(())
+    }
+}
+
+/// Filters for listing rebalancing runs.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GetRunsRequest {
+    /// Only this account's runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<Uuid>,
+    /// Only runs of this type.
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub run_type: Option<RunType>,
+    /// Page size.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    /// The page to fetch.
+    ///
+    /// alpaca-py leaves this off `GetRunsRequest` and then sets it on the dict
+    /// anyway while paging, so the field has to exist here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_token: Option<String>,
 }
 
 /// The body of an option exercise request.

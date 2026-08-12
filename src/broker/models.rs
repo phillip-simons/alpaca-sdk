@@ -14,10 +14,12 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::broker::enums::{
-    ACHRelationshipStatus, AccountType, AgreementType, BankAccountType, BankStatus, ClearingBroker,
-    DocumentType, FeePaymentMethod, FundingSource, IdentifierType, JournalEntryType, JournalStatus,
-    TaxIdType, TradeDocumentSubType, TradeDocumentType, TransferDirection, TransferStatus,
-    TransferType, VisaType,
+    ACHRelationshipStatus, AccountType, AgreementType, BankAccountType, BankStatus,
+    CalendarSubType, ClearingBroker, DocumentType, DriftBandSubType, FeePaymentMethod,
+    FundingSource, IdentifierType, JournalEntryType, JournalStatus, PortfolioStatus,
+    RebalancingConditionsType, RunInitiatedFrom, RunStatus, RunType, TaxIdType,
+    TradeDocumentSubType, TradeDocumentType, TransferDirection, TransferStatus, TransferType,
+    VisaType, WeightType,
 };
 use crate::trading::AccountStatus;
 use crate::types::serde_util::empty_string_as_none;
@@ -661,6 +663,281 @@ impl W8BenDocument {
         }
         Ok(())
     }
+}
+
+/// One line of a portfolio's target allocation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Weight {
+    /// Whether this line is cash or a security.
+    #[serde(rename = "type")]
+    pub weight_type: WeightType,
+    /// The security, for asset lines.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub symbol: Option<String>,
+    /// The share of the portfolio, as a percentage.
+    ///
+    /// Declared `float` in alpaca-py; the wire carries `"35"`, a string.
+    #[serde(with = "crate::types::decimal")]
+    pub percent: Decimal,
+}
+
+impl Weight {
+    /// A cash line holding `percent` of the portfolio.
+    #[must_use]
+    pub fn cash(percent: Decimal) -> Self {
+        Self {
+            weight_type: WeightType::Cash,
+            symbol: None,
+            percent,
+        }
+    }
+
+    /// An asset line holding `percent` of the portfolio in `symbol`.
+    #[must_use]
+    pub fn asset(symbol: impl Into<String>, percent: Decimal) -> Self {
+        Self {
+            weight_type: WeightType::Asset,
+            symbol: Some(symbol.into()),
+            percent,
+        }
+    }
+
+    /// Checks the line is one Alpaca will accept.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if the percentage is not
+    /// positive, or an asset line names no symbol.
+    pub fn validate(&self) -> crate::error::Result<()> {
+        if self.percent <= Decimal::ZERO {
+            return Err(crate::Error::InvalidRequest(
+                "a weight's percent must be greater than zero".to_owned(),
+            ));
+        }
+        if self.weight_type == WeightType::Asset && self.symbol.is_none() {
+            return Err(crate::Error::InvalidRequest(
+                "an asset weight must name a symbol".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Which sub type a rebalancing condition carries.
+///
+/// The `type` field decides which enum `sub_type` belongs to. alpaca-py models
+/// this as `Union[DriftBandSubType, CalendarSubType]`, which pydantic resolves
+/// by trying each in turn — a scheme that cannot work here, because every
+/// generated enum accepts any string into `Unknown` and so would always match
+/// first. The two value sets are disjoint, so the wire value alone decides.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum RebalancingSubType {
+    /// A drift band condition's sub type.
+    DriftBand(DriftBandSubType),
+    /// A calendar condition's sub type.
+    Calendar(CalendarSubType),
+    /// A value belonging to neither set.
+    Unknown(String),
+}
+
+impl RebalancingSubType {
+    /// The value as it appears on the wire.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::DriftBand(sub_type) => sub_type.as_str(),
+            Self::Calendar(sub_type) => sub_type.as_str(),
+            Self::Unknown(value) => value,
+        }
+    }
+}
+
+impl From<&str> for RebalancingSubType {
+    fn from(value: &str) -> Self {
+        if DriftBandSubType::WIRE_VALUES.contains(&value) {
+            Self::DriftBand(DriftBandSubType::from(value))
+        } else if CalendarSubType::WIRE_VALUES.contains(&value) {
+            Self::Calendar(CalendarSubType::from(value))
+        } else {
+            Self::Unknown(value.to_owned())
+        }
+    }
+}
+
+impl std::fmt::Display for RebalancingSubType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl Serialize for RebalancingSubType {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for RebalancingSubType {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from(value.as_str()))
+    }
+}
+
+/// When a portfolio should be rebalanced.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RebalancingCondition {
+    /// Whether the trigger is drift or the calendar.
+    #[serde(rename = "type")]
+    pub condition_type: RebalancingConditionsType,
+    /// The specific trigger, from the set the type implies.
+    pub sub_type: RebalancingSubType,
+    /// The drift threshold, for drift band conditions.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub percent: Option<Decimal>,
+    /// The day the calendar condition fires on.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub day: Option<String>,
+}
+
+/// A target allocation that accounts can subscribe to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Portfolio {
+    /// Alpaca's id for the portfolio.
+    pub id: Uuid,
+    /// The portfolio's name.
+    pub name: String,
+    /// What the portfolio is for.
+    #[serde(default)]
+    pub description: String,
+    /// Whether the portfolio can still be subscribed to.
+    pub status: PortfolioStatus,
+    /// Days to wait after a rebalance before rebalancing again.
+    #[serde(default, with = "crate::types::serde_util::int::option")]
+    pub cooldown_days: Option<i64>,
+    /// When the portfolio was created.
+    pub created_at: DateTime<Utc>,
+    /// When the portfolio last changed.
+    pub updated_at: DateTime<Utc>,
+    /// The target allocation.
+    #[serde(default)]
+    pub weights: Vec<Weight>,
+    /// When to rebalance towards it.
+    #[serde(default)]
+    pub rebalance_conditions: Option<Vec<RebalancingCondition>>,
+}
+
+/// An account's subscription to a portfolio.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Subscription {
+    /// Alpaca's id for the subscription.
+    pub id: Uuid,
+    /// The subscribed account.
+    pub account_id: Uuid,
+    /// The portfolio it tracks.
+    pub portfolio_id: Uuid,
+    /// When the subscription was created.
+    pub created_at: DateTime<Utc>,
+    /// When the account was last rebalanced.
+    #[serde(default)]
+    pub last_rebalanced_at: Option<DateTime<Utc>>,
+}
+
+/// An order a rebalancing run chose not to place.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkippedOrder {
+    /// The security the order would have been for.
+    pub symbol: String,
+    /// Which way it would have gone.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub side: Option<crate::trading::OrderSide>,
+    /// The dollar value it would have been for.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub notional: Option<Decimal>,
+    /// The currency of that value.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub currency: Option<String>,
+    /// Why it was skipped.
+    #[serde(default)]
+    pub reason: String,
+    /// The detail behind the reason.
+    #[serde(default)]
+    pub reason_details: String,
+}
+
+/// One attempt to move an account towards its portfolio's weights.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RebalancingRun {
+    /// Alpaca's id for the run.
+    pub id: Uuid,
+    /// The account being rebalanced.
+    pub account_id: Uuid,
+    /// The portfolio being rebalanced towards.
+    pub portfolio_id: Uuid,
+    /// Whether this is a full rebalance or a cash investment.
+    #[serde(rename = "type")]
+    pub run_type: RunType,
+    /// The cash being invested, for `invest_cash` runs.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub amount: Option<Decimal>,
+    /// The weights the run targets.
+    #[serde(default)]
+    pub weights: Vec<Weight>,
+    /// Whether Alpaca or the correspondent started the run.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub initiated_from: Option<RunInitiatedFrom>,
+    /// When the run was created.
+    pub created_at: DateTime<Utc>,
+    /// When the run last changed.
+    pub updated_at: DateTime<Utc>,
+    /// When the run finished.
+    #[serde(default)]
+    pub completed_at: Option<DateTime<Utc>>,
+    /// When the run was cancelled.
+    #[serde(default)]
+    pub canceled_at: Option<DateTime<Utc>>,
+    /// Where the run is in its lifecycle.
+    pub status: RunStatus,
+    /// Why the run is in that status.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub reason: Option<String>,
+    /// The orders the run placed.
+    #[serde(default)]
+    pub orders: Option<Vec<Order>>,
+    /// The orders that were rejected.
+    #[serde(default)]
+    pub failed_orders: Option<Vec<Order>>,
+    /// The orders the run declined to place.
+    #[serde(default)]
+    pub skipped_orders: Option<Vec<SkippedOrder>>,
+}
+
+/// One page of subscriptions.
+///
+/// Unlike the portfolio list, which is a bare array, this route wraps its
+/// results and pages by token.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubscriptionsPage {
+    /// The subscriptions on this page.
+    #[serde(default)]
+    pub subscriptions: Vec<Subscription>,
+    /// The token that fetches the next page, when there is one.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub next_page_token: Option<String>,
+}
+
+/// One page of rebalancing runs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunsPage {
+    /// The runs on this page.
+    #[serde(default)]
+    pub runs: Vec<RebalancingRun>,
+    /// The token that fetches the next page, when there is one.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub next_page_token: Option<String>,
 }
 
 /// Positions held across every account, as of the last market close.
