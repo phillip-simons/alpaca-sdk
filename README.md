@@ -22,8 +22,8 @@ Under active development. Ported phase by phase against alpaca-py commit `cc4cb3
 | Trading REST | ✅ |
 | Historical market data | ✅ |
 | Live market data streams | ✅ |
-| Trade update stream | 🚧 |
-| Broker API | ⬜ |
+| Trade update stream | ✅ |
+| Broker API | 🚧 |
 
 ## What changes from alpaca-py
 

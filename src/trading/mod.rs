@@ -5,6 +5,7 @@ mod enums;
 mod enums_ext;
 mod models;
 mod requests;
+mod stream;
 
 pub use client::TradingClient;
 pub use enums::*;
@@ -13,3 +14,4 @@ pub use enums::*;
 pub use crate::types::ContractType;
 pub use models::*;
 pub use requests::*;
+pub use stream::{TradeStreamMessage, TradingStream};
