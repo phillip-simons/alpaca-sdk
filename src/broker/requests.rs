@@ -7,7 +7,7 @@
 //! imports them from `alpaca.trading`. Only the types with no trading
 //! equivalent live here.
 
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -19,7 +19,8 @@ use crate::broker::enums::{
 };
 use crate::broker::models::{RebalancingCondition, W8BenDocument, Weight};
 use crate::error::{Error, Result};
-use crate::trading::OrderType;
+use crate::trading::{ActivityType, OrderType};
+use crate::types::Sort;
 use crate::types::SupportedCurrencies;
 
 /// An order submitted on behalf of a brokerage account.
@@ -1083,6 +1084,64 @@ pub struct GetRunsRequest {
     /// anyway while paging, so the field has to exist here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page_token: Option<String>,
+}
+
+/// Filters for listing account activities across accounts.
+///
+/// Note `date` cannot be combined with `after` or `until`;
+/// [`validate`](Self::validate) enforces that, as alpaca-py does.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GetAccountActivitiesRequest {
+    /// Only this account's activities.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<Uuid>,
+    /// Only activities of these kinds.
+    ///
+    /// Sent as one comma-separated parameter.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "crate::types::serde_util::comma_separated"
+    )]
+    pub activity_types: Option<Vec<ActivityType>>,
+    /// Only activities on this date.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<DateTime<Utc>>,
+    /// Only activities before this time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<DateTime<Utc>>,
+    /// Only activities after this time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after: Option<DateTime<Utc>>,
+    /// Which way to sort. Defaults to descending.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<Sort>,
+    /// How many activities to return per page.
+    ///
+    /// Defaults to 100, and is capped there — unless `date` is set, in which
+    /// case Alpaca may return everything in one response and ignore paging
+    /// altogether.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_size: Option<u32>,
+    /// Where to resume from: the `id` of the last activity already seen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_token: Option<String>,
+}
+
+impl GetAccountActivitiesRequest {
+    /// Checks the date filters do not conflict.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if `date` is combined with `after` or
+    /// `until`.
+    pub fn validate(&self) -> Result<()> {
+        if self.date.is_some() && (self.after.is_some() || self.until.is_some()) {
+            return Err(Error::InvalidRequest(
+                "date cannot be combined with after or until".to_owned(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// The body of an option exercise request.

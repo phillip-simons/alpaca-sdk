@@ -22,14 +22,9 @@ alpaca-py checkout.
 
 ## Remaining in Phase 6
 
-Captured fixtures exist for all of these under `fixtures/broker/`.
-
-- CIP / KYC submission — note alpaca-py's two methods are literally `pass` and
-  no fixture exists, so this one cannot follow "the fixture wins". Build it from
-  `models/cip.py` and the spec, and say in the docs that it is unverified.
-- Account activities — pages by *page token* (the last item's id), not by offset
-  like transfers. Read `_get_account_activities_iterator` before writing it.
-- The five SSE event streams (`reqwest` byte stream + `eventsource-stream`)
+- The five SSE event streams (`reqwest` byte stream + `eventsource-stream`).
+  Mirror `_get_sse_headers` and the five paths; alpaca-py just iterates the
+  stream, so do not import the websocket reconnect machine.
 
 Also unported, found while doing the above: `create_account`, `update_account`
 and `list_accounts` take a generic `Serialize` body rather than a request type,
@@ -68,7 +63,9 @@ other about which:
 
 - **Offset**, no envelope, empty array to stop: transfers.
 - **Page token**, envelope (`{"subscriptions": [...], "next_page_token": …}`),
-  absent token to stop: rebalancing subscriptions and runs, account activities.
+  absent token to stop: rebalancing subscriptions and runs.
+- **Cursor**, no envelope, where the cursor is the last item's own `id`: account
+  activities. Nothing in the response says there is more; an empty array stops it.
 - **None at all**, bare array: rebalancing portfolios.
 
 Each paginated route has both a single-page method and a `get_all_*` that walks,
@@ -131,6 +128,12 @@ a raw map.
   `TaxIdType::ARG_AR_CUIT` (ours) against the spec's `ARG_AG_CUIT` on a live
   response — one is a typo.
 - **docs.rs build** for 0.0.0 has not been checked.
+- **CIP is spec-derived and unverified.** alpaca-py's two CIP methods are empty
+  stubs — its own comment says the sandbox 404s them — so the six `CIP*` models
+  have never met a real response. They follow `models/cip.py` and the broker
+  spec. First real payload wins; treat a decode failure there as expected work,
+  not a regression. Note `CIPPhoto.face_comparison` reads Alpaca's
+  `face_comparision`, which is a typo on the wire and so is load-bearing.
 - **`BrokerClient` carries a second `reqwest::Client`**, only for the document
   download: that route answers `301` to a presigned storage URL, and
   `RestClient` refuses redirects on purpose. The second client follows them and

@@ -10,25 +10,33 @@ use uuid::Uuid;
 use crate::auth::Credentials;
 use crate::broker::enums::ACHRelationshipStatus;
 use crate::broker::models::{
-    ACHRelationship, Account, AllAccountsPositions, Bank, BatchJournalResponse, Journal, Order,
-    Portfolio, RebalancingRun, RunsPage, Subscription, SubscriptionsPage, TradeAccount,
+    ACHRelationship, Account, AllAccountsPositions, Bank, BatchJournalResponse, CIPInfo, Journal,
+    Order, Portfolio, RebalancingRun, RunsPage, Subscription, SubscriptionsPage, TradeAccount,
     TradeDocument, Transfer,
 };
 use crate::broker::requests::{
     CreateACHRelationshipRequest, CreateBankRequest, CreateBatchJournalRequest,
     CreateJournalRequest, CreateOptionExerciseRequest, CreatePortfolioRequest,
     CreateReverseBatchJournalRequest, CreateRunRequest, CreateSubscriptionRequest,
-    CreateTransferRequest, GetJournalsRequest, GetPortfoliosRequest, GetRunsRequest,
-    GetSubscriptionsRequest, GetTradeDocumentsRequest, GetTransfersRequest, OrderRequest,
-    UpdatePortfolioRequest, UploadDocument,
+    CreateTransferRequest, GetAccountActivitiesRequest, GetJournalsRequest, GetPortfoliosRequest,
+    GetRunsRequest, GetSubscriptionsRequest, GetTradeDocumentsRequest, GetTransfersRequest,
+    OrderRequest, UpdatePortfolioRequest, UploadDocument,
 };
 use crate::config::BaseUrl;
 use crate::error::Result;
 use crate::rest::{Empty, RestClient, RestConfig};
-use crate::trading::{Position, Watchlist};
+use crate::trading::{Activity, Position, Watchlist};
 
 /// The most documents Alpaca accepts in one upload.
 const DOCUMENT_UPLOAD_LIMIT: usize = 10;
+
+/// The id an activity pages from, whichever kind it is.
+fn activity_id(activity: &Activity) -> &str {
+    match activity {
+        Activity::Trade(trade) => &trade.id,
+        Activity::NonTrade(non_trade) => &non_trade.id,
+    }
+}
 
 /// alpaca-py's default page size for the token-paginated broker routes.
 const DEFAULT_PAGE_SIZE: u32 = 100;
@@ -410,6 +418,115 @@ impl BrokerClient {
             None::<&Empty>,
         )
         .await
+    }
+
+    // ------------------------------------------------- account activities
+
+    /// Fetches one page of account activities.
+    ///
+    /// Unlike the trading API's equivalent, this route spans every account the
+    /// correspondent serves; filter by `account_id` for one of them. The
+    /// response mixes trade and non-trade activities, which is why it decodes to
+    /// [`crate::trading::Activity`].
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if the filter combines `date`
+    /// with `after` or `until`.
+    pub async fn get_account_activities(
+        &self,
+        filter: Option<&GetAccountActivitiesRequest>,
+    ) -> Result<Vec<Activity>> {
+        match filter {
+            Some(filter) => {
+                filter.validate()?;
+                self.rest.get("/accounts/activities", filter).await
+            }
+            None => self.rest.get("/accounts/activities", &Empty).await,
+        }
+    }
+
+    /// Walks every page of account activities.
+    ///
+    /// This route pages by *cursor*, not by offset or by a server-supplied
+    /// token: the next page starts after the `id` of the last activity already
+    /// seen. An empty array ends the walk.
+    ///
+    /// Setting `date` on the filter changes the endpoint's behaviour — Alpaca
+    /// may then return everything in one response and ignore paging — so this
+    /// walk can finish in a single request. `max_items` still holds.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if the filter combines `date`
+    /// with `after` or `until`.
+    pub async fn get_all_account_activities(
+        &self,
+        filter: Option<&GetAccountActivitiesRequest>,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Activity>> {
+        let mut filter = filter.cloned().unwrap_or_default();
+        filter.validate()?;
+
+        let mut collected: Vec<Activity> = Vec::new();
+
+        loop {
+            if let Some(page_size) = page_limit(&filter.page_size, max_items, collected.len()) {
+                filter.page_size = Some(page_size);
+            }
+
+            let page: Vec<Activity> = self.rest.get("/accounts/activities", &filter).await?;
+            let Some(last) = page.last() else {
+                break;
+            };
+
+            // The cursor is the last activity's id, so it is taken before the
+            // page is moved into the accumulator.
+            let cursor = activity_id(last).to_owned();
+            collected.extend(page);
+
+            if let Some(max_items) = max_items
+                && collected.len() >= max_items
+            {
+                collected.truncate(max_items);
+                break;
+            }
+
+            filter.page_token = Some(cursor);
+        }
+
+        Ok(collected)
+    }
+
+    // ---------------------------------------------------------------- CIP
+
+    /// Fetches an account's Customer Identification Program record.
+    ///
+    /// **Unverified.** alpaca-py leaves this route unimplemented — its comment
+    /// says the sandbox answers 404 — so [`CIPInfo`] is derived from the models
+    /// and the spec rather than from a captured response.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_cip_data_for_account_by_id(&self, account_id: Uuid) -> Result<CIPInfo> {
+        self.rest
+            .get(&format!("/accounts/{account_id}/cip"), &Empty)
+            .await
+    }
+
+    /// Submits an account's Customer Identification Program record.
+    ///
+    /// **Unverified**, for the same reason as
+    /// [`get_cip_data_for_account_by_id`](Self::get_cip_data_for_account_by_id).
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn upload_cip_data_for_account_by_id(
+        &self,
+        account_id: Uuid,
+        cip: &CIPInfo,
+    ) -> Result<CIPInfo> {
+        self.rest
+            .post(&format!("/accounts/{account_id}/cip"), cip)
+            .await
     }
 
     // --------------------------------------------------------- documents
