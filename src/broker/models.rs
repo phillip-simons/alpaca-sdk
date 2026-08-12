@@ -14,8 +14,8 @@ use uuid::Uuid;
 
 use crate::broker::enums::{
     ACHRelationshipStatus, AccountType, AgreementType, BankAccountType, BankStatus, ClearingBroker,
-    DocumentType, FeePaymentMethod, FundingSource, IdentifierType, TaxIdType, TransferDirection,
-    TransferStatus, TransferType, VisaType,
+    DocumentType, FeePaymentMethod, FundingSource, IdentifierType, JournalEntryType, JournalStatus,
+    TaxIdType, TransferDirection, TransferStatus, TransferType, VisaType,
 };
 use crate::trading::AccountStatus;
 use crate::types::serde_util::empty_string_as_none;
@@ -478,6 +478,79 @@ pub struct Transfer {
     /// Free-text detail carried on wires.
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub additional_information: Option<String>,
+}
+
+/// Cash or securities moving from one account to another.
+///
+/// `net_amount`, `qty` and `price` are declared `float` in alpaca-py but arrive
+/// as strings — `"115.5"` in the captured payload — so they are [`Decimal`]
+/// here. Reading them as floats is the precision loss this port exists to avoid.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Journal {
+    /// Alpaca's id for the journal.
+    pub id: Uuid,
+    /// The account the money or securities came from.
+    pub from_account: Uuid,
+    /// The account they went to.
+    pub to_account: Uuid,
+    /// Whether this journal moves cash or securities.
+    pub entry_type: JournalEntryType,
+    /// Where the journal is in its lifecycle.
+    pub status: JournalStatus,
+    /// The cash amount, for cash journals.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub net_amount: Option<Decimal>,
+    /// The security journaled, for security journals.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub symbol: Option<String>,
+    /// How much of the security moved.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub qty: Option<Decimal>,
+    /// The price the security was journaled at.
+    #[serde(default, with = "crate::types::option_decimal")]
+    pub price: Option<Decimal>,
+    /// Free-text description.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub description: Option<String>,
+    /// When the journal settles.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub settle_date: Option<NaiveDate>,
+    /// The system date the journal belongs to.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub system_date: Option<NaiveDate>,
+    /// Travel rule: the transmitter's name.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub transmitter_name: Option<String>,
+    /// Travel rule: the transmitter's account number.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub transmitter_account_number: Option<String>,
+    /// Travel rule: the transmitter's address.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub transmitter_address: Option<String>,
+    /// Travel rule: the transmitter's financial institution.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub transmitter_financial_institution: Option<String>,
+    /// Travel rule: when the transfer was transmitted.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub transmitter_timestamp: Option<String>,
+    /// The currency the journal settles in.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub currency: Option<crate::types::SupportedCurrencies>,
+}
+
+/// One journal's outcome within a batch.
+///
+/// A batch request answers with one of these per entry, and a failed entry
+/// carries its reason rather than failing the whole request — so
+/// `error_message` has to be read, not assumed empty.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BatchJournalResponse {
+    /// The journal itself.
+    #[serde(flatten)]
+    pub journal: Journal,
+    /// Why this entry failed, when it did.
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub error_message: Option<String>,
 }
 
 /// Positions held across every account, as of the last market close.

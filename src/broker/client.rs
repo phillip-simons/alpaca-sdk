@@ -10,11 +10,13 @@ use uuid::Uuid;
 use crate::auth::Credentials;
 use crate::broker::enums::ACHRelationshipStatus;
 use crate::broker::models::{
-    ACHRelationship, Account, AllAccountsPositions, Bank, Order, TradeAccount, Transfer,
+    ACHRelationship, Account, AllAccountsPositions, Bank, BatchJournalResponse, Journal, Order,
+    TradeAccount, Transfer,
 };
 use crate::broker::requests::{
-    CreateACHRelationshipRequest, CreateBankRequest, CreateOptionExerciseRequest,
-    CreateTransferRequest, GetTransfersRequest, OrderRequest,
+    CreateACHRelationshipRequest, CreateBankRequest, CreateBatchJournalRequest,
+    CreateJournalRequest, CreateOptionExerciseRequest, CreateReverseBatchJournalRequest,
+    CreateTransferRequest, GetJournalsRequest, GetTransfersRequest, OrderRequest,
 };
 use crate::config::BaseUrl;
 use crate::error::Result;
@@ -356,6 +358,85 @@ impl BrokerClient {
         self.send_void(
             Method::DELETE,
             &format!("/accounts/{account_id}/transfers/{transfer_id}"),
+            None::<&Empty>,
+        )
+        .await
+    }
+
+    // ---------------------------------------------------------- journals
+
+    /// Opens a journal between two accounts.
+    ///
+    /// Journals are not account-scoped: both accounts are named in the body, so
+    /// the route sits at the top level.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if the fields set do not match
+    /// the entry type; see [`CreateJournalRequest::validate`].
+    pub async fn create_journal(&self, journal: &CreateJournalRequest) -> Result<Journal> {
+        journal.validate()?;
+        self.rest.post("/journals", journal).await
+    }
+
+    /// Moves cash out of one account into many.
+    ///
+    /// Each entry succeeds or fails on its own: the response carries one record
+    /// per entry, and a failed one explains itself in
+    /// [`error_message`](BatchJournalResponse::error_message) rather than
+    /// failing the request.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn create_batch_journal(
+        &self,
+        batch: &CreateBatchJournalRequest,
+    ) -> Result<Vec<BatchJournalResponse>> {
+        self.rest.post("/journals/batch", batch).await
+    }
+
+    /// Moves cash into one account out of many.
+    ///
+    /// Per-entry outcomes work as they do for
+    /// [`create_batch_journal`](Self::create_batch_journal).
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn create_reverse_batch_journal(
+        &self,
+        batch: &CreateReverseBatchJournalRequest,
+    ) -> Result<Vec<BatchJournalResponse>> {
+        self.rest.post("/journals/reverse_batch", batch).await
+    }
+
+    /// Lists journals, optionally filtered.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_journals(&self, filter: Option<&GetJournalsRequest>) -> Result<Vec<Journal>> {
+        match filter {
+            Some(filter) => self.rest.get("/journals", filter).await,
+            None => self.rest.get("/journals", &Empty).await,
+        }
+    }
+
+    /// Fetches one journal.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_journal_by_id(&self, journal_id: Uuid) -> Result<Journal> {
+        self.rest
+            .get(&format!("/journals/{journal_id}"), &Empty)
+            .await
+    }
+
+    /// Cancels a journal that has not yet executed.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn cancel_journal_by_id(&self, journal_id: Uuid) -> Result<()> {
+        self.send_void(
+            Method::DELETE,
+            &format!("/journals/{journal_id}"),
             None::<&Empty>,
         )
         .await

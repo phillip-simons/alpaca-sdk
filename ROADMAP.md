@@ -24,13 +24,20 @@ alpaca-py checkout.
 
 Captured fixtures exist for all of these under `fixtures/broker/`.
 
-- Funding: ACH relationships, recipient banks, transfers
-- Journals: create, batch, reverse batch, list, cancel
 - Documents: list, download, and the base64 upload (10-document limit)
 - Rebalancing: portfolios, subscriptions, runs
-- CIP / KYC submission
-- Account activities
+- CIP / KYC submission — note alpaca-py's two methods are literally `pass` and
+  no fixture exists, so this one cannot follow "the fixture wins". Build it from
+  `models/cip.py` and the spec, and say in the docs that it is unverified.
+- Account activities — pages by *page token* (the last item's id), not by offset
+  like transfers. Read `_get_account_activities_iterator` before writing it.
 - The five SSE event streams (`reqwest` byte stream + `eventsource-stream`)
+
+Also unported, found while doing the above: `create_account`, `update_account`
+and `list_accounts` take a generic `Serialize` body rather than a request type,
+so `CreateAccountRequest`, `UpdateAccountRequest` and `ListAccountsRequest` do
+not exist here — including the last one's `entities` comma-join, which currently
+falls on the caller.
 
 The broker spec has **154 operations**; alpaca-py has **76**. Phase 6 targets the
 76. The rest is Phase 6.5.
@@ -50,6 +57,7 @@ silently drops the extra fields:
   the `last_*` previous-session values, `clearing_broker`)
 - `broker::OrderRequest` = `trading::OrderRequest` + `commission` + `currency`,
   and a non-USD order must be a market order
+- `BatchJournalResponse` = `Journal` + `error_message`
 
 They use `#[serde(flatten)]` over the trading struct rather than transcribing it,
 which is the closest thing to alpaca-py's subclassing. Check for this whenever a

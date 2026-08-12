@@ -7,13 +7,14 @@
 //! imports them from `alpaca.trading`. Only the types with no trading
 //! equivalent live here.
 
+use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::broker::enums::{
-    BankAccountType, FeePaymentMethod, IdentifierType, TransferDirection, TransferTiming,
-    TransferType,
+    BankAccountType, FeePaymentMethod, IdentifierType, JournalEntryType, JournalStatus,
+    TransferDirection, TransferTiming, TransferType,
 };
 use crate::error::{Error, Result};
 use crate::trading::OrderType;
@@ -386,6 +387,307 @@ pub struct GetTransfersRequest {
     /// starting offset for a single-page request.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub offset: Option<u32>,
+}
+
+/// The body that opens a journal between two accounts.
+///
+/// Cash and security journals share a shape but not a set of fields: a cash
+/// journal carries an `amount` and no `symbol`/`qty`, a security journal the
+/// reverse. [`validate`](Self::validate) enforces that, as alpaca-py's model
+/// validator does. Build one with [`cash`](Self::cash) or
+/// [`security`](Self::security) and the right fields are set for you.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreateJournalRequest {
+    /// The account the money or securities come from.
+    pub from_account: Uuid,
+    /// The account they go to.
+    pub to_account: Uuid,
+    /// Whether this journal moves cash or securities.
+    pub entry_type: JournalEntryType,
+    /// The cash amount. Cash journals only.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
+    pub amount: Option<Decimal>,
+    /// The security to move. Security journals only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<String>,
+    /// How much of the security to move. Security journals only.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
+    pub qty: Option<Decimal>,
+    /// Free-text description. Sandbox reads fixture directives from this.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Travel rule: the transmitter's name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitter_name: Option<String>,
+    /// Travel rule: the transmitter's account number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitter_account_number: Option<String>,
+    /// Travel rule: the transmitter's address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitter_address: Option<String>,
+    /// Travel rule: the transmitter's financial institution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitter_financial_institution: Option<String>,
+    /// Travel rule: when the transfer was transmitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitter_timestamp: Option<String>,
+    /// The settlement currency. Unset means USD.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub currency: Option<SupportedCurrencies>,
+}
+
+impl CreateJournalRequest {
+    fn base(from_account: Uuid, to_account: Uuid, entry_type: JournalEntryType) -> Self {
+        Self {
+            from_account,
+            to_account,
+            entry_type,
+            amount: None,
+            symbol: None,
+            qty: None,
+            description: None,
+            transmitter_name: None,
+            transmitter_account_number: None,
+            transmitter_address: None,
+            transmitter_financial_institution: None,
+            transmitter_timestamp: None,
+            currency: None,
+        }
+    }
+
+    /// A cash journal moving `amount` between two accounts.
+    #[must_use]
+    pub fn cash(from_account: Uuid, to_account: Uuid, amount: Decimal) -> Self {
+        let mut request = Self::base(from_account, to_account, JournalEntryType::Cash);
+        request.amount = Some(amount);
+        request
+    }
+
+    /// A security journal moving `qty` of `symbol` between two accounts.
+    #[must_use]
+    pub fn security(
+        from_account: Uuid,
+        to_account: Uuid,
+        symbol: impl Into<String>,
+        qty: Decimal,
+    ) -> Self {
+        let mut request = Self::base(from_account, to_account, JournalEntryType::Security);
+        request.symbol = Some(symbol.into());
+        request.qty = Some(qty);
+        request
+    }
+
+    /// Checks that the fields set match the entry type.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if a cash journal carries a symbol or
+    /// quantity or no amount, or a security journal carries an amount or is
+    /// missing its symbol or quantity.
+    pub fn validate(&self) -> Result<()> {
+        match self.entry_type {
+            JournalEntryType::Cash => {
+                if self.symbol.is_some() || self.qty.is_some() {
+                    return Err(Error::InvalidRequest(
+                        "symbol and qty are reserved for security journals".to_owned(),
+                    ));
+                }
+                if self.amount.is_none() {
+                    return Err(Error::InvalidRequest(
+                        "cash journals must carry an amount".to_owned(),
+                    ));
+                }
+            }
+            JournalEntryType::Security => {
+                if self.amount.is_some() {
+                    return Err(Error::InvalidRequest(
+                        "amount is reserved for cash journals".to_owned(),
+                    ));
+                }
+                if self.symbol.is_none() || self.qty.is_none() {
+                    return Err(Error::InvalidRequest(
+                        "security journals must carry a symbol and a qty".to_owned(),
+                    ));
+                }
+            }
+            // A value Alpaca added since; let the API judge it.
+            JournalEntryType::Unknown(_) => {}
+        }
+
+        Ok(())
+    }
+}
+
+/// One destination in a batch journal.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BatchJournalRequestEntry {
+    /// The account to fund.
+    pub to_account: Uuid,
+    /// How much cash to send.
+    #[serde(with = "crate::types::decimal")]
+    pub amount: Decimal,
+    /// Free-text description.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Travel rule: the transmitter's name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitter_name: Option<String>,
+    /// Travel rule: the transmitter's account number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitter_account_number: Option<String>,
+    /// Travel rule: the transmitter's address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitter_address: Option<String>,
+    /// Travel rule: the transmitter's financial institution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitter_financial_institution: Option<String>,
+    /// Travel rule: when the transfer was transmitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitter_timestamp: Option<String>,
+}
+
+impl BatchJournalRequestEntry {
+    /// Sends `amount` to `to_account`.
+    #[must_use]
+    pub fn new(to_account: Uuid, amount: Decimal) -> Self {
+        Self {
+            to_account,
+            amount,
+            description: None,
+            transmitter_name: None,
+            transmitter_account_number: None,
+            transmitter_address: None,
+            transmitter_financial_institution: None,
+            transmitter_timestamp: None,
+        }
+    }
+}
+
+/// One source in a reverse batch journal.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReverseBatchJournalRequestEntry {
+    /// The account to draw from.
+    pub from_account: Uuid,
+    /// How much cash to draw.
+    #[serde(with = "crate::types::decimal")]
+    pub amount: Decimal,
+    /// Free-text description.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Travel rule: the transmitter's name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitter_name: Option<String>,
+    /// Travel rule: the transmitter's account number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitter_account_number: Option<String>,
+    /// Travel rule: the transmitter's address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitter_address: Option<String>,
+    /// Travel rule: the transmitter's financial institution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitter_financial_institution: Option<String>,
+    /// Travel rule: when the transfer was transmitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transmitter_timestamp: Option<String>,
+}
+
+impl ReverseBatchJournalRequestEntry {
+    /// Draws `amount` from `from_account`.
+    #[must_use]
+    pub fn new(from_account: Uuid, amount: Decimal) -> Self {
+        Self {
+            from_account,
+            amount,
+            description: None,
+            transmitter_name: None,
+            transmitter_account_number: None,
+            transmitter_address: None,
+            transmitter_financial_institution: None,
+            transmitter_timestamp: None,
+        }
+    }
+}
+
+/// Cash moving out of one account into many.
+///
+/// Only cash batch journals are supported, so `entry_type` is always
+/// [`JournalEntryType::Cash`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreateBatchJournalRequest {
+    /// Always [`JournalEntryType::Cash`].
+    pub entry_type: JournalEntryType,
+    /// The account the money comes from, usually the sweep firm account.
+    pub from_account: Uuid,
+    /// Where the money goes.
+    pub entries: Vec<BatchJournalRequestEntry>,
+}
+
+impl CreateBatchJournalRequest {
+    /// A batch paying every entry out of `from_account`.
+    #[must_use]
+    pub fn new(from_account: Uuid, entries: Vec<BatchJournalRequestEntry>) -> Self {
+        Self {
+            entry_type: JournalEntryType::Cash,
+            from_account,
+            entries,
+        }
+    }
+}
+
+/// Cash moving into one account out of many.
+///
+/// Only cash reverse batch journals are supported, so `entry_type` is always
+/// [`JournalEntryType::Cash`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreateReverseBatchJournalRequest {
+    /// Always [`JournalEntryType::Cash`].
+    pub entry_type: JournalEntryType,
+    /// The account the money goes to, usually the sweep firm account.
+    pub to_account: Uuid,
+    /// Where the money comes from.
+    pub entries: Vec<ReverseBatchJournalRequestEntry>,
+}
+
+impl CreateReverseBatchJournalRequest {
+    /// A reverse batch collecting every entry into `to_account`.
+    #[must_use]
+    pub fn new(to_account: Uuid, entries: Vec<ReverseBatchJournalRequestEntry>) -> Self {
+        Self {
+            entry_type: JournalEntryType::Cash,
+            to_account,
+            entries,
+        }
+    }
+}
+
+/// Filters for listing journals.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GetJournalsRequest {
+    /// Only journals created on or after this date.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after: Option<NaiveDate>,
+    /// Only journals created on or before this date.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before: Option<NaiveDate>,
+    /// Only journals in this status.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<JournalStatus>,
+    /// Only cash or only security journals.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_type: Option<JournalEntryType>,
+    /// Only journals into this account.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to_account: Option<Uuid>,
+    /// Only journals out of this account.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from_account: Option<Uuid>,
 }
 
 /// The body of an option exercise request.
