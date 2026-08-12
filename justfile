@@ -81,6 +81,11 @@ semver:
 # Everything CI runs.
 ci: check msrv deny
 
+# Install the repo's git hooks (once per clone).
+hooks:
+    git config core.hooksPath .githooks
+    @echo "pre-commit hook installed (core.hooksPath=.githooks)"
+
 # Fast inner-loop compile check. Needs `cargo install cargo-watch`.
 watch:
     cargo watch -x 'clippy --all-targets --all-features -- -D warnings'

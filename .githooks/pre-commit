@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Refuse a commit that stages credential-shaped files or values.
+#
+# This is the second of two guards. The first lives in ~/.claude/hooks and stops
+# Claude Code at the tool boundary; this one runs for every commit in this repo
+# regardless of who makes it or what tool they use, which is the half that
+# would have caught an auto-circadian secrets.env being swept in by `git add -A`.
+#
+# Install once per clone:  just hooks
+# Bypass deliberately:     git commit --no-verify
+
+set -euo pipefail
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+fail=0
+
+note() {
+    printf '\n  \033[31m%s\033[0m\n' "$1"
+}
+
+# --- filenames that should never be committed -----------------------------
+
+while IFS= read -r path; do
+    [ -z "$path" ] && continue
+    # Templates are meant to be shared; they name variables, not values.
+    case "$path" in
+        *.example | *.sample | *.template) continue ;;
+    esac
+
+    case "$path" in
+        secrets.env | */secrets.env | *.env | */.env | *.pem | *.p12 | *.pfx | \
+        id_rsa | */id_rsa | id_ed25519 | */id_ed25519 | .npmrc | */.npmrc | \
+        .netrc | */.netrc | credentials | */credentials)
+            note "staged credential file: $path"
+            fail=1
+            ;;
+    esac
+done <<< "$staged"
+
+# --- credential-shaped values in the staged content -----------------------
+
+# Both greps use -E: in BRE, BSD grep reads `\+` as a repetition operator, so
+# `^\+\+\+` fails with "repetition-operator operand invalid" on macOS.
+added=$(git diff --cached -U0 --diff-filter=ACM | grep -E '^\+' | grep -vE '^\+\+\+' || true)
+
+if [ -n "$added" ]; then
+    # Placeholders in templates and docs are fine; live values are not.
+    live=$(printf '%s\n' "$added" |
+        grep -viE 'your[-_]|changeme|placeholder|example|redacted|xxxxx|dummy|fake|todo|insert|replace-me' || true)
+
+    if [ -n "$live" ]; then
+        if printf '%s\n' "$live" | grep -qE -- '-----BEGIN [A-Z ]*PRIVATE KEY-----'; then
+            note "staged a private key block"
+            fail=1
+        fi
+        if printf '%s\n' "$live" | grep -qE '\bAKIA[0-9A-Z]{16}\b'; then
+            note "staged what looks like an AWS access key id"
+            fail=1
+        fi
+        if printf '%s\n' "$live" | grep -qE '\bgh[pousr]_[A-Za-z0-9]{30,}'; then
+            note "staged what looks like a GitHub token"
+            fail=1
+        fi
+        if printf '%s\n' "$live" | grep -qE '\bAPCA_API_(KEY_ID|SECRET_KEY)[[:space:]]*=[[:space:]]*[^[:space:]]{8,}'; then
+            note "staged what looks like an Alpaca API credential"
+            fail=1
+        fi
+        if printf '%s\n' "$live" | grep -qE '[A-Z0-9_]*(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*[[:space:]]*[=:][[:space:]]*.?[A-Za-z0-9/+=_-]{16,}'; then
+            note "staged an assignment that looks like a credential"
+            fail=1
+        fi
+    fi
+fi
+
+if [ "$fail" -ne 0 ]; then
+    cat >&2 <<'EOF'
+
+  Commit refused: the staged changes look like they contain credentials.
+
+  Unstage them:   git restore --staged <path>
+  Ignore them:    add the pattern to .gitignore
+  Rotate:         if the value ever left this machine, treat it as compromised
+
+  If this is a false positive:  git commit --no-verify
+
+EOF
+    exit 1
+fi
+
+exit 0
