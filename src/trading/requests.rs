@@ -1197,6 +1197,7 @@ impl GetOptionContractsRequest {
 
 /// The outcome of cancelling one order in a bulk cancel.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CancelOrderResponse {
     /// Id of the order.
     pub id: Uuid,

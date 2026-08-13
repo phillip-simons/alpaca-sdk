@@ -84,6 +84,7 @@ wire_enum! {
 
 /// An options level approval request and its outcome.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OptionsApproval {
     /// Alpaca's identifier for the request.
     #[serde(default)]
@@ -115,6 +116,7 @@ pub struct OptionsApproval {
 
 /// A page of options approval requests.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OptionsApprovalsPage {
     /// The requests.
     #[serde(
@@ -194,6 +196,7 @@ impl GetOptionsApprovalsRequest {
 
 /// A token for Onfido's client-side identity-verification SDK.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OnfidoToken {
     /// The token to hand the SDK.
     #[serde(default)]
@@ -245,6 +248,7 @@ impl UpdateOnfidoOutcomeRequest {
 
 /// What Alpaca will serve in one country.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CountryInfo {
     /// The country's name.
     pub full_name: String,
@@ -262,6 +266,7 @@ pub struct CountryInfo {
 
 /// An over-contribution to an IRA, which has to be returned.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct IraExcessContribution {
     /// The account.
     #[serde(default)]
@@ -276,6 +281,7 @@ pub struct IraExcessContribution {
 
 /// The USD leg of an account's trading limits.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TradingLimitsUsd {
     /// The ceiling for the day.
     #[serde(default)]
@@ -293,6 +299,7 @@ pub struct TradingLimitsUsd {
 
 /// What an account may still trade today.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TradingLimits {
     /// The ceiling for the day.
     #[serde(default)]

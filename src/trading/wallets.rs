@@ -81,6 +81,7 @@ wire_enum! {
 
 /// A deposit wallet.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CryptoWallet {
     /// The on-chain address to deposit to.
     #[serde(default)]
@@ -95,6 +96,7 @@ pub struct CryptoWallet {
 
 /// An on-chain transfer into or out of an account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CryptoTransfer {
     /// Alpaca's identifier for the transfer.
     #[serde(default)]
@@ -139,6 +141,7 @@ pub struct CryptoTransfer {
 
 /// An address a withdrawal may be sent to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct WhitelistedAddress {
     /// Alpaca's identifier for the entry.
     #[serde(default)]
@@ -162,6 +165,7 @@ pub struct WhitelistedAddress {
 
 /// What a proposed transfer would cost in gas.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TransferFeeEstimate {
     /// Alpaca's fee.
     #[serde(default)]

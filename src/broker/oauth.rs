@@ -39,6 +39,7 @@ wire_enum! {
 
 /// A registered third-party application.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OAuthClient {
     /// The client id.
     #[serde(default)]
@@ -74,6 +75,7 @@ pub struct OAuthClient {
 
 /// The authorization code an app exchanges for a token.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OAuthCode {
     /// The code.
     pub code: String,
@@ -87,6 +89,7 @@ pub struct OAuthCode {
 
 /// A bearer token.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OAuthToken {
     /// The token.
     pub access_token: String,

@@ -78,6 +78,7 @@ pub struct TransmitterInfo {
 
 /// A settlement of money owed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Settlement {
     /// Alpaca's identifier for the settlement.
     pub id: Uuid,
@@ -114,6 +115,7 @@ pub struct Settlement {
 
 /// A list of settlements, which arrives under a key rather than bare.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Settlements {
     /// The settlements.
     #[serde(

@@ -165,9 +165,15 @@ impl From<reqwest::Error> for Error {
 /// a version-skewed type is worth avoiding. reqwest got neither; now it does not
 /// need one.
 ///
-/// What a caller actually asks of a transport error is answered by the
-/// predicates below and by [`std::error::Error::source`], which still reaches
-/// the underlying `reqwest::Error` for anyone who needs it.
+/// The `reqwest::Error` is deliberately **not** reachable — an accessor would
+/// put the type back in the public API and undo the point of the wrapper. What a
+/// caller actually asks of a transport error is answered by the predicates
+/// below, and [`std::error::Error::source`] continues the chain past this layer
+/// into reqwest's own cause (the `hyper` or TLS error underneath), which is the
+/// part that carries information this type does not already forward.
+///
+/// If you need a predicate that is not here, open an issue rather than reaching
+/// through: adding one is cheap and keeps the dependency contained.
 #[derive(Debug)]
 pub struct TransportError(reqwest::Error);
 

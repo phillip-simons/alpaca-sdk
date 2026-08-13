@@ -44,7 +44,7 @@ const MAX_FRAME_SIZE: usize = 32_768;
 /// `data_timeout` mean a hardcoded five seconds whatever the caller set.
 const RECEIVE_POLL: Duration = Duration::from_secs(5);
 
-/// How long a session must last before it counts as healthy.
+/// How long a session must last before it counts as healthy, by default.
 ///
 /// The backoff curve is indexed by consecutive *failures*, and a connection that
 /// came up and immediately dropped is a failure however far it got through the
@@ -56,7 +56,7 @@ const RECEIVE_POLL: Duration = Duration::from_secs(5);
 /// long. That covers the case the reset exists for — a quiet overnight stream
 /// whose server recycles it hourly — without rewarding a server that is only
 /// pretending to work.
-const STABLE_SESSION: Duration = Duration::from_secs(30);
+pub const DEFAULT_STABLE_SESSION: Duration = Duration::from_secs(30);
 
 /// Configuration for a market data stream.
 #[derive(Debug, Clone)]
@@ -83,6 +83,9 @@ pub struct StreamConfig {
     /// Ceiling for the reconnect delay. Set through
     /// [`StreamConfig::backoff`].
     max_backoff: Duration,
+    /// How long a session must last to count as healthy. Set through
+    /// [`StreamConfig::stable_session`].
+    stable_session: Duration,
 }
 
 impl StreamConfig {
@@ -93,6 +96,7 @@ impl StreamConfig {
             data_timeout: None,
             min_backoff: DEFAULT_MIN_BACKOFF,
             max_backoff: DEFAULT_MAX_BACKOFF,
+            stable_session: DEFAULT_STABLE_SESSION,
         }
     }
 
@@ -155,6 +159,41 @@ impl StreamConfig {
     #[must_use]
     pub fn max_backoff(&self) -> Duration {
         self.max_backoff
+    }
+
+    /// How long a session must stay up before it clears the failure count.
+    ///
+    /// A session that delivered market data always clears it; this covers the
+    /// legitimately quiet one whose server recycles it. Defaults to
+    /// [`DEFAULT_STABLE_SESSION`].
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if the duration is zero, which would
+    /// treat a connection that dropped instantly as healthy and pin the
+    /// reconnect delay at its minimum.
+    pub fn stable_session(mut self, after: Duration) -> Result<Self> {
+        self.set_stable_session(after)?;
+        Ok(self)
+    }
+
+    /// The same, in place.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if the duration is zero.
+    pub fn set_stable_session(&mut self, after: Duration) -> Result<&mut Self> {
+        if after.is_zero() {
+            return Err(Error::InvalidRequest(
+                "stable_session must be a positive duration".to_owned(),
+            ));
+        }
+        self.stable_session = after;
+        Ok(self)
+    }
+
+    /// How long a session must stay up before it clears the failure count.
+    #[must_use]
+    pub fn stable_session_after(&self) -> Duration {
+        self.stable_session
     }
 }
 
@@ -370,7 +409,7 @@ impl DataStream {
                         // A half-open socket from a failed connect or auth keeps
                         // consuming the single connection Alpaca allows, so the
                         // attempt above always drops it before we back off.
-                        retries += 1;
+                        retries = retries.saturating_add(1);
                         sleep_backoff(&self.config, retries).await;
                         continue;
                     }
@@ -453,7 +492,9 @@ impl DataStream {
                     Outcome::Reconnect => {
                         // A session that did its job clears the failure count;
                         // one that came up and fell straight over does not.
-                        if delivered_data || session_start.elapsed() >= STABLE_SESSION {
+                        if delivered_data
+                            || session_start.elapsed() >= self.config.stable_session
+                        {
                             retries = 0;
                         }
                         retries = retries.saturating_add(1);

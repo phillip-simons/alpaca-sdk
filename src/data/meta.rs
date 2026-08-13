@@ -71,6 +71,7 @@ wire_enum! {
 /// ```
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
+#[non_exhaustive]
 pub struct Codes(HashMap<String, String>);
 
 impl Codes {

@@ -50,13 +50,39 @@ where
 /// `--features data` build, which is the kind of thing `just features` exists
 /// to catch.
 #[cfg(feature = "trading")]
-#[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone)]
 pub(crate) enum OneOrMany<T> {
     /// The array form.
     Many(Vec<T>),
     /// The single-object form, which becomes a one-element `Vec`.
     One(T),
+}
+
+#[cfg(feature = "trading")]
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for OneOrMany<T> {
+    /// Hand-written rather than `#[serde(untagged)]`.
+    ///
+    /// Untagged discards both branches' errors and reports only "data did not
+    /// match any variant of untagged enum `OneOrMany`", which says nothing about
+    /// *why*. These are the routes whose payloads this crate has never seen, so
+    /// the first real response that does not fit is the most valuable bug report
+    /// it can receive — and untagged would throw the contents of it away.
+    ///
+    /// Branching on the JSON shape first means the error that comes back is the
+    /// real field error from the branch that was actually taken.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error as _;
+
+        let value = serde_json::Value::deserialize(deserializer)?;
+        match value {
+            serde_json::Value::Array(_) => Vec::<T>::deserialize(value)
+                .map(Self::Many)
+                .map_err(D::Error::custom),
+            other => T::deserialize(other)
+                .map(Self::One)
+                .map_err(D::Error::custom),
+        }
+    }
 }
 
 #[cfg(feature = "trading")]

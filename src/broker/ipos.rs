@@ -26,6 +26,7 @@ wire_enum! {
 
 /// An initial public offering.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct IpoOffering {
     /// Alpaca's reference for the offering, which is how it is fetched.
     pub ipo_reference: String,
@@ -91,6 +92,7 @@ pub struct IpoOffering {
 /// The list nests under `data`, and so does the single-offering response — an
 /// envelope this API uses nowhere else.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct IpoOfferingsPage {
     /// The offerings.
     #[serde(
@@ -106,6 +108,7 @@ pub struct IpoOfferingsPage {
 
 /// One offering, in the same `data` envelope the list uses.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct IpoOfferingResponse {
     /// The offering.
     #[serde(rename = "data")]

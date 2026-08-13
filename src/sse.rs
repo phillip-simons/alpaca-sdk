@@ -278,6 +278,42 @@ pub(crate) fn streaming_client(
         .build()?)
 }
 
+/// Builds the HTTP client the broker document download uses.
+///
+/// Separate from [`streaming_client`] for one reason: this one *does* apply
+/// [`RestConfig::timeout`]. A document download is an ordinary request/response
+/// call with a body that ends, so a total deadline is exactly the right shape
+/// for it — the argument for withholding one from an event stream does not
+/// transfer, and folding the two together silently dropped the caller's
+/// deadline from the two download routes.
+///
+/// Redirects are followed: the route answers `301` to a presigned storage URL.
+/// Safe because the broker client converts its credentials to basic auth, which
+/// reqwest strips on a cross-host hop.
+///
+/// # Errors
+/// Returns an error if the credentials cannot be encoded as headers.
+#[cfg(feature = "broker")]
+pub(crate) fn download_client(
+    credentials: &Credentials,
+    timeout: Option<std::time::Duration>,
+) -> Result<reqwest::Client> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    credentials.apply(&mut headers)?;
+    headers.insert(
+        reqwest::header::USER_AGENT,
+        reqwest::header::HeaderValue::from_static(crate::config::user_agent()),
+    );
+
+    let mut builder = reqwest::Client::builder()
+        .default_headers(headers)
+        .redirect(reqwest::redirect::Policy::limited(10));
+    if let Some(timeout) = timeout {
+        builder = builder.timeout(timeout);
+    }
+    Ok(builder.build()?)
+}
+
 /// Opens an event stream at `url`.
 ///
 /// The subscription itself is awaited so a rejected one — bad credentials, a

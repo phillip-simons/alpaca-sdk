@@ -5,6 +5,11 @@ use std::time::Duration;
 /// Maximum number of items the market data API returns per page.
 pub const DATA_MAX_LIMIT: u32 = 10_000;
 
+/// Maximum number of orders `/v2/orders` and its broker twin serve in one page.
+///
+/// The default is 50; this is the ceiling, and what the order walkers ask for.
+pub const ORDERS_MAX_LIMIT: u32 = 500;
+
 /// Default page size for the broker account-activities endpoint.
 pub const ACCOUNT_ACTIVITIES_DEFAULT_PAGE_SIZE: u32 = 100;
 
@@ -170,6 +175,15 @@ pub enum RetryBackoff {
 /// — on HTTP 429 and 504, waiting about a second before the first and doubling
 /// from there, capped at 30 seconds and jittered.
 ///
+/// **The method has a veto.** Whatever this configuration allows, the client
+/// will not replay a `POST` or a `PATCH` on anything except a 429: a 504 on
+/// `POST /v2/orders` means the gateway stopped waiting for the answer, not that
+/// nothing happened, and replaying it places a second order. So a policy of
+/// `status_codes([429, 500, 502, 504])` retries all four on `GET`, `PUT` and
+/// `DELETE`, and only the 429 on `POST` and `PATCH`. See
+/// [`RetryConfig::should_retry`], which reports this configuration's own answer
+/// and not the client's.
+///
 /// **A response carrying `Retry-After` overrides all of that.** The server is
 /// stating the answer this configuration is otherwise guessing at, so its value
 /// is used in place of the computed delay — clamped to the backoff's own ceiling,
@@ -248,7 +262,11 @@ impl RetryConfig {
         self
     }
 
-    /// Whether `status` should be retried under this configuration.
+    /// Whether `status` is in this configuration's retry set.
+    ///
+    /// **Not the same question as "will the client retry it".** The method has a
+    /// veto that this type cannot see: a `POST` or `PATCH` is never replayed
+    /// except on a 429, however this is configured. See the type documentation.
     #[must_use]
     pub fn should_retry(&self, status: u16) -> bool {
         self.status_codes.contains(&status)

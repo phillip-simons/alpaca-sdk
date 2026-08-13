@@ -37,8 +37,9 @@ behaviour changes are worth reading before the first release rather than after.
   put the Alpaca key pair in `default_headers` and allowed ten redirects. reqwest
   strips `Authorization` on a cross-host hop and nothing else, so the custom
   `APCA-API-*` headers rode along. The trading and market-data streaming clients
-  now refuse redirects; only the broker document download follows them, where the
-  credentials are basic auth and therefore stripped.
+  now refuse redirects. The broker clients still follow them — the document
+  download answers `301` to a presigned storage URL — which is safe there because
+  those credentials are basic auth, and reqwest does strip `Authorization`.
 - **`RestConfig::timeout` is no longer applied to event streams.** It is a total
   deadline on a whole request, and an event stream's body never finishes, so
   setting it gave every subscription a fixed lifespan: events until the deadline,
@@ -48,11 +49,6 @@ behaviour changes are worth reading before the first release rather than after.
   above five seconds behaved as exactly five — an overnight stock stream
   reconnected every five seconds against an endpoint that allows one connection
   per account. There is now a real clock, reset by market data.
-- **Reconnect backoff resets on a successful connection.** The retry counter was
-  incremented immediately *after* a successful connect and only reset by an
-  inbound message, so a few clean server-side recycles pushed the delay to its
-  30-second ceiling. On the trade-update stream, whose own docs call a silent
-  account normal, it never reset at all.
 - **A `null` symbol no longer fails the whole market-data response.** Alpaca
   answers `null` for a symbol it has nothing for, and that error propagated and
   discarded every good symbol beside it. A request takes up to 100 symbols, so
@@ -88,22 +84,57 @@ behaviour changes are worth reading before the first release rather than after.
   Chaining both produced an `oto` order carrying two exit legs that `validate`
   accepted.
 - **Empty `Symbols` is refused locally** instead of issuing `?symbols=`.
-- **`Error::Decode` carries the route and the payload** from the market-data
-  merge, where it used to carry the map key and an empty body.
+- **`Error::Decode` carries the route and the payload** everywhere in the
+  market-data client, including the three single-symbol "latest" routes and the
+  news route, where it used to carry an empty body. The payload is now borrowed
+  rather than cloned, so a successful multi-symbol response no longer pays for an
+  error path it did not take.
+- **The reconnect curve resets on a session that did its job.** The counter was
+  incremented immediately *after* a successful connect and reset only by an
+  inbound message, so a few clean server-side recycles pushed the delay to its
+  30-second ceiling — and on the trade-update stream, whose own docs call a
+  silent account normal, it never reset at all. Resetting on *connect* would go
+  too far the other way: it pins the delay at its minimum against a server that
+  accepts and immediately hangs up, about one connection a second at an endpoint
+  that allows one per account. So a session clears the count when it delivered
+  data or stayed up past `stable_session`.
+- **The blocking façade re-raises panics it did not cause.** `catch_unwind`
+  reported *every* escaping panic as "you called this from an async context",
+  which would have hidden a genuine bug in the caller's own future.
+- **The broker document download honours `RestConfig::timeout` again.** It shared
+  a client with the event streams, which deliberately have no total deadline, and
+  silently lost the caller's.
+- **`get_option_chain` and `get_market_movers` encode their path segments.** Both
+  interpolate a request *field* rather than a bare argument, so the first
+  encoding sweep missed them.
+- **`OneOrMany` reports the real decode error.** As an untagged enum it discarded
+  both branches' errors on exactly the routes whose payloads have never been
+  seen.
 
 ### Added
 
-- `TradingClient::get_all_orders`, which walks `/v2/orders` with the
-  `before_order_id` cursor. `get_orders` returns one page — 50 by default, 500 at
-  most — and said so nowhere, so an account with more history than that
-  reconciled against a silently truncated list.
+- `TradingClient::get_all_orders` and `BrokerClient::get_all_orders_for_account`,
+  which walk `/v2/orders` and its broker twin with the `before_order_id` cursor.
+  `get_orders` returns one page — 50 by default, 500 at most — and said so
+  nowhere, so an account with more history than that reconciled against a
+  silently truncated list. The walk deduplicates on order id rather than assuming
+  the cursor is exclusive, because Alpaca's cursors are inclusive on some routes
+  and the reference does not say which this is.
+- `StreamConfig::stable_session` and `TradingStream::stable_session`, which set
+  how long a connection must stay up before it clears the reconnect failure
+  count. Defaults to 30 seconds.
 
 ### Changed — API surface
 
 Decisions that become expensive after the first release, settled now.
 
-- **Response models are `#[non_exhaustive]`.** `CHANGELOG` stated this as a
-  guarantee; `trading/models.rs`, `broker/models.rs` and `data/models.rs` had it
+- **Response models are `#[non_exhaustive]`,** across every module rather than
+  the three model files — 80 further types, including all fourteen corporate
+  action shapes and the funding, JIT, reporting, IPO, OAuth and locate responses.
+  Clients, request bodies and caller-constructed value types (`OrderAmount`,
+  `Trail`, `StopLimit`, `SettlementTransfer`, `W8BenDocument`) are deliberately
+  left exhaustive: the attribute costs a caller something and buys nothing on a
+  type they have to build. `CHANGELOG` stated the policy as a guarantee; `trading/models.rs`, `broker/models.rs` and `data/models.rs` had it
   on nothing. Alpaca adds fields without a version bump, and without the
   attribute the crate cannot follow an *additive* upstream change without a major
   release of its own. Several request-body components gain constructors as a
@@ -138,7 +169,9 @@ Decisions that become expensive after the first release, settled now.
 - **`currency` is `SupportedCurrencies` everywhere,** rather than the enum on
   some types and `String` on others — including on the one you read back after
   setting it, where the mismatch turned a compile error into a string comparison
-  that quietly evaluated false.
+  that quietly evaluated false. `CreateWithdrawalRequest::desired_currency` and
+  `FundingWalletTransfer::original_currency` are included; the first is the write
+  path for money leaving an account.
 - **`strike_price_gte` / `strike_price_lte` are `Decimal`** on the market-data
   request, matching the trading request and the model they filter. They were the
   only `f64` money fields in the request surface.

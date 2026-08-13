@@ -1,6 +1,6 @@
 //! The trading API: orders, positions, assets, watchlists, and account state.
 
-mod client;
+pub(crate) mod client;
 mod enums;
 mod enums_ext;
 pub mod locates;
@@ -22,4 +22,4 @@ pub use wallets::*;
 pub use crate::types::ContractType;
 pub use models::*;
 pub use requests::*;
-pub use stream::{TradeStreamMessage, TradingStream};
+pub use stream::{DEFAULT_STABLE_SESSION, TradeStreamMessage, TradingStream};

@@ -24,6 +24,10 @@ enum Script {
     RejectAuth,
     /// Authorize, then say nothing.
     GoMute,
+    /// Authorize, stay silent for this long, then drop. A quiet session that
+    /// was doing its job and got recycled server-side — which on this stream is
+    /// the *normal* shape, because a silent account is normal.
+    HoldThenDrop(Duration),
 }
 
 type Received = Arc<Mutex<Vec<Value>>>;
@@ -79,6 +83,10 @@ async fn serve(script: Script) -> (String, Received, Arc<Mutex<u32>>) {
 
                 match script {
                     Script::GoMute => tokio::time::sleep(Duration::from_secs(30)).await,
+                    Script::HoldThenDrop(hold) => {
+                        tokio::time::sleep(hold).await;
+                        drop(ws);
+                    }
                     Script::Send(ref frames) | Script::SendThenDrop(ref frames) => {
                         let drop_after = matches!(script, Script::SendThenDrop(_));
                         for frame in frames {
@@ -340,4 +348,89 @@ async fn a_mute_stream_reconnects_when_a_data_timeout_is_set() {
         "a mute stream should have been reconnected, saw {}",
         *connections.lock().await
     );
+}
+
+// ------------------------------------------- the staleness clock and backoff
+//
+// This stream carries fills, and it received the same two fixes as the market
+// data stream with no test of its own. The `data_timeout` test below used 300ms,
+// under the 5s internal poll interval, so it could not tell a real clock from
+// one that fired on every poll.
+
+/// A timeout longer than the internal poll interval must be honoured as written.
+/// Before the clock existed, one elapsed 5s read *was* the staleness signal, so
+/// any timeout above 5s behaved as exactly 5s.
+#[tokio::test]
+async fn a_timeout_longer_than_the_poll_interval_is_not_fired_early() {
+    let (endpoint, _, connections) = serve(Script::GoMute).await;
+
+    let stream = TradingStream::with_endpoint(credentials(), endpoint)
+        .data_timeout(Duration::from_secs(30))
+        .expect("a positive timeout");
+
+    let mut updates = Box::pin(stream.run());
+    let _ = tokio::time::timeout(Duration::from_secs(12), updates.next()).await;
+
+    assert_eq!(
+        *connections.lock().await,
+        1,
+        "a 30s timeout must not reconnect within 12s; the clock is being read \
+         from one poll window rather than from elapsed time"
+    );
+}
+
+/// A quiet session that stayed up and was then recycled clears the failure
+/// count. This is the case the old loop got wrong on *this* stream in
+/// particular: it reset only on a trade update, and a silent account never
+/// sends one — so a few server-side recycles left every reconnect waiting the
+/// 30s maximum, and there is no replay here, so a fill in that window is gone.
+#[tokio::test]
+async fn a_quiet_session_that_stayed_up_clears_the_failure_count() {
+    let (endpoint, _, connections) = serve(Script::HoldThenDrop(Duration::from_millis(400))).await;
+
+    let stream = TradingStream::with_endpoint(credentials(), endpoint)
+        .stable_session(Duration::from_millis(200))
+        .expect("a positive duration");
+
+    let mut updates = Box::pin(stream.run());
+    let _ = tokio::time::timeout(Duration::from_secs(12), async {
+        while updates.next().await.is_some() {}
+    })
+    .await;
+
+    let seen = *connections.lock().await;
+    assert!(
+        seen >= 6,
+        "a session that stayed up past `stable_session` should have cleared the \
+         backoff curve, but only {seen} reconnects fit in 12s"
+    );
+}
+
+/// And a server that authorizes and immediately hangs up is still a failure.
+#[tokio::test]
+async fn a_session_that_dropped_immediately_does_advance_the_backoff_curve() {
+    let (endpoint, _, connections) = serve(Script::SendThenDrop(Vec::new())).await;
+
+    let stream = TradingStream::with_endpoint(credentials(), endpoint)
+        .stable_session(Duration::from_millis(200))
+        .expect("a positive duration");
+
+    let mut updates = Box::pin(stream.run());
+    let _ = tokio::time::timeout(Duration::from_secs(12), async {
+        while updates.next().await.is_some() {}
+    })
+    .await;
+
+    let seen = *connections.lock().await;
+    assert!(
+        seen <= 7,
+        "a connect-then-drop server should be backed off from, but saw {seen} \
+         connections in 12s"
+    );
+}
+
+#[tokio::test]
+async fn a_stable_session_must_be_positive() {
+    let stream = TradingStream::with_endpoint(credentials(), "ws://127.0.0.1:1");
+    assert!(stream.stable_session(Duration::ZERO).is_err());
 }

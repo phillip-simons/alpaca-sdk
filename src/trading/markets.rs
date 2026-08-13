@@ -97,6 +97,7 @@ wire_enum! {
 /// eastern-time datetimes. Two calendars, two time representations — which is
 /// the sort of thing that only shows up when both are used.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MarketSession {
     /// The trading day.
     pub date: NaiveDate,
@@ -129,6 +130,7 @@ pub struct MarketSession {
 
 /// Which market a calendar describes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MarketInfo {
     /// Alpaca's short name for it.
     pub acronym: String,
@@ -146,6 +148,7 @@ pub struct MarketInfo {
 
 /// A named market's calendar.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MarketCalendar {
     /// The market described.
     pub market: MarketInfo,

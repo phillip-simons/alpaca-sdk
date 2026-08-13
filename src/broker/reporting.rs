@@ -22,6 +22,7 @@ use crate::types::serde_util::comma_separated;
 /// Keyed by account id. Each value is the same [`Position`] the trading API
 /// returns, so an end-of-day position and a live one read identically.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct EodPositions {
     /// The close these positions are as of.
     #[serde(default)]
@@ -39,6 +40,7 @@ pub struct EodPositions {
 
 /// One symbol's position summed across every account.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AggregatePosition {
     /// The symbol.
     #[serde(default)]
@@ -71,6 +73,7 @@ pub struct AggregatePosition {
 
 /// One account's interest on idle cash for one day.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CashInterestDetail {
     /// The account.
     #[serde(default)]
@@ -106,6 +109,7 @@ pub struct CashInterestDetail {
 
 /// A page of cash interest details.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CashInterestReport {
     /// The details.
     #[serde(
@@ -120,6 +124,7 @@ pub struct CashInterestReport {
 
 /// How many accounts sit in a tier, and how much they hold.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AprTierDetails {
     /// When the count was taken.
     #[serde(default)]
@@ -134,6 +139,7 @@ pub struct AprTierDetails {
 
 /// A cash interest rate tier.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AprTier {
     /// Alpaca's identifier for the tier.
     #[serde(default)]
@@ -166,6 +172,7 @@ pub struct AprTier {
 
 /// The tier list, which arrives under a key rather than bare.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AprTiers {
     /// The tiers.
     #[serde(

@@ -120,16 +120,25 @@ fn page_limit(configured: &Option<u32>, max_items: Option<usize>, collected: usi
 #[derive(Debug, Clone)]
 pub struct BrokerClient {
     rest: RestClient,
-    /// A second HTTP client, for the routes that do not fit [`RestClient`].
+    /// The client the event streams are read through.
     ///
-    /// Two need it. The document download answers `301` to a presigned storage
-    /// URL, and `RestClient` refuses redirects deliberately; this client follows
-    /// them. What keeps broker credentials off the storage provider is not this
-    /// client but the credential *form*: `with_config` converts to basic auth,
-    /// and reqwest strips `Authorization` when a redirect crosses hosts. The
-    /// event streams need a response body read incrementally rather than
-    /// decoded whole.
-    raw: reqwest::Client,
+    /// They need a response body read incrementally rather than decoded whole,
+    /// and they carry **no timeout**: a total deadline on a `text/event-stream`
+    /// caps the life of the subscription rather than bounding a slow call.
+    events: reqwest::Client,
+    /// The client for request/response routes that `RestClient` cannot serve:
+    /// the two document downloads, and the activity-event lookup that sits on
+    /// its own version segment.
+    ///
+    /// Separate from `events` because these are ordinary calls with a body that
+    /// ends, and therefore *do* honour [`RestConfig::timeout`]. Folding the two
+    /// together silently dropped the caller's deadline from all three.
+    ///
+    /// It follows redirects — the download answers `301` to a presigned storage
+    /// URL — and what keeps broker credentials off that storage provider is not
+    /// this client but the credential *form*: `with_config` converts to basic
+    /// auth, and reqwest strips `Authorization` when a redirect crosses hosts.
+    plain: reqwest::Client,
 }
 
 impl BrokerClient {
@@ -156,20 +165,10 @@ impl BrokerClient {
         // where the trading and data APIs take the pair as two headers.
         let credentials = credentials.clone().into_basic();
         Ok(Self {
-            raw: Self::raw_client(&credentials)?,
+            events: crate::sse::streaming_client(&credentials, crate::sse::Redirects::Follow)?,
+            plain: crate::sse::download_client(&credentials, config.timeout)?,
             rest: RestClient::new(&credentials, config)?,
         })
-    }
-
-    /// Builds the client used by the document download and the event streams.
-    ///
-    /// `Follow`, not `Refuse`: the document download answers a redirect to a
-    /// presigned storage URL. Safe here because [`BrokerClient::with_config`]
-    /// converts the credentials to basic auth, which reqwest strips on a
-    /// cross-host hop — unlike the key-pair headers the trading and data
-    /// clients send, which is why those two refuse redirects instead.
-    fn raw_client(credentials: &Credentials) -> Result<reqwest::Client> {
-        crate::sse::streaming_client(credentials, crate::sse::Redirects::Follow)
     }
 
     /// The underlying transport, for routes this client does not wrap.
@@ -670,7 +669,7 @@ impl BrokerClient {
             self.rest.config().base_url.trim_end_matches('/'),
         );
         let response = self
-            .raw
+            .plain
             .get(&url)
             .send()
             .await
@@ -708,7 +707,7 @@ impl BrokerClient {
         let query = filter
             .map(|filter| version.query(filter))
             .unwrap_or_default();
-        crate::sse::subscribe(&self.raw, &url, path, &query).await
+        crate::sse::subscribe(&self.events, &url, path, &query).await
     }
 
     /// Opens one of the timestamp-bounded event streams.
@@ -728,7 +727,7 @@ impl BrokerClient {
             version.segment()
         );
         let query = filter.map(EventStreamRequest::query).unwrap_or_default();
-        crate::sse::subscribe(&self.raw, &url, path, &query).await
+        crate::sse::subscribe(&self.events, &url, path, &query).await
     }
 
     // ------------------------------------------------- account activities
@@ -939,7 +938,7 @@ impl BrokerClient {
 
         for attempt in 1..=total_attempts {
             let response = self
-                .raw
+                .plain
                 .get(&url)
                 .send()
                 .await
@@ -1484,6 +1483,12 @@ impl BrokerClient {
 
     /// Lists an account's orders, optionally filtered.
     ///
+    /// **One page.** Alpaca returns 50 orders by default and at most 500, and
+    /// this sends exactly what it is given — so an account with more history
+    /// than that gets a silently truncated list rather than an error. Use
+    /// [`get_all_orders_for_account`](Self::get_all_orders_for_account) to walk
+    /// the whole history.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_orders_for_account(
@@ -1496,6 +1501,39 @@ impl BrokerClient {
             Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
         }
+    }
+
+    /// Every order on an account matching `filter`, following the cursor across
+    /// pages.
+    ///
+    /// The broker route takes the same request type and the same 500-order page
+    /// cap as the trading one, so it needs the same walk — a correspondent
+    /// reconciling an account's history hits the identical silent truncation
+    /// otherwise. See
+    /// [`TradingClient::get_all_orders`](crate::trading::TradingClient::get_all_orders)
+    /// for how the cursor works and which two filter fields it overrides.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_all_orders_for_account(
+        &self,
+        account_id: Uuid,
+        filter: Option<&crate::trading::GetOrdersRequest>,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Order>> {
+        let path = format!("/trading/accounts/{account_id}/orders");
+        let mut request = filter.cloned().unwrap_or_default();
+        request.limit = Some(crate::config::ORDERS_MAX_LIMIT);
+        request.direction = Some(crate::types::Sort::Desc);
+
+        crate::trading::client::walk_orders(
+            &self.rest,
+            &path,
+            request,
+            max_items,
+            |order: &Order| order.order.id,
+        )
+        .await
     }
 
     /// Fetches one of an account's orders by its Alpaca id.

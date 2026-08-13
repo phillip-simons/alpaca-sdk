@@ -145,51 +145,18 @@ impl TradingClient {
         filter: Option<&GetOrdersRequest>,
         max_items: Option<usize>,
     ) -> Result<Vec<Order>> {
-        /// The API's own ceiling for one page.
-        const PAGE: u32 = 500;
-
         let mut request = filter.cloned().unwrap_or_default();
-        request.limit = Some(PAGE);
+        request.limit = Some(crate::config::ORDERS_MAX_LIMIT);
         request.direction = Some(Sort::Desc);
 
-        let mut all: Vec<Order> = Vec::new();
-        loop {
-            let page = self.rest.get::<Vec<Order>, _>("/orders", &request).await?;
-            let short_page = page.len() < PAGE as usize;
-
-            // The cursor is the oldest id on this page, and it has to be read
-            // before the page is moved into the accumulator.
-            let oldest = page.last().map(|order| order.id);
-            all.extend(page);
-
-            if let Some(max) = max_items
-                && all.len() >= max
-            {
-                all.truncate(max);
-                break;
-            }
-
-            // A page shorter than the maximum is the last one. An exactly-full
-            // final page costs one extra empty request, which is the price of
-            // an endpoint that does not say whether more remain.
-            if short_page {
-                break;
-            }
-
-            let Some(oldest) = oldest else { break };
-            // Defensive: an endpoint that kept returning the same last id would
-            // otherwise loop forever accumulating duplicates.
-            if request.before_order_id == Some(oldest) {
-                tracing::warn!(
-                    order_id = %oldest,
-                    "order cursor stopped advancing; stopping the walk"
-                );
-                break;
-            }
-            request.before_order_id = Some(oldest);
-        }
-
-        Ok(all)
+        walk_orders(
+            &self.rest,
+            "/orders",
+            request,
+            max_items,
+            |order: &Order| order.id,
+        )
+        .await
     }
 
     /// Fetches one order by its Alpaca id.
@@ -951,4 +918,80 @@ impl TradingClient {
         let query = filter.map(EventStreamRequest::query).unwrap_or_default();
         crate::sse::subscribe(&self.raw, &url, path, &query).await
     }
+}
+
+/// Walks `/orders` (or its broker twin) with the `before_order_id` cursor.
+///
+/// Shared by [`TradingClient::get_all_orders`] and
+/// [`BrokerClient::get_all_orders_for_account`](crate::broker::BrokerClient::get_all_orders_for_account):
+/// the two routes take the same request type and the same page cap, so a second
+/// copy of this loop would be a second place for the cursor logic to drift.
+///
+/// `request` is expected to arrive with `limit` and `direction` already set —
+/// the walk needs newest-first ordering to page backwards.
+pub(crate) async fn walk_orders<T, F>(
+    rest: &RestClient,
+    path: &str,
+    mut request: GetOrdersRequest,
+    max_items: Option<usize>,
+    id_of: F,
+) -> Result<Vec<T>>
+where
+    T: serde::de::DeserializeOwned,
+    F: Fn(&T) -> Uuid,
+{
+    let page_size = crate::config::ORDERS_MAX_LIMIT as usize;
+
+    // The cursor is exclusive on this route, but Alpaca's cursors are inclusive
+    // on some others and the reference does not say which this is — so a page
+    // boundary is deduplicated rather than trusted. Without it, an inclusive
+    // cursor would repeat one order per page, silently.
+    let mut seen: std::collections::HashSet<Uuid> = std::collections::HashSet::new();
+    let mut all: Vec<T> = Vec::new();
+
+    loop {
+        if max_items == Some(0) {
+            break;
+        }
+
+        let page = rest.get::<Vec<T>, _>(path, &request).await?;
+        let short_page = page.len() < page_size;
+
+        // The cursor is the oldest id on this page, and it has to be read
+        // before the page is moved into the accumulator.
+        let oldest = page.last().map(&id_of);
+        for order in page {
+            if seen.insert(id_of(&order)) {
+                all.push(order);
+            }
+        }
+
+        if let Some(max) = max_items
+            && all.len() >= max
+        {
+            all.truncate(max);
+            break;
+        }
+
+        // A page shorter than the maximum is the last one. An exactly-full
+        // final page costs one extra empty request, which is the price of an
+        // endpoint that does not say whether more remain.
+        if short_page {
+            break;
+        }
+
+        let Some(oldest) = oldest else { break };
+        // Defensive: an endpoint that kept returning the same last id would
+        // otherwise loop forever without adding anything.
+        if request.before_order_id == Some(oldest) {
+            tracing::warn!(
+                order_id = %oldest,
+                "order cursor stopped advancing; stopping the walk"
+            );
+            break;
+        }
+        request.before_order_id = Some(oldest);
+    }
+
+    Ok(all)
 }

@@ -216,6 +216,8 @@ async fn a_jit_report_decodes_as_a_download_link() {
     match report {
         JitReport::Download(download) => assert_eq!(download.filename, "report.csv"),
         JitReport::Inline(_) => panic!("expected the download shape"),
+        // The enum is `#[non_exhaustive]`: the route may grow a third shape.
+        other => panic!("unexpected JIT report shape: {other:?}"),
     }
 }
 
@@ -424,7 +426,7 @@ async fn a_recipient_bank_sends_only_what_was_set() {
 #[tokio::test]
 async fn a_zero_withdrawal_never_reaches_the_server() {
     let server = MockServer::start().await;
-    let request = CreateWithdrawalRequest::new(Decimal::ZERO, "GBP");
+    let request = CreateWithdrawalRequest::new(Decimal::ZERO, SupportedCurrencies::Gbp);
     let error = client(&server)
         .create_funding_wallet_withdrawal(ACCOUNT, &request)
         .await
@@ -552,7 +554,7 @@ async fn a_funding_wallet_withdrawal_posts_to_the_v1beta_route_with_the_amount_a
         .mount(&server)
         .await;
 
-    let request = CreateWithdrawalRequest::new(Decimal::new(25_075, 2), "GBP");
+    let request = CreateWithdrawalRequest::new(Decimal::new(25_075, 2), SupportedCurrencies::Gbp);
     client(&server)
         .create_funding_wallet_withdrawal(ACCOUNT, &request)
         .await

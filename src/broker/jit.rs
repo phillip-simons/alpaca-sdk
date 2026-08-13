@@ -53,6 +53,7 @@ wire_enum! {
 
 /// A JIT ledger.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct JitLedger {
     /// Alpaca's identifier for the ledger.
     #[serde(default)]
@@ -70,6 +71,7 @@ pub struct JitLedger {
 
 /// One movement on a ledger.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct JitLedgerTransaction {
     /// The account it belongs to.
     #[serde(default)]
@@ -102,6 +104,7 @@ pub struct JitLedgerTransaction {
 
 /// A ledger's balance over a window, and the movements behind it.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct JitLedgerBalances {
     /// The ledger.
     #[serde(default)]
@@ -131,6 +134,7 @@ pub struct JitLedgerBalances {
 
 /// A correspondent's trading limits for the day.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct JitTradingLimits {
     /// Which correspondent.
     #[serde(default)]
@@ -164,6 +168,7 @@ pub struct JitTradingLimits {
 /// this is untagged: a body of report strings, or a link to download one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
+#[non_exhaustive]
 pub enum JitReport {
     /// A presigned URL to fetch the report from.
     Download(JitReportDownload),
@@ -182,7 +187,13 @@ pub enum JitReport {
 /// untagged enum, that made [`JitReport`] unable to fail: an unrecognised body
 /// became `Inline` with nothing in it, so a settlement report came back
 /// silently empty instead of erroring.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+///
+/// `Default` is deliberately absent. The deserializer refuses a body with no
+/// report key, so a derived `Default` would hand out a value that will not
+/// round-trip through its own codec — the same asymmetry the `Calendar`
+/// serializer in this crate exists to remove. `Serialize` stays because
+/// [`JitReport`] derives it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[non_exhaustive]
 pub struct JitReportInline {
     /// The detail report.
@@ -277,6 +288,7 @@ impl JitReportInline {
 
 /// A report served as a link.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct JitReportDownload {
     /// Where to fetch it.
     pub url: String,

@@ -71,6 +71,7 @@ wire_enum! {
 
 /// A fee charged on an instant funding request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct InstantFundingFee {
     /// Alpaca's identifier for the fee.
     pub id: Uuid,
@@ -83,6 +84,7 @@ pub struct InstantFundingFee {
 
 /// A day's interest on an unsettled advance.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct InstantFundingInterest {
     /// Alpaca's identifier for the charge.
     pub id: Uuid,
@@ -101,6 +103,7 @@ pub struct InstantFundingInterest {
 
 /// An advance of cash against a deposit that has not cleared.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct InstantFunding {
     /// Alpaca's identifier for the advance.
     pub id: Uuid,
@@ -138,6 +141,7 @@ pub struct InstantFunding {
 
 /// How much instant funding a correspondent may have outstanding.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct InstantFundingLimits {
     /// The ceiling.
     #[serde(default)]
@@ -152,6 +156,7 @@ pub struct InstantFundingLimits {
 
 /// One account's share of the correspondent's limit.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountInstantFundingLimits {
     /// The account.
     pub account_no: String,
@@ -165,6 +170,7 @@ pub struct AccountInstantFundingLimits {
 
 /// A day's instant funding position for one account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct InstantFundingReport {
     /// The account.
     pub account_no: String,

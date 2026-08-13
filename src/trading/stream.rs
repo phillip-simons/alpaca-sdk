@@ -32,14 +32,14 @@ const TRADE_UPDATES: &str = "trade_updates";
 /// How long to wait for a frame before re-checking the staleness clock.
 const RECEIVE_POLL: Duration = Duration::from_secs(5);
 
-/// How long a session must last before it counts as healthy.
+/// How long a session must last before it counts as healthy, by default.
 ///
 /// Defined here as well as on the market data stream rather than shared: the two
 /// live behind different feature flags, and a constant is cheaper to state twice
 /// than a module is to introduce for it. See the market data stream for the
 /// reasoning — a connection that came up and immediately dropped is a failure
 /// however far it got through the handshake, so it must not clear the curve.
-const STABLE_SESSION: Duration = Duration::from_secs(30);
+pub const DEFAULT_STABLE_SESSION: Duration = Duration::from_secs(30);
 
 /// A frame from the trade update stream.
 #[derive(Debug, Clone, PartialEq)]
@@ -90,6 +90,7 @@ pub struct TradingStream {
     min_backoff: Duration,
     max_backoff: Duration,
     data_timeout: Option<Duration>,
+    stable_session: Duration,
 }
 
 impl TradingStream {
@@ -108,6 +109,7 @@ impl TradingStream {
             min_backoff: DEFAULT_MIN_BACKOFF,
             max_backoff: DEFAULT_MAX_BACKOFF,
             data_timeout: None,
+            stable_session: DEFAULT_STABLE_SESSION,
         }
     }
 
@@ -126,6 +128,26 @@ impl TradingStream {
             ));
         }
         self.data_timeout = Some(timeout);
+        Ok(self)
+    }
+
+    /// How long a session must stay up before it clears the reconnect failure
+    /// count.
+    ///
+    /// A session that delivered a trade update always clears it; this covers the
+    /// silent account, which this stream's own documentation calls normal.
+    /// Defaults to [`DEFAULT_STABLE_SESSION`].
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if the duration is zero, which would
+    /// treat a connection that dropped instantly as healthy.
+    pub fn stable_session(mut self, after: Duration) -> Result<Self> {
+        if after.is_zero() {
+            return Err(Error::InvalidRequest(
+                "stable_session must be a positive duration".to_owned(),
+            ));
+        }
+        self.stable_session = after;
         Ok(self)
     }
 
@@ -226,7 +248,7 @@ impl TradingStream {
                 let _ = socket.close(None).await;
                 // A session that did its job clears the failure count; one that
                 // came up and fell straight over does not.
-                if delivered_update || session_start.elapsed() >= STABLE_SESSION {
+                if delivered_update || session_start.elapsed() >= self.stable_session {
                     retries = 0;
                 }
                 retries = retries.saturating_add(1);

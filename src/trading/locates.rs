@@ -48,6 +48,7 @@ wire_enum! {
 
 /// A locate request and its current status.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Locate {
     /// Alpaca's identifier for the locate.
     pub id: Uuid,
@@ -84,6 +85,7 @@ pub struct Locate {
 
 /// A page of locates.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LocatesPage {
     /// The locates on this page.
     #[serde(
@@ -98,6 +100,7 @@ pub struct LocatesPage {
 
 /// What one symbol currently costs to borrow.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LocateQuote {
     /// The symbol quoted.
     pub symbol: String,
@@ -112,6 +115,7 @@ pub struct LocateQuote {
 
 /// Why a requested symbol has no quote.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LocateQuoteFailure {
     /// The symbol that could not be quoted.
     pub symbol: String,
@@ -127,6 +131,7 @@ pub struct LocateQuoteFailure {
 /// symbols where one is easy to borrow returns four quotes and one entry in
 /// [`errors`](Self::errors).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LocateQuotes {
     /// The symbols that were quoted.
     #[serde(

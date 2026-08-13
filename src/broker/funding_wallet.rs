@@ -139,6 +139,7 @@ wire_enum! {
 
 /// An account's funding wallet.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FundingWallet {
     /// The account it belongs to.
     pub account_id: Uuid,
@@ -150,6 +151,7 @@ pub struct FundingWallet {
 
 /// The wallets a batch create opened.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FundingWallets {
     /// The wallets.
     #[serde(
@@ -161,6 +163,7 @@ pub struct FundingWallets {
 
 /// A fee on a funding wallet transfer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FundingFee {
     /// What it is for.
     #[serde(rename = "type")]
@@ -175,6 +178,7 @@ pub struct FundingFee {
 
 /// The USD leg of a transfer denominated in something else.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UsdAmount {
     /// How much, in USD.
     pub amount: Decimal,
@@ -182,6 +186,7 @@ pub struct UsdAmount {
 
 /// Money in or out of a funding wallet.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FundingWalletTransfer {
     /// Alpaca's identifier for the transfer.
     #[serde(default)]
@@ -206,7 +211,7 @@ pub struct FundingWalletTransfer {
     pub original_amount: Option<Decimal>,
     /// In what currency.
     #[serde(default)]
-    pub original_currency: Option<String>,
+    pub original_currency: Option<SupportedCurrencies>,
     /// The USD leg.
     #[serde(default)]
     pub usd: Option<UsdAmount>,
@@ -226,6 +231,7 @@ pub struct FundingWalletTransfer {
 
 /// A page of funding wallet transfers.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FundingWalletTransfers {
     /// The transfers.
     #[serde(
@@ -237,6 +243,7 @@ pub struct FundingWalletTransfers {
 
 /// A bank a withdrawal may be sent to.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct RecipientBank {
     /// Alpaca's identifier for the bank.
     #[serde(default)]
@@ -447,7 +454,7 @@ pub struct CreateWithdrawalRequest {
     pub usd_amount: Option<Decimal>,
     /// What to convert it to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub desired_currency: Option<String>,
+    pub desired_currency: Option<SupportedCurrencies>,
     /// Which rail to send it on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payment_type: Option<PaymentType>,
@@ -456,10 +463,10 @@ pub struct CreateWithdrawalRequest {
 impl CreateWithdrawalRequest {
     /// Sends `usd_amount` out as `desired_currency`.
     #[must_use]
-    pub fn new(usd_amount: Decimal, desired_currency: impl Into<String>) -> Self {
+    pub fn new(usd_amount: Decimal, desired_currency: SupportedCurrencies) -> Self {
         Self {
             usd_amount: Some(usd_amount),
-            desired_currency: Some(desired_currency.into()),
+            desired_currency: Some(desired_currency),
             payment_type: None,
         }
     }
@@ -577,7 +584,7 @@ mod tests {
 
     #[test]
     fn a_zero_withdrawal_is_refused_before_it_is_sent() {
-        let request = CreateWithdrawalRequest::new(Decimal::ZERO, "GBP");
+        let request = CreateWithdrawalRequest::new(Decimal::ZERO, SupportedCurrencies::Gbp);
         assert!(request.validate().is_err());
     }
 }

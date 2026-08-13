@@ -33,9 +33,11 @@ enum Script {
     /// Accept auth, then reject the subscription.
     RejectSubscription,
     /// Complete the whole handshake, then drop without ever sending market
-    /// data — a healthy session that ends, which is what a server-side recycle
-    /// looks like.
+    /// data — a connection that came up and fell straight over.
     DropAfterHandshake,
+    /// Complete the handshake, stay silent for this long, then drop. A quiet
+    /// session that was doing its job and got recycled server-side.
+    HoldThenDrop(Duration),
 }
 
 /// Everything the server saw a client send, across all connections.
@@ -113,6 +115,10 @@ async fn serve(script: Script) -> (String, Received, Arc<Mutex<u32>>) {
                         tokio::time::sleep(Duration::from_secs(30)).await;
                     }
                     Script::DropAfterHandshake => drop(ws),
+                    Script::HoldThenDrop(hold) => {
+                        tokio::time::sleep(hold).await;
+                        drop(ws);
+                    }
                     Script::Send(ref batches) | Script::SendThenDrop(ref batches) => {
                         let drop_after = matches!(script, Script::SendThenDrop(_));
                         for batch in batches {
@@ -550,24 +556,31 @@ async fn a_timeout_longer_than_the_poll_interval_still_fires_eventually() {
     );
 }
 
-/// A session that did its job clears the failure count.
+/// A quiet session that stayed up and was then recycled clears the failure
+/// count.
 ///
-/// The backoff curve is indexed by consecutive *failures*, and the original loop
-/// incremented it immediately after a **successful** connect — so a server-side
-/// recycle, which is routine, pushed the delay out every time and left a quiet
-/// overnight stream sitting at the 30s ceiling by the opening bell.
+/// This is the one case where the old loop and the new one differ, and therefore
+/// the only one worth asserting. The original incremented the counter after a
+/// *successful* connect and reset it only on a market data message — so a
+/// legitimately silent stream whose server recycles it climbed to the 30s
+/// ceiling and stayed there. Resetting on connect alone would have gone too far
+/// the other way (see the test below), so the discriminator is whether the
+/// session lasted: `stable_session` is set short here purely to keep the test
+/// fast.
 ///
-/// `SendThenDrop` delivers a trade and then drops, which is what a healthy
-/// session that ends looks like. The default backoff is 1s jittered to
-/// [0.5s, 1s), so a curve that stays put reconnects at least a dozen times in
-/// twelve seconds.
+/// The default backoff is 1s jittered to [0.5s, 1s). With the curve reset each
+/// time, a 400ms session plus a ~0.75s wait is roughly one connection per 1.2s,
+/// so twelve seconds fits at least six. Without the reset the curve doubles —
+/// 0.5s, 1s, 2s, 4s, 8s — and four connections is all that fits.
 #[tokio::test]
-async fn a_session_that_delivered_data_does_not_advance_the_backoff_curve() {
-    let (endpoint, _, connections) =
-        serve(Script::SendThenDrop(vec![json!([trade("AAPL", 1.0)])])).await;
+async fn a_quiet_session_that_stayed_up_clears_the_failure_count() {
+    let (endpoint, _, connections) = serve(Script::HoldThenDrop(Duration::from_millis(400))).await;
 
     let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
     stream.subscribe_trades(["AAPL"]);
+    stream
+        .stable_session(Duration::from_millis(200))
+        .expect("a positive duration");
 
     let mut messages = Box::pin(stream.run());
     let _ = tokio::time::timeout(Duration::from_secs(12), async {
@@ -577,26 +590,27 @@ async fn a_session_that_delivered_data_does_not_advance_the_backoff_curve() {
 
     let seen = *connections.lock().await;
     assert!(
-        seen >= 8,
-        "backoff grew across sessions that delivered data: only {seen} reconnects \
-         in 12s, expected the curve to stay at its minimum"
+        seen >= 6,
+        "a session that stayed up past `stable_session` should have cleared the \
+         backoff curve, but only {seen} reconnects fit in 12s"
     );
 }
 
-/// And the other direction, which resetting on *connect* alone would have got
-/// wrong: a server that completes the handshake and immediately hangs up has
-/// not done its job, however far it got. Treating that as success pinned the
-/// delay at ~1s forever — roughly one connection a second at an endpoint that
-/// allows one per account.
-///
-/// A growing curve waits 0.5–1s, then 1–2s, 2–4s, 4–8s: about five connections
-/// in twelve seconds, against a dozen or more if it were pinned at the minimum.
+/// And the other direction, which resetting on *connect* alone would get wrong:
+/// a server that completes the handshake and immediately hangs up has not done
+/// its job, however far it got. Treating that as success pinned the delay at
+/// ~1s forever — roughly one connection a second at an endpoint that allows one
+/// per account.
 #[tokio::test]
 async fn a_session_that_dropped_immediately_does_advance_the_backoff_curve() {
     let (endpoint, _, connections) = serve(Script::DropAfterHandshake).await;
 
     let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
     stream.subscribe_trades(["AAPL"]);
+    // Well below the session length, so only the *duration* rule decides.
+    stream
+        .stable_session(Duration::from_millis(200))
+        .expect("a positive duration");
 
     let mut messages = Box::pin(stream.run());
     let _ = tokio::time::timeout(Duration::from_secs(12), async {
@@ -610,4 +624,10 @@ async fn a_session_that_dropped_immediately_does_advance_the_backoff_curve() {
         "a connect-then-drop server should be backed off from, but saw {seen} \
          connections in 12s — the curve is not growing"
     );
+}
+
+#[tokio::test]
+async fn a_stable_session_must_be_positive() {
+    let mut stream = StockDataStream::with_endpoint(credentials(), "ws://127.0.0.1:1");
+    assert!(stream.stable_session(Duration::ZERO).is_err());
 }

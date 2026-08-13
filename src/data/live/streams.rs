@@ -107,6 +107,17 @@ macro_rules! common {
             Ok(self)
         }
 
+        /// How long a session must stay up before it clears the reconnect
+        /// failure count. See
+        /// [`StreamConfig::stable_session`](crate::data::StreamConfig::stable_session).
+        ///
+        /// # Errors
+        /// Returns [`Error::InvalidRequest`] if the duration is zero.
+        pub fn stable_session(&mut self, after: Duration) -> Result<&mut Self> {
+            self.inner.config_mut().set_stable_session(after)?;
+            Ok(self)
+        }
+
         /// Connects and yields frames, reconnecting on failure.
         ///
         /// # Errors
