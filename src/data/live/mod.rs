@@ -409,7 +409,7 @@ async fn sleep_backoff(config: &StreamConfig, retries: u32) {
 fn is_fatal(error: &Error) -> bool {
     match error {
         Error::Credentials(_) => true,
-        Error::InvalidRequest(message) => is_fatal_message(message),
+        Error::Stream(message) => is_fatal_message(message),
         _ => false,
     }
 }
@@ -438,20 +438,20 @@ async fn connect(
         .map_err(|e| Error::InvalidUrl(e.to_string()))?;
     request.headers_mut().insert(
         "Content-Type",
-        "application/msgpack".parse().map_err(|_| {
-            Error::InvalidRequest("could not build the content type header".to_owned())
-        })?,
+        "application/msgpack"
+            .parse()
+            .map_err(|_| Error::Stream("could not build the content type header".to_owned()))?,
     );
     request.headers_mut().insert(
         "User-Agent",
-        user_agent().parse().map_err(|_| {
-            Error::InvalidRequest("could not build the user agent header".to_owned())
-        })?,
+        user_agent()
+            .parse()
+            .map_err(|_| Error::Stream("could not build the user agent header".to_owned()))?,
     );
 
     let (mut socket, _) = tokio_tungstenite::connect_async(request)
         .await
-        .map_err(|e| Error::InvalidRequest(format!("websocket connect failed: {e}")))?;
+        .map_err(|e| Error::Stream(format!("websocket connect failed: {e}")))?;
 
     expect_control(&mut socket, "connected").await?;
 
@@ -488,12 +488,12 @@ async fn connect(
 
 async fn send(socket: &mut Socket, payload: &Value) -> Result<()> {
     let encoded = rmp_serde::to_vec_named(payload)
-        .map_err(|e| Error::InvalidRequest(format!("could not encode a stream message: {e}")))?;
+        .map_err(|e| Error::Stream(format!("could not encode a stream message: {e}")))?;
 
     socket
         .send(Message::Binary(encoded.into()))
         .await
-        .map_err(|e| Error::InvalidRequest(format!("websocket send failed: {e}")))
+        .map_err(|e| Error::Stream(format!("websocket send failed: {e}")))
 }
 
 /// Reads one frame and asserts it is the expected `success` acknowledgement.
@@ -501,14 +501,14 @@ async fn expect_control(socket: &mut Socket, expected: &str) -> Result<()> {
     let frame = socket
         .next()
         .await
-        .ok_or_else(|| Error::InvalidRequest("the stream closed during the handshake".to_owned()))?
-        .map_err(|e| Error::InvalidRequest(format!("websocket error: {e}")))?;
+        .ok_or_else(|| Error::Stream("the stream closed during the handshake".to_owned()))?
+        .map_err(|e| Error::Stream(format!("websocket error: {e}")))?;
 
     let payload = match frame {
         Message::Binary(bytes) => bytes.to_vec(),
         Message::Text(text) => text.as_bytes().to_vec(),
         other => {
-            return Err(Error::InvalidRequest(format!(
+            return Err(Error::Stream(format!(
                 "expected a data frame during the handshake, got {other:?}"
             )));
         }
@@ -516,11 +516,11 @@ async fn expect_control(socket: &mut Socket, expected: &str) -> Result<()> {
 
     let frames: Vec<Value> = rmp_serde::from_slice(&payload)
         .or_else(|_| serde_json::from_slice(&payload))
-        .map_err(|e| Error::InvalidRequest(format!("could not decode a handshake frame: {e}")))?;
+        .map_err(|e| Error::Stream(format!("could not decode a handshake frame: {e}")))?;
 
-    let first = frames.first().ok_or_else(|| {
-        Error::InvalidRequest("the server sent an empty handshake frame".to_owned())
-    })?;
+    let first = frames
+        .first()
+        .ok_or_else(|| Error::Stream("the server sent an empty handshake frame".to_owned()))?;
 
     let message_type = first.get("T").and_then(Value::as_str).unwrap_or_default();
     let message = first.get("msg").and_then(Value::as_str).unwrap_or_default();
@@ -528,12 +528,12 @@ async fn expect_control(socket: &mut Socket, expected: &str) -> Result<()> {
     if message_type == "error" {
         // Surfaced as-is so `is_fatal` can decide; an entitlement failure must
         // not be retried.
-        return Err(Error::InvalidRequest(format!(
+        return Err(Error::Stream(format!(
             "the server rejected the handshake: {message}"
         )));
     }
     if message_type != "success" || message != expected {
-        return Err(Error::InvalidRequest(format!(
+        return Err(Error::Stream(format!(
             "expected a {expected:?} acknowledgement, got {first}"
         )));
     }
@@ -569,7 +569,7 @@ fn decode(payload: &[u8]) -> Vec<Result<StreamMessage>> {
 
     match frames {
         Some(frames) => frames.into_iter().map(decode_frame).collect(),
-        None => vec![Err(Error::InvalidRequest(
+        None => vec![Err(Error::Stream(
             "could not decode a stream frame as msgpack or JSON".to_owned(),
         ))],
     }
@@ -616,7 +616,7 @@ fn decode_frame(frame: Value) -> Result<StreamMessage> {
     let message_type = frame
         .get("T")
         .and_then(Value::as_str)
-        .ok_or_else(|| Error::InvalidRequest(format!("a stream frame has no type: {frame}")))?
+        .ok_or_else(|| Error::Stream(format!("a stream frame has no type: {frame}")))?
         .to_owned();
 
     let symbol = frame

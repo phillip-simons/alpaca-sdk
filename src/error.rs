@@ -48,6 +48,24 @@ pub enum Error {
     #[error("invalid request: {0}")]
     InvalidRequest(String),
 
+    /// A stream failed: the connection, the handshake, or a frame carried on it.
+    ///
+    /// This covers both stream transports — the msgpack and JSON websockets and
+    /// the SSE event streams — because the failures are the same shape and a
+    /// caller matching on them is not usually asking which one broke.
+    ///
+    /// The line these failures used to be reported on was
+    /// [`InvalidRequest`](Self::InvalidRequest), which was a lie in both
+    /// directions: nothing about the request was invalid, and the failure
+    /// happened long after the request was accepted.
+    ///
+    /// A stream error is not necessarily the end of the stream. The market data
+    /// stream reconnects from most of them and stops on the two that never
+    /// resolve by retrying — a subscription the account is not entitled to, and
+    /// credentials the server rejects.
+    #[error("stream error: {0}")]
+    Stream(String),
+
     /// The configured base URL could not be joined with the request path.
     #[error("invalid url: {0}")]
     InvalidUrl(String),

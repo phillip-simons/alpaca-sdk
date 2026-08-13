@@ -277,7 +277,12 @@ async fn a_rejected_authorization_stops_the_stream() {
         .await
         .expect("should not hang")
         .expect("should yield an error");
-    assert!(first.is_err(), "expected an error, got {first:?}");
+    // `Credentials`, not `Stream`: the socket and the handshake both worked, and
+    // the server said no. A stream failure would reconnect; this must not.
+    assert!(
+        matches!(first, Err(alpaca_sdk::Error::Credentials(_))),
+        "expected Error::Credentials, got {first:?}"
+    );
 
     let next = tokio::time::timeout(Duration::from_secs(3), messages.next()).await;
     assert!(matches!(next, Ok(None)), "the stream should have ended");

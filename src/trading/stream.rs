@@ -220,14 +220,14 @@ async fn connect(endpoint: &str, credentials: &Credentials) -> Result<Socket> {
         .map_err(|e| Error::InvalidUrl(e.to_string()))?;
     request.headers_mut().insert(
         "User-Agent",
-        user_agent().parse().map_err(|_| {
-            Error::InvalidRequest("could not build the user agent header".to_owned())
-        })?,
+        user_agent()
+            .parse()
+            .map_err(|_| Error::Stream("could not build the user agent header".to_owned()))?,
     );
 
     let (mut socket, _) = tokio_tungstenite::connect_async(request)
         .await
-        .map_err(|e| Error::InvalidRequest(format!("websocket connect failed: {e}")))?;
+        .map_err(|e| Error::Stream(format!("websocket connect failed: {e}")))?;
 
     let (key_id, secret_key) = match credentials {
         Credentials::KeyPair {
@@ -286,34 +286,34 @@ async fn send(socket: &mut Socket, payload: &Value) -> Result<()> {
     socket
         .send(Message::Text(payload.to_string().into()))
         .await
-        .map_err(|e| Error::InvalidRequest(format!("websocket send failed: {e}")))
+        .map_err(|e| Error::Stream(format!("websocket send failed: {e}")))
 }
 
 async fn receive(socket: &mut Socket) -> Result<Value> {
     let frame = socket
         .next()
         .await
-        .ok_or_else(|| Error::InvalidRequest("the stream closed during the handshake".to_owned()))?
-        .map_err(|e| Error::InvalidRequest(format!("websocket error: {e}")))?;
+        .ok_or_else(|| Error::Stream("the stream closed during the handshake".to_owned()))?
+        .map_err(|e| Error::Stream(format!("websocket error: {e}")))?;
 
     let payload = match frame {
         Message::Text(text) => text.as_bytes().to_vec(),
         Message::Binary(bytes) => bytes.to_vec(),
         other => {
-            return Err(Error::InvalidRequest(format!(
+            return Err(Error::Stream(format!(
                 "expected a data frame during the handshake, got {other:?}"
             )));
         }
     };
 
     serde_json::from_slice(&payload)
-        .map_err(|e| Error::InvalidRequest(format!("could not decode a handshake frame: {e}")))
+        .map_err(|e| Error::Stream(format!("could not decode a handshake frame: {e}")))
 }
 
 /// Decodes one frame, returning `None` for frames that carry no stream.
 fn decode(payload: &[u8]) -> Result<Option<TradeStreamMessage>> {
     let frame: Value = serde_json::from_slice(payload)
-        .map_err(|e| Error::InvalidRequest(format!("could not decode a stream frame: {e}")))?;
+        .map_err(|e| Error::Stream(format!("could not decode a stream frame: {e}")))?;
 
     let Some(stream) = frame.get("stream").and_then(Value::as_str) else {
         return Ok(None);
@@ -326,9 +326,10 @@ fn decode(payload: &[u8]) -> Result<Option<TradeStreamMessage>> {
         }));
     }
 
-    let data = frame.get("data").cloned().ok_or_else(|| {
-        Error::InvalidRequest(format!("a trade update frame has no data: {frame}"))
-    })?;
+    let data = frame
+        .get("data")
+        .cloned()
+        .ok_or_else(|| Error::Stream(format!("a trade update frame has no data: {frame}")))?;
 
     let update: TradeUpdate = serde_json::from_value(data).map_err(|source| Error::Decode {
         path: "<trade_updates>".to_owned(),

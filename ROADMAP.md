@@ -75,9 +75,8 @@ diff <(grep -oE '^    def [a-z_0-9]+' ../alpaca-py/alpaca/broker/client.py \
   waited a flat 3 seconds where the rate-limit page asks for exponential backoff
   with jitter; it now calls the same `backoff.rs` curve the stream reconnect
   uses.
-- **`Error` has no variant for a stream that breaks mid-flight**, so both the
-  SSE and websocket paths call it `InvalidRequest`. Also carried to "Phase 7",
-  where it turns out to be additive rather than breaking.
+- ~~**`Error` has no variant for a stream that breaks mid-flight**~~ — fixed in
+  phase 7 as `Error::Stream`, additively, since `Error` is `#[non_exhaustive]`.
 
 ### The broker's models are not the trading models
 
@@ -730,19 +729,38 @@ falling back to the curve when absent, is additive, so it is not a 1.0 deadline.
 
 ### Additive, so it need not wait for 1.0
 
-**`Error` has no variant for a stream that breaks mid-flight.** Both surfaces
-report one as `InvalidRequest`, which is a lie in both: nothing about the
-request was invalid.
+**`Error::Stream` now exists** — done. Both surfaces used to report a stream
+that broke mid-flight as `InvalidRequest`, which was a lie in both directions:
+nothing about the request was invalid, and the failure happened long after the
+request was accepted. `Error` is `#[non_exhaustive]`, so the variant was
+additive; what changes observably is what an existing failure maps to, which is
+a release-notes line.
 
-```
-src/sse.rs:160            Error::InvalidRequest("event stream failed: …")
-src/trading/stream.rs:230 Error::InvalidRequest("websocket connect failed: …")
-```
+Two things the two-line sketch of this item did not show:
 
-`Error` **is** `#[non_exhaustive]`, so adding one `Stream` variant covering both
-is not a breaking change and does not need to wait. What does change observably
-is what an existing failure maps to — anyone matching `InvalidRequest` to catch
-a dead stream stops catching it — so it still belongs in release notes.
+- **It was 26 call sites, not 2.** Every websocket connect, send, handshake and
+  frame-decode failure in `data/live/mod.rs` and `trading/stream.rs`, plus all
+  three arms of `sse::stream_error`. The boundary drawn is *where* the failure
+  happened, not what caused it: a failure the crate determines locally before
+  any network call stays `InvalidRequest` — an empty subscription set, a
+  non-positive timeout, an invalid feed — and everything on the wire is
+  `Stream`.
+- **`is_fatal` reads the message out of the variant.** The market data stream
+  decides whether to reconnect by matching `Error::InvalidRequest(message)` and
+  looking for "insufficient subscription" or "auth failed" in it. Moving the
+  handshake rejection to `Stream` without moving that match would have turned a
+  permanent entitlement failure into an infinite reconnect loop. The data-stream
+  test now asserts the variant and the message rather than `is_err()`.
+
+The trading stream's rejected authorization is `Error::Credentials`, not
+`Stream`, and stays that way: the socket and the handshake both worked and the
+server said no. Its test now says so.
+
+Not changed, and it is the same class of lie: `data/pagination.rs` and
+`data/historical.rs` report a *response* that does not match the expected shape
+as `InvalidRequest` — "the response carried no `bars`". That is a decode
+failure, and `Error::Decode` already exists for it. Also additive, also not a
+1.0 deadline.
 
 ### Documentation
 

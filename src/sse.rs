@@ -150,20 +150,20 @@ impl From<eventsource_stream::Event> for Event {
 
 /// Translates a stream-level failure into this crate's error type.
 ///
-/// A malformed stream is not an invalid request, but [`Error`] has no variant
-/// for a broken stream and the websocket code already reports its failures this
-/// way. Consistent and imperfect beats inconsistent and imperfect; the roadmap
-/// carries the note to add a variant for both at once.
+/// All three arms are [`Error::Stream`], which is the variant the websocket
+/// paths use too. The distinction the caller usually wants — did the transport
+/// drop, or did the server send something unparseable — is in the message rather
+/// than in the type, because it does not change what a caller can do about it.
 pub(crate) fn stream_error(error: &eventsource_stream::EventStreamError<reqwest::Error>) -> Error {
     match error {
         eventsource_stream::EventStreamError::Transport(source) => {
-            Error::InvalidRequest(format!("event stream failed: {source}"))
+            Error::Stream(format!("event stream failed: {source}"))
         }
         eventsource_stream::EventStreamError::Utf8(source) => {
-            Error::InvalidRequest(format!("event stream was not valid utf-8: {source}"))
+            Error::Stream(format!("event stream was not valid utf-8: {source}"))
         }
         eventsource_stream::EventStreamError::Parser(source) => {
-            Error::InvalidRequest(format!("event stream was malformed: {source}"))
+            Error::Stream(format!("event stream was malformed: {source}"))
         }
     }
 }

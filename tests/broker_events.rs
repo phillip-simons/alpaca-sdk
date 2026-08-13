@@ -79,6 +79,47 @@ async fn the_stream_yields_each_event_with_its_id_and_name() {
     assert_eq!(second.name, "message");
 }
 
+/// A body that breaks *after* the subscription succeeded, which is the case the
+/// error type used to describe as an invalid request.
+#[tokio::test]
+async fn a_stream_that_breaks_mid_flight_is_a_stream_error() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/events/accounts/status"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                // One good event, then bytes that are not UTF-8 at all.
+                .set_body_bytes(
+                    [
+                        b"id: 1\nevent: account_status\ndata: {}\n\n".as_slice(),
+                        &[b'd', b'a', b't', b'a', b':', b' ', 0xff, 0xfe, b'\n', b'\n'],
+                    ]
+                    .concat(),
+                ),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let events: Vec<_> = client(&server)
+        .get_account_status_events(None)
+        .await
+        .unwrap()
+        .collect()
+        .await;
+
+    assert!(events[0].is_ok(), "{:?}", events[0]);
+    let failure = events
+        .iter()
+        .find_map(|event| event.as_ref().err())
+        .expect("the malformed bytes should have produced an error");
+    assert!(
+        matches!(failure, alpaca_sdk::Error::Stream(_)),
+        "expected Error::Stream, got {failure:?}"
+    );
+}
+
 /// Mounts a mock for `expected_path` alone, so any other path 404s.
 async fn server_for(expected_path: &str) -> MockServer {
     let server = MockServer::start().await;

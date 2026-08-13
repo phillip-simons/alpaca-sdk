@@ -321,7 +321,15 @@ async fn a_rejected_authentication_stops_the_stream() {
         .expect("should not hang")
         .expect("should yield an error");
 
-    assert!(first.is_err(), "expected an error, got {first:?}");
+    // The variant matters as well as the failure: `is_fatal` reads the message
+    // out of `Error::Stream` to decide whether to reconnect, so reporting this
+    // one as anything else would turn a permanent rejection into a retry loop.
+    match first {
+        Err(alpaca_sdk::Error::Stream(message)) => {
+            assert!(message.contains("auth failed"), "{message}");
+        }
+        other => panic!("expected Error::Stream, got {other:?}"),
+    }
 
     let next = tokio::time::timeout(Duration::from_secs(3), messages.next()).await;
     assert!(matches!(next, Ok(None)), "the stream should have ended");
