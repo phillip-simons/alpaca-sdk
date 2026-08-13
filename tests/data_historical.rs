@@ -80,8 +80,8 @@ async fn crypto_bars_deserialize_from_the_captured_payload() {
 
 #[tokio::test]
 async fn crypto_client_sends_no_auth_headers() {
-    // Crypto market data is served unauthenticated, which is why
-    // _validate_credentials so the client can be built without keys.
+    // Crypto market data is served unauthenticated: `CryptoHistoricalDataClient::new`
+    // takes no credentials at all, so there is nothing to send.
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/v1beta3/crypto/us/bars"))

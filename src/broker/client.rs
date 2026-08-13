@@ -728,8 +728,8 @@ impl BrokerClient {
     /// [`crate::trading::Activity`].
     ///
     /// # Errors
-    /// Returns [`crate::Error::InvalidRequest`] if the filter combines `date`
-    /// with `after` or `until`.
+    /// Returns [`crate::Error::InvalidRequest`] if the filter combines `category`
+    /// with `activity_types`.
     pub async fn get_account_activities(
         &self,
         filter: Option<&GetAccountActivitiesRequest>,
@@ -754,8 +754,8 @@ impl BrokerClient {
     /// walk can finish in a single request. `max_items` still holds.
     ///
     /// # Errors
-    /// Returns [`crate::Error::InvalidRequest`] if the filter combines `date`
-    /// with `after` or `until`.
+    /// Returns [`crate::Error::InvalidRequest`] if the filter combines `category`
+    /// with `activity_types`.
     pub async fn get_all_account_activities(
         &self,
         filter: Option<&GetAccountActivitiesRequest>,

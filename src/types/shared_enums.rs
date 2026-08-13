@@ -7,11 +7,11 @@
 
 use crate::types::wire::wire_enum;
 wire_enum! {
-    /// Represents the contract type of options
+    /// Whether an options contract is a call or a put.
     pub enum ContractType {
-        /// `call`
+        /// The right to buy the underlying.
         Call => "call",
-        /// `put`
+        /// The right to sell the underlying.
         Put => "put",
     }
 }

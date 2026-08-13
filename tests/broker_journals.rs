@@ -1,6 +1,6 @@
 //! Journals: moving cash and securities between accounts.
 //!
-//! Two things here are easy to get wrong from the Python alone. The amounts are
+//! Two things here are easy to get wrong from the reference alone. The amounts are
 //! declared `float` and arrive as strings, and a batch journal reports failures
 //! per entry rather than failing the request.
 
