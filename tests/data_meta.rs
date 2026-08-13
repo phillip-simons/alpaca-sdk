@@ -110,18 +110,16 @@ async fn auctions_deserialize_from_the_live_capture() {
 async fn the_single_symbol_route_returns_a_bare_list_with_the_symbol_beside_it() {
     // Not an alias of the multi-symbol route: the payload has no map keyed by
     // symbol, so the symbol has to be filled in from the path instead.
+    //
+    // Captured live by `just capture` — no SDK's tests cover these routes, so
+    // there was no other way to get a real one.
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/v2/stocks/AAPL/bars"))
         .and(query_param_is_missing("symbols"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "bars": [
-                {"t": "2022-10-17T13:30:00Z", "o": 141.07, "h": 142.9, "l": 140.27,
-                 "c": 142.41, "v": 85_250_907, "n": 705_140, "vw": 141.8},
-            ],
-            "symbol": "AAPL",
-            "next_page_token": null,
-        })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(fixture("live/stocks_bars_single.json")),
+        )
         .expect(1)
         .mount(&server)
         .await;
@@ -131,9 +129,9 @@ async fn the_single_symbol_route_returns_a_bare_list_with_the_symbol_beside_it()
         .await
         .unwrap();
 
-    assert_eq!(bars.len(), 1);
+    assert_eq!(bars.len(), 2);
     assert_eq!(bars[0].symbol, "AAPL");
-    assert_eq!(bars[0].close, 142.41);
+    assert_eq!(bars[0].close, 308.26);
 }
 
 #[tokio::test]
@@ -141,11 +139,10 @@ async fn the_single_symbol_latest_route_returns_one_record_under_a_singular_key(
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/v2/stocks/AAPL/trades/latest"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "trade": {"t": "2022-10-17T20:00:00Z", "x": "V", "p": 142.41, "s": 100,
-                      "i": 1, "c": [" "], "z": "C"},
-            "symbol": "AAPL",
-        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixture("live/stocks_latest_trade_single.json")),
+        )
         .expect(1)
         .mount(&server)
         .await;
@@ -155,13 +152,11 @@ async fn the_single_symbol_latest_route_returns_one_record_under_a_singular_key(
         .await
         .unwrap();
 
+    // The record is under a *singular* key with the symbol beside it, so the
+    // symbol comes from the path rather than from a map key.
     assert_eq!(trade.symbol, "AAPL");
-    assert_eq!(trade.price, 142.41);
-    // The most common condition on the tape, and it survives the round trip.
-    assert_eq!(
-        trade.conditions.as_deref(),
-        Some([" ".to_owned()].as_slice())
-    );
+    assert_eq!(trade.price, 301.3);
+    assert_eq!(trade.conditions.as_deref().map(<[_]>::len), Some(3));
 }
 
 #[tokio::test]
@@ -169,12 +164,9 @@ async fn the_single_symbol_snapshot_has_no_wrapping_key_at_all() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/v2/stocks/AAPL/snapshot"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "symbol": "AAPL",
-            "latestTrade": {"t": "2022-10-17T20:00:00Z", "x": "V", "p": 142.41, "s": 100, "z": "C"},
-            "dailyBar": {"t": "2022-10-17T04:00:00Z", "o": 141.07, "h": 142.9, "l": 140.27,
-                         "c": 142.41, "v": 85_250_907},
-        })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(fixture("live/stocks_snapshot_single.json")),
+        )
         .expect(1)
         .mount(&server)
         .await;

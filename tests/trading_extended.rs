@@ -19,6 +19,15 @@ use alpaca_sdk::trading::{
 };
 use alpaca_sdk::types::AssetIdent;
 use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
+
+fn fixture(name: &str) -> serde_json::Value {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("fixtures")
+        .join(name);
+    let body = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
+    serde_json::from_str(&body).unwrap()
+}
 use rust_decimal::Decimal;
 use serde_json::json;
 use wiremock::matchers::{body_json, method, path, query_param};
@@ -123,35 +132,36 @@ async fn a_degenerate_locate_never_reaches_the_server() {
 async fn the_per_market_calendar_is_a_v3_route() {
     // Three versions of the same idea are live at once: /v2/calendar here,
     // /v3/calendar/{market} for this one, and /v2/calendar/{market} on the
-    // broker API.
+    // broker API. The payload was captured from the real v3 route by
+    // `just capture`, which is the only way to confirm the segment — a mock
+    // answers whatever it is pointed at.
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/v3/calendar/XLON"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "market": {
-                "acronym": "LSE",
-                "name": "London Stock Exchange",
-                "timezone": "Europe/London",
-                "mic": "XLON",
-            },
-            "calendar": [{
-                "date": "2026-01-02",
-                "core_start": "2026-01-02T08:00:00Z",
-                "core_end": "2026-01-02T16:30:00Z",
-            }],
-        })))
+        .and(path("/v3/calendar/XNYS"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixture("live/trading_calendar_market_v3.json")),
+        )
         .expect(1)
         .mount(&server)
         .await;
 
     let calendar = client(&server)
-        .get_market_calendar(&Market::Xlon, None)
+        .get_market_calendar(&Market::Xnys, None)
         .await
         .unwrap();
 
-    assert_eq!(calendar.market.mic.as_deref(), Some("XLON"));
-    assert_eq!(calendar.calendar.len(), 1);
+    assert_eq!(calendar.calendar.len(), 5);
+    // The sessions arrive as offset timestamps (`-04:00`), not `Z` — absolute
+    // instants either way, unlike the v2 calendar's naive eastern-time open and
+    // close. Reading one as the other is an off-by-four-hours bug.
+    assert_eq!(
+        calendar.calendar[0].core_start.to_rfc3339(),
+        "2026-08-10T13:30:00+00:00"
+    );
+    // NYSE takes no lunch break; the field is absent rather than null.
     assert_eq!(calendar.calendar[0].lunch_start, None);
+    assert!(calendar.calendar[0].pre_start.is_some());
 }
 
 // ------------------------------------------------------ watchlists by name

@@ -4,6 +4,7 @@
   "routes": {
     "forex_latest_rates": {
       "detail": "alpaca api error 403 on /forex/latest/rates: forbidden: insufficient grants",
+      "host": "data",
       "http_status": 403,
       "query": [
         [
@@ -16,6 +17,7 @@
     },
     "forex_rates": {
       "detail": "alpaca api error 403 on /forex/rates: forbidden: insufficient grants",
+      "host": "data",
       "http_status": 403,
       "query": [
         [
@@ -40,6 +42,7 @@
     },
     "indices_latest_values": {
       "detail": "alpaca api error 403 on /indices/latest/values: forbidden: insufficient grants",
+      "host": "data",
       "http_status": 403,
       "query": [
         [
@@ -52,22 +55,26 @@
     },
     "logos_aapl": {
       "detail": "alpaca api error 403 on /logos/AAPL: Subscription does not permit querying logos",
+      "host": "data",
       "http_status": 403,
       "query": [],
       "route": "/v1beta1/logos/AAPL",
       "status": "refused"
     },
     "options_meta_conditions_trade": {
+      "host": "data",
       "query": [],
       "route": "/v1beta1/options/meta/conditions/trade",
       "status": "captured"
     },
     "options_meta_exchanges": {
+      "host": "data",
       "query": [],
       "route": "/v1beta1/options/meta/exchanges",
       "status": "captured"
     },
     "stocks_auctions": {
+      "host": "data",
       "query": [
         [
           "symbols",
@@ -89,7 +96,46 @@
       "route": "/v2/stocks/auctions",
       "status": "captured"
     },
+    "stocks_auctions_single": {
+      "host": "data",
+      "query": [
+        [
+          "start",
+          "2026-08-10"
+        ],
+        [
+          "end",
+          "2026-08-11"
+        ],
+        [
+          "limit",
+          "5"
+        ]
+      ],
+      "route": "/v2/stocks/AAPL/auctions",
+      "status": "captured"
+    },
+    "stocks_bars_single": {
+      "host": "data",
+      "query": [
+        [
+          "start",
+          "2026-08-10"
+        ],
+        [
+          "end",
+          "2026-08-11"
+        ],
+        [
+          "timeframe",
+          "1Day"
+        ]
+      ],
+      "route": "/v2/stocks/AAPL/bars",
+      "status": "captured"
+    },
     "stocks_bars_sip": {
+      "host": "data",
       "query": [
         [
           "symbols",
@@ -115,7 +161,26 @@
       "route": "/v2/stocks/bars",
       "status": "captured"
     },
+    "stocks_latest_bar_single": {
+      "host": "data",
+      "query": [],
+      "route": "/v2/stocks/AAPL/bars/latest",
+      "status": "captured"
+    },
+    "stocks_latest_quote_single": {
+      "host": "data",
+      "query": [],
+      "route": "/v2/stocks/AAPL/quotes/latest",
+      "status": "captured"
+    },
+    "stocks_latest_trade_single": {
+      "host": "data",
+      "query": [],
+      "route": "/v2/stocks/AAPL/trades/latest",
+      "status": "captured"
+    },
     "stocks_meta_conditions_quote": {
+      "host": "data",
       "query": [
         [
           "tape",
@@ -126,6 +191,7 @@
       "status": "captured"
     },
     "stocks_meta_conditions_trade": {
+      "host": "data",
       "query": [
         [
           "tape",
@@ -136,9 +202,127 @@
       "status": "captured"
     },
     "stocks_meta_exchanges": {
+      "host": "data",
       "query": [],
       "route": "/v2/stocks/meta/exchanges",
       "status": "captured"
+    },
+    "stocks_quotes_single": {
+      "host": "data",
+      "query": [
+        [
+          "start",
+          "2026-08-10"
+        ],
+        [
+          "end",
+          "2026-08-11"
+        ],
+        [
+          "limit",
+          "5"
+        ]
+      ],
+      "route": "/v2/stocks/AAPL/quotes",
+      "status": "captured"
+    },
+    "stocks_snapshot_single": {
+      "host": "data",
+      "query": [],
+      "route": "/v2/stocks/AAPL/snapshot",
+      "status": "captured"
+    },
+    "stocks_trades_single": {
+      "host": "data",
+      "query": [
+        [
+          "start",
+          "2026-08-10"
+        ],
+        [
+          "end",
+          "2026-08-11"
+        ],
+        [
+          "limit",
+          "5"
+        ]
+      ],
+      "route": "/v2/stocks/AAPL/trades",
+      "status": "captured"
+    },
+    "trading_calendar_market_v3": {
+      "host": "paper-trading",
+      "query": [
+        [
+          "start",
+          "2026-08-10"
+        ],
+        [
+          "end",
+          "2026-08-14"
+        ]
+      ],
+      "route": "/v3/calendar/XNYS",
+      "status": "captured"
+    },
+    "trading_locate_quotes": {
+      "detail": "alpaca api error 404 on /locates/quotes: Not Found",
+      "host": "paper-trading",
+      "http_status": 404,
+      "query": [
+        [
+          "symbols",
+          "TSLA,AAPL"
+        ]
+      ],
+      "route": "/v1/locates/quotes",
+      "status": "refused"
+    },
+    "trading_locates": {
+      "detail": "alpaca api error 404 on /locates (code 40410000): endpoint not found",
+      "host": "paper-trading",
+      "http_status": 404,
+      "query": [
+        [
+          "limit",
+          "5"
+        ]
+      ],
+      "route": "/v1/locates",
+      "status": "refused"
+    },
+    "trading_tokenization_requests": {
+      "detail": "alpaca api error 404 on /tokenization/requests: Not Found",
+      "host": "paper-trading",
+      "http_status": 404,
+      "query": [],
+      "route": "/v2/tokenization/requests",
+      "status": "refused"
+    },
+    "trading_wallets": {
+      "detail": "alpaca api error 404 on /wallets (code 40410000): endpoint not found",
+      "host": "paper-trading",
+      "http_status": 404,
+      "query": [],
+      "route": "/v2/wallets",
+      "status": "refused"
+    },
+    "trading_wallets_transfers": {
+      "detail": "alpaca api error 404 on /wallets/transfers: Not Found",
+      "host": "paper-trading",
+      "http_status": 404,
+      "query": [],
+      "route": "/v2/wallets/transfers",
+      "status": "refused"
+    },
+    "trading_wallets_whitelists": {
+      "detail": "alpaca api error 404 on /wallets/whitelists: Not Found",
+      "host": "paper-trading",
+      "http_status": 404,
+      "query": [],
+      "route": "/v2/wallets/whitelists",
+      "status": "refused"
     }
   }
 }

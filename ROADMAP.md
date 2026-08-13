@@ -34,11 +34,15 @@ rediscovering which:
 
 | Wanted | Blocks |
 |---|---|
-| **Broker sandbox key** | All 74 broker routes are verified against captured payloads and the spec, never against a server. It would settle the two undocumented routes below, and whether `commission` is accepted as a string on an order request. |
+| **Broker sandbox key** | All 153 broker routes are verified against captured payloads, the reference and the spec — never against a server. It would settle the two undocumented routes below, whether `commission` is accepted as a string on an order request, and the 69 routes phase 6.5 added from the reference alone. |
 | **Nothing will settle CIP** | alpaca-py's own comment says the sandbox answers 404 for the CIP routes, which is why its two methods are stubs. A sandbox key probably leaves the six `CIP*` models exactly as unverified as they are now. |
 | **Forex / indices / logos grants** | Each answers 403 `insufficient grants` on a paid plan that reaches SIP, so they are per-product entitlements. Porting them is possible from the spec; *verifying* them is not. |
+| **A key paper does not gate** | Locates, tokenization and crypto funding answer **404** on the paper trading API — not 403. See "What the live capture found": that is a different kind of unverified, and worth separating. |
 
-Everything else has been checked against something real.
+**Everything else has been checked against something real**, and "real" is
+ranked: a captured payload beats a harvested one, a harvested one beats a
+reference example, and a reference example beats a schema. `just capture`
+upgrades whatever paper keys can reach; what is left is the table above.
 
 ## Phase 6, as built
 
@@ -339,13 +343,20 @@ alpaca-py, and the two disagree enough to be worth recording:
 ### What the live capture found
 
 `just capture` asks the API directly for the routes no SDK tests, writing to
-`fixtures/live/` and recording refusals as well as successes. Seven of eleven
-came back.
+`fixtures/live/` and recording refusals as well as successes. It grew from 11
+routes to 26 once phase 6.5 landed routes that paper keys can reach, and
+**16 of 26 came back**.
 
 **Captured:** stock exchanges, stock trade and quote conditions, option
-exchanges, option trade conditions, auctions, and a SIP bars sample.
+exchanges, option trade conditions, auctions, a SIP bars sample, all eight
+single-symbol stock routes, and the `v3` per-market calendar.
 
-**Refused, on an account whose paid plan reaches SIP** — so these are
+Every one of those is now what its test parses, rather than a body hand-written
+out of the reference. That is the point: the reference example is the weakest
+tier of evidence this repo recognises, and the capture upgrades it wherever
+paper keys allow.
+
+**Refused with a 403, on an account whose paid plan reaches SIP** — so these are
 per-product grants, not the plan as a whole:
 
 | Route | Answer |
@@ -358,6 +369,25 @@ A 403 rather than a 404 settles a question the spec could not: **indices exist**
 which until now rested on the Node SDK alone. Porting any of these three needs
 the matching entitlement before it can be verified, and `stocks_bars_sip` in the
 same run is the control that proves the plan itself is fine.
+
+**Refused with a 404 — a different finding, and a new one.** Six trading routes
+the spec and the reference both document answer `404 endpoint not found` on the
+paper API:
+
+| Route | Answer |
+|---|---|
+| `/v1/locates`, `/v1/locates/quotes` | 404 |
+| `/v2/tokenization/requests` | 404 |
+| `/v2/wallets`, `/v2/wallets/transfers`, `/v2/wallets/whitelists` | 404 |
+
+A 403 says "the route is there and you cannot see it". A 404 says the paper
+endpoint does not serve it at all — so locates, tokenization and crypto funding
+are live-only, entitlement-gated at the routing layer, or served somewhere the
+reference does not say. The methods stay: the reference documents all six as
+current, and paper is not the whole API. But they are **unverified for a
+different reason than forex and logos**, and the distinction is worth keeping,
+because a 404 is also what a wrong path looks like. Re-running the capture
+against a live or entitled key is what would separate the two.
 
 **Two findings worth keeping:**
 
