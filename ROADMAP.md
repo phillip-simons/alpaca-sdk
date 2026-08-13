@@ -31,6 +31,14 @@ end before a version anyone depends on goes out. That path is
 anywhere — and `RELEASING.md` has the procedure. It has now run once, so `0.1.0`
 is a version bump and a tag, not an experiment.
 
+**Re-verified 2026-08-13, during release preparation.** `just coverage` against
+freshly downloaded specs produced a byte-identical `COVERAGE.md`; `just
+parameters` reports no gaps across 330 documented query parameters; `just
+enums-drift` is unchanged, with the `TaxIdType` typo pair still the only value
+the specs document and this crate lacks. All 8 live paper tests pass, both
+websocket streams included. Nothing drifted — which is the point of running
+them, not a reason to skip it next time.
+
 ### Blocked on credentials this account does not have
 
 Three separate things, so that a session picking this up does not spend an hour
@@ -747,11 +755,31 @@ who set `wait` and expected it flat now gets it doubled, and a caller who set
 nothing waits 1s before the first retry rather than 3. It wants a release of its
 own.
 
-Not done, and deliberately: **`Retry-After` is ignored.** A 429 that carries the
-header is telling us the exact answer that the backoff curve is guessing at.
-Whether Alpaca sends it is unverified — it does not appear in the reference, and
-provoking a 429 to find out has not been done. Reading it when present, and
-falling back to the curve when absent, is additive, so it is not a 1.0 deadline.
+**`Retry-After` is read now** — done, and additive, so it did not need to wait.
+A 429 carrying the header is stating the exact answer the backoff curve is
+guessing at, so it wins when present and the curve applies when it is not. Three
+decisions came with it:
+
+- **Delta-seconds only.** RFC 9110 also allows an HTTP-date, and honouring one
+  means trusting that the caller's clock agrees with the server's. Anything that
+  is not a plain count of seconds reads as *absent*, which is the safe direction
+  — the caller lands back on the curve rather than on a wait computed from clock
+  skew. A test pins that an unparsed header does not silently become a zero wait,
+  which is the failure this would otherwise ship.
+- **The value is clamped, not trusted.** It comes from the other end, so it is
+  held to the backoff's own ceiling: `Exponential`'s `max`, or
+  `DEFAULT_RETRY_MAX_WAIT` under `Flat`, which has no ceiling of its own. A
+  rate limiter or a proxy answering `Retry-After: 86400` must not put a caller to
+  sleep for a day.
+- **No configuration knob.** Reading a header the server chose to send needs no
+  opt-in, and `RetryConfig` is `#[non_exhaustive]`, so one can arrive later if
+  anybody asks for it. Surface without a user is surface that still has to be
+  kept correct.
+
+Whether Alpaca sends the header at all is still unverified — it does not appear
+in the reference, and provoking a 429 to find out has not been done. That is
+precisely the argument for making the fallback bit-identical to the previous
+behaviour: against an API that never sends it, nothing changes.
 
 [rate-limits]: https://docs.alpaca.markets/us/docs/broker-api-rate-limits
 
@@ -784,11 +812,29 @@ The trading stream's rejected authorization is `Error::Credentials`, not
 `Stream`, and stays that way: the socket and the handshake both worked and the
 server said no. Its test now says so.
 
-Not changed, and it is the same class of lie: `data/pagination.rs` and
-`data/historical.rs` report a *response* that does not match the expected shape
-as `InvalidRequest` — "the response carried no `bars`". That is a decode
-failure, and `Error::Decode` already exists for it. Also additive, also not a
-1.0 deadline.
+**The same class of lie in `data/` is fixed too** — done. `data/pagination.rs`
+and `data/historical.rs` reported a *response* that does not match the expected
+shape as `InvalidRequest` — "the response carried no `bars`". The request was
+fine and the server answered 200; sending the caller to check their own
+parameters was the wrong direction to point them in. Four sites now report
+`Error::Decode`, built through a crate-private constructor that puts the
+offending payload in `body`, so the response travels with the complaint.
+
+Two things worth keeping:
+
+- **One of the five sites was not a lie and did not move.** `to_param_map`
+  reports a *request* that does not serialize to an object, and `InvalidRequest`
+  is exactly right there. The rule is where the failure is, not which module it
+  is in.
+- **`Error::Decode` wants a `serde_json::Error`**, and these failures are found
+  *after* a successful parse, so there is no real one to carry. The reason is
+  synthesized through `serde::de::Error::custom`. That is why the constructor
+  exists rather than the four sites building the variant themselves — the
+  synthesis should happen in one place.
+
+This is a behaviour change with no compile error attached, so it is a release
+notes line: code matching `InvalidRequest` to catch a malformed market data
+response now needs `Decode`.
 
 ### Documentation — done
 
@@ -941,21 +987,47 @@ What is left before tagging it is a release, not a decision:
   `Error::InvalidRequest` no longer means a dead stream; `RetryConfig` can no
   longer be built with a struct literal. That last one is the only compile
   error, and it is the intended kind.
-- **`0.2.0` before `1.0`.** The breaking change is already made, so it should go
-  out under a version that is allowed to make it and be lived with for a while.
-  `1.0` is then a promise about a surface that has been used, rather than one
-  published the same day it changed.
+- **`0.1.0` before `1.0`.** This entry used to ask for `0.2.0`, on the premise
+  that the breaking changes were landing on top of a released `0.1.0`. They were
+  not: only `0.0.0` and `0.1.0-alpha.1` are on crates.io, so there is nothing to
+  break against and `0.1.0` is the first real version. The goal is unchanged —
+  a version that is *allowed* to break, lived with for a while, so `1.0` is a
+  promise about a surface that has been used rather than one published the day
+  it changed.
 - **The twelve missing parameters are closed.** Fixing them was itself
   breaking, which is the argument for doing it now: two client methods changed
-  signature and five request structs gained fields, and none of those structs is
-  `#[non_exhaustive]`. The enum gaps remain a list — an unknown value degrades to
-  `Unknown(String)`, so they are 1.x work.
-- **The request structs are the same class of decision as `RestConfig`.** None
-  of the 46 is `#[non_exhaustive]`, so every one of them is one documented
-  parameter away from a breaking change — which is exactly what just happened,
-  five times. Marking them costs the `..Default::default()` literals the tests
-  lean on, so it is a real ergonomic trade rather than a free win, and it stops
-  being available at 1.0.
+  signature and five request structs gained fields. The enum gaps remain a list
+  — an unknown value degrades to `Unknown(String)`, so they are 1.x work.
+- **Every request struct is `#[non_exhaustive]` now**, and so is `RestConfig`.
+  Each was one documented parameter away from a breaking change — which is
+  exactly what had just happened, five times. Four things the earlier sketch of
+  this item got wrong:
+
+  - **There are 103 of them, not 46.** The old count came from a partial survey.
+    The rule applied is mechanical — every `pub struct *Request*` — because a
+    hand-curated exception list is the thing that does not scale, which is the
+    lesson of `just coverage` and `just parameters` both.
+  - **It costs far less than "a real ergonomic trade" implied.**
+    `#[non_exhaustive]` blocks struct-literal and `..Default::default()`
+    construction *in downstream crates only*, and public fields stay assignable
+    on any instance. So no field became unreachable and no setters had to be
+    written; a caller writes `let mut r = X::default(); r.field = …;`. The bill
+    was 24 literals in `tests/` — a separate crate, and therefore downstream,
+    which is why the cost landed there and not in `src/` — plus the one `Default`
+    derive in the sub-point below.
+  - **One struct had no way in at all.** `GetOrderByIdRequest` had neither
+    `Default` nor a constructor, so marking it would have made it genuinely
+    unconstructible. It derives `Default` now. That is the check worth repeating
+    if this rule is ever extended to the response models: non-exhaustive plus no
+    constructor is the one combination that removes capability.
+  - **Clippy does not fight it.** `field_reassign_with_default` skips
+    non-exhaustive structs, because the struct literal it would suggest is not
+    available. Verified rather than assumed.
+
+  Still open, and purely additive: **68 of the 103 have no setters at all**, so
+  those fields are reachable only by assignment. That is acceptable and it is
+  not a 1.0 deadline — builders can arrive any time. Worth knowing that
+  `GetOrdersRequest`, one of the most-used types here, is among them.
 
 **`just semver` cannot help yet, and it is worth knowing why before relying on
 it.** Run against this phase's changes it reports "no semver update required"

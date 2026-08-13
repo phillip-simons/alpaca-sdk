@@ -3,6 +3,7 @@
 [![crates.io](https://img.shields.io/crates/v/alpaca-sdk.svg)](https://crates.io/crates/alpaca-sdk)
 [![docs.rs](https://docs.rs/alpaca-sdk/badge.svg)](https://docs.rs/alpaca-sdk)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![MSRV](https://img.shields.io/badge/MSRV-1.88-blue.svg)](#minimum-supported-rust-version)
 
 Unofficial Rust SDK for the [Alpaca](https://alpaca.markets) trading, market data,
 and broker APIs, targeting [the API itself][docs] rather than any one SDK's idea
@@ -40,11 +41,26 @@ conventions that keep it honest.
   match arm rather than a decode.
 - **Paginated endpoints offer two methods.** `get_x` fetches one page; `get_all_x`
   walks every page with an optional cap.
+- **Request structs are `#[non_exhaustive]`.** Build one with `new` or
+  `default` and set fields on it — `let mut r = GetOrdersRequest::default();
+  r.limit = Some(50);`. Alpaca documents new query parameters regularly, and
+  this is what lets one arrive as a new field rather than as a breaking change.
 - **`request_raw` is the escape hatch** for routes this crate does not wrap: the
   transport is public, and returns the body undecoded.
 - **Async-first.** The `blocking` feature wraps any client in a runtime of its
   own; the `polars` feature adds `DataFrame` conversion for the market data
   collections.
+
+## Examples
+
+`examples/` has three runnable programs, each needing paper credentials in
+`APCA_API_KEY_ID` and `APCA_API_SECRET_KEY`:
+
+```sh
+cargo run --example account          # balances, positions, open orders
+cargo run --example historical_bars  # daily bars for a couple of symbols
+cargo run --example crypto_stream    # live trades over the websocket
+```
 
 ## How it is verified
 
