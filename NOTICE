@@ -6,19 +6,15 @@ This product includes software derived from alpaca-py
 licensed under the Apache License, Version 2.0.
 
 The type definitions, request and response models, endpoint paths, retry
-policy, and streaming reconnection semantics in this crate were ported from
-that project, and the generated enums are still produced from its source.
-
-Behavioral parity with alpaca-py was the original goal and is no longer the
-goal: this crate targets the Alpaca API, and diverges from alpaca-py where
-alpaca-py is incomplete or out of date. Comments cite the Python source where
-the derivation is the point, and cite Alpaca's own documentation otherwise.
+policy, and streaming reconnection semantics in this crate began as a port of
+that project. The captured API responses under fixtures/ are extracted from its
+test suite and are used as test data.
 
 The response payloads under fixtures/go/ are derived from alpaca-trade-api-go
 (https://github.com/alpacahq/alpaca-trade-api-go), Copyright 2021 Alpaca,
 licensed under the Apache License, Version 2.0. They are used as test data.
 
-This is an unofficial, community-maintained port. It is not affiliated with,
+This is an unofficial, community-maintained crate. It is not affiliated with,
 authorized by, endorsed by, or sponsored by Alpaca Securities LLC or any of
 its affiliates. "Alpaca" is a trademark of its respective owner and is used
 here only to identify the API this crate connects to.

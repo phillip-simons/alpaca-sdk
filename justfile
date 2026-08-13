@@ -1,8 +1,9 @@
 # alpaca-sdk task runner. `just check` is the gate — run it before every commit.
 # `just ci` additionally runs the slower jobs GitHub Actions does.
 
-# Where the alpaca-py checkout lives. The codegen recipes read from it.
-# Override with ALPACA_PY=/path/to/alpaca-py, or `just gen-enums /some/path`.
+# Where the alpaca-py checkout lives. Only the fixture extractor reads it:
+# its test suite is a source of captured API responses, and nothing else here
+# depends on that project. Override with ALPACA_PY=/path/to/alpaca-py.
 alpaca_py := env_var_or_default("ALPACA_PY", "../alpaca-py")
 
 default: check
@@ -99,18 +100,12 @@ watch:
     cargo watch -x 'clippy --all-targets --all-features -- -D warnings'
 
 # ---------------------------------------------------------------------------
-# Porting from alpaca-py
+# Fixtures
 #
-# Both generators overwrite their output wholesale. Hand-written code never
-# lives in generated files: enum methods belong in the `enums_ext.rs` next
-# door, and fixtures are captured API responses that should only change when
-# the upstream revision does.
+# Captured API responses, harvested from other SDKs' test suites. Payloads are
+# the one thing worth taking from another implementation: a real response is a
+# fact about the API, where another project's types are only its reading of it.
 # ---------------------------------------------------------------------------
-
-# Regenerate the wire enums and their parity test.
-gen-enums source=alpaca_py:
-    python3 scripts/gen_enums.py {{ source }}
-    cargo fmt --all
 
 # Re-extract the captured API responses from alpaca-py's test suite.
 fixtures source=alpaca_py:
@@ -137,10 +132,6 @@ harvest go="../alpaca-trade-api-go":
         exit 1
     fi
     python3 scripts/harvest_go_fixtures.py "{{ go }}"
-
-# Regenerate everything, then verify nothing broke.
-regen source=alpaca_py: (gen-enums source) (fixtures source)
-    just check
 
 # Download the OpenAPI specs the coverage check diffs against.
 #
@@ -189,19 +180,6 @@ enums-drift:
 parameters:
     python3 scripts/parameters.py
 
-# Compare the pinned upstream revision against the local alpaca-py checkout.
-pinned source=alpaca_py:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    generated=$(grep -o 'revision `[^`]*`' src/trading/enums.rs | head -1 | tr -d '`' | cut -d' ' -f2)
-    upstream=$(git -C "{{ source }}" rev-parse --short HEAD 2>/dev/null || echo "unavailable")
-    echo "generated from: ${generated}"
-    echo "alpaca-py HEAD: ${upstream}"
-    if [ "${generated}" = "${upstream}" ]; then
-        echo "up to date"
-    else
-        echo "MISMATCH — run \`just regen\`"
-    fi
 
 # ---------------------------------------------------------------------------
 # Live API

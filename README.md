@@ -29,31 +29,34 @@ responses at every step.
 See [ROADMAP.md](ROADMAP.md) for what is left, how the port is verified, and the
 conventions that keep it honest.
 
-## Coming from alpaca-py
+## What the types look like
 
-This crate began as a port of [alpaca-py] and is a derivative work of it. It no
-longer tracks that SDK — alpaca-py is the least complete of Alpaca's official
-SDKs, and in at least one place still calls an endpoint Alpaca has retired — so
-where the two disagree, this crate follows the API.
-
-The shape is close enough to migrate mechanically. What needs a decision rather
-than a rename:
-
-- **Money is `rust_decimal::Decimal`**, not `Optional[Union[str, float]]`. Alpaca
-  sends order quantities and prices as strings; a custom deserializer accepts both
-  strings and numbers. Market-data floats that arrive as JSON numbers stay `f64`.
-  Several fields alpaca-py declares `float` arrive as strings on the wire, and
-  reading them as floats loses precision.
+- **Money is `rust_decimal::Decimal`.** Alpaca sends order quantities and prices
+  as strings and market data as JSON numbers, so the deserializer accepts both
+  and the market-data floats stay `f64` — reading a string price as a float
+  loses precision.
 - **Unknown enum values deserialize into `Unknown`** rather than failing. Alpaca
-  adds values without warning; pydantic hard-errors on a new order status, and
-  this crate keeps the raw string instead.
-- **Paginated endpoints offer two methods, not a mode flag.** `get_x` fetches one
-  page; `get_all_x` walks every page with an optional cap. That covers alpaca-py's
-  `PaginationType::{NONE, FULL}`; the lazy `ITERATOR` mode has no equivalent yet.
-- **`raw_data=True` becomes `request_raw`.** A boolean cannot change a function's
-  return type in Rust, so the escape hatch is a separate method.
-- **Async-first.** A `blocking` feature provides a synchronous façade.
-- **`.df` needs the `polars` feature**, off by default so the dependency is opt-in.
+  adds values without warning, and a new order status should cost a caller a
+  match arm rather than a decode.
+- **Paginated endpoints offer two methods.** `get_x` fetches one page; `get_all_x`
+  walks every page with an optional cap.
+- **`request_raw` is the escape hatch** for routes this crate does not wrap: the
+  transport is public, and returns the body undecoded.
+- **Async-first.** The `blocking` feature wraps any client in a runtime of its
+  own; the `polars` feature adds `DataFrame` conversion for the market data
+  collections.
+
+## How it is verified
+
+Alpaca publishes an API reference, vendors OpenAPI specs, and ships five SDKs,
+and they do not always agree. Sources are ranked by how close each is to the
+wire: a captured response beats a specification, a specification beats an SDK,
+and only the published reference says whether a route is still current — three
+event streams were in the specs, looked healthy, and had been switched off.
+
+`just coverage`, `just parameters` and `just enums-drift` diff this crate
+against those sources; the results live in [COVERAGE.md](COVERAGE.md) and
+[ROADMAP.md](ROADMAP.md).
 
 ## Minimum supported Rust version
 
@@ -74,8 +77,6 @@ off by default.
 
 ## License
 
-Apache-2.0, matching [alpaca-py], from which this crate is derived. See
-[NOTICE](NOTICE).
+Apache-2.0. This crate derives from Apache-2.0 works; see [NOTICE](NOTICE).
 
-[alpaca-py]: https://github.com/alpacahq/alpaca-py
 [docs]: https://docs.alpaca.markets/us/reference/

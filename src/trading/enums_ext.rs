@@ -1,6 +1,8 @@
-//! Hand-ported behavior that `wire_enum!` cannot generate.
+//! Behaviour on the enums, kept out of the file that holds their wire values.
 //!
-//! Kept separate from `enums.rs` so regenerating that file never drops it.
+//! `enums.rs` is a vocabulary and this is what the vocabulary does. Splitting
+//! them keeps that file diffable: a change there is a change to what goes on the
+//! wire, and nothing else.
 
 use crate::trading::enums::ActivityType;
 
