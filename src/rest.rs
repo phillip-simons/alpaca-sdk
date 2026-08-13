@@ -494,7 +494,7 @@ impl RestClient {
     }
 }
 
-fn truncate(body: &str) -> String {
+pub(crate) fn truncate(body: &str) -> String {
     if body.len() <= MAX_ERROR_BODY {
         return body.to_owned();
     }

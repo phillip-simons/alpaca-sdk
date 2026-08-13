@@ -429,9 +429,16 @@ impl StockHistoricalDataClient {
         )
         .await?;
 
-        let record = merged.remove(key).ok_or_else(|| {
-            Error::InvalidRequest(format!("{path}: the response carried no `{key}`"))
-        })?;
+        let Some(record) = merged.remove(key) else {
+            // `remove` left `merged` untouched when it answered `None`, so the
+            // response can still be reported alongside the reason.
+            let body = serde_json::to_string(&merged).unwrap_or_default();
+            return Err(Error::decode_shape(
+                path,
+                &body,
+                format_args!("the response carried no `{key}`"),
+            ));
+        };
         let mut record: T = serde_json::from_value(record).map_err(|source| Error::Decode {
             path: path.to_owned(),
             body: String::new(),

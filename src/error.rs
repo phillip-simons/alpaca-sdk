@@ -85,6 +85,26 @@ pub enum Error {
 }
 
 impl Error {
+    /// A response that parsed as JSON but is not the document the route returns.
+    ///
+    /// The distinction from [`Error::InvalidRequest`] is *where* the failure is.
+    /// Nothing about the request was wrong and the response arrived intact; it
+    /// simply does not have the shape this crate expects — a market data payload
+    /// under no known key, or a `latest` response missing the very field it is
+    /// named for. That is a decode failure, and reporting it as an invalid
+    /// request sends the caller to look at their own parameters.
+    ///
+    /// `serde_json` never saw these, because they are found after a successful
+    /// parse, so the source is synthesized to carry the reason.
+    pub(crate) fn decode_shape(path: &str, body: &str, reason: impl fmt::Display) -> Self {
+        use serde::de::Error as _;
+        Self::Decode {
+            path: path.to_owned(),
+            body: crate::rest::truncate(body),
+            source: serde_json::Error::custom(reason),
+        }
+    }
+
     /// The HTTP status code, when the failure came from a response.
     #[must_use]
     pub fn status(&self) -> Option<u16> {

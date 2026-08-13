@@ -614,10 +614,19 @@ async fn a_response_matching_no_known_key_is_an_error() {
         .await
         .unwrap_err();
 
-    assert!(
-        matches!(err, alpaca_sdk::Error::InvalidRequest(_)),
-        "{err:?}"
-    );
+    // A response this crate cannot read is a decode failure, not an invalid
+    // request: the request was fine and the server answered 200. Reporting it
+    // as `InvalidRequest` sent the caller to check their own parameters.
+    match err {
+        alpaca_sdk::Error::Decode { path, body, .. } => {
+            assert_eq!(path, "/stocks/bars");
+            assert!(
+                body.contains("unexpected"),
+                "the offending payload should travel with the error: {body}"
+            );
+        }
+        other => panic!("expected a decode error, got {other:?}"),
+    }
 }
 
 #[tokio::test]

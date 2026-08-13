@@ -226,7 +226,11 @@ pub(crate) async fn get_marketdata<Q: Serialize>(
 /// Locates the payload within a response.
 fn entries(response: &Value, unwrap: Unwrap, path: &str) -> Result<Vec<(String, Value)>> {
     let object = response.as_object().ok_or_else(|| {
-        Error::InvalidRequest(format!("{path}: expected a JSON object in the response"))
+        Error::decode_shape(
+            path,
+            &response.to_string(),
+            "expected a JSON object in the response",
+        )
     })?;
 
     if unwrap == Unwrap::WholeBody {
@@ -244,9 +248,11 @@ fn entries(response: &Value, unwrap: Unwrap, path: &str) -> Result<Vec<(String, 
         .collect();
 
     match selected.as_slice() {
-        [] => Err(Error::InvalidRequest(format!(
-            "{path}: the response matched no known market data key"
-        ))),
+        [] => Err(Error::decode_shape(
+            path,
+            &response.to_string(),
+            "the response matched no known market data key",
+        )),
         [key] => {
             let value = object[*key].clone();
             // A payload that is already a list stays under its key: news, which
@@ -257,10 +263,14 @@ fn entries(response: &Value, unwrap: Unwrap, path: &str) -> Result<Vec<(String, 
                 other => Ok(vec![((*key).to_owned(), other)]),
             }
         }
-        many => Err(Error::InvalidRequest(format!(
-            "{path}: the response matched multiple known market data keys: {}",
-            many.join(", ")
-        ))),
+        many => Err(Error::decode_shape(
+            path,
+            &response.to_string(),
+            format_args!(
+                "the response matched multiple known market data keys: {}",
+                many.join(", ")
+            ),
+        )),
     }
 }
 
