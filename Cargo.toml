@@ -29,7 +29,10 @@ broker = ["trading", "_sse"]
 
 # Ergonomics.
 blocking = ["tokio/rt-multi-thread"]
-polars = ["dep:polars"]
+# `data` is not optional here: the frame conversion is for the market data
+# collections, so `--features polars` on its own would compile the whole polars
+# dependency and expose nothing.
+polars = ["data", "dep:polars"]
 
 # TLS backends. Pick exactly one.
 rustls-tls = ["reqwest/rustls", "tokio-tungstenite?/rustls-tls-webpki-roots"]
@@ -47,8 +50,10 @@ base64 = "0.23.1"
 chrono = { version = "0.4.45", features = ["serde"] }
 eventsource-stream = { version = "0.2.3", optional = true }
 futures-util = "0.3.34"
+# No `lazy`. Nothing here needs it, it is the expensive half of polars to
+# compile, and a caller doing frame work depends on polars directly anyway — so
+# they enable it themselves and cargo unifies the two.
 polars = { version = "0.55.2", default-features = false, features = [
-    "lazy",
     "dtype-full",
 ], optional = true }
 rand = "0.10.2"

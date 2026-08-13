@@ -651,41 +651,50 @@ checking caught by luck.
 Read the version numbers as the constraint. `0.x` may break anything; `1.0`
 may not. Everything below is sorted by whether it survives that line.
 
-### The two features that do not exist
+### The two features that did not exist
 
-`blocking` and `polars` are declared in `Cargo.toml`, listed in the `lib.rs`
-feature table, and **implemented nowhere**. Nothing in `src/` is gated on
-either:
+`blocking` and `polars` were declared in `Cargo.toml`, listed in the `lib.rs`
+feature table, and implemented nowhere — the crate claiming something untrue on
+docs.rs, not a gap in a plan. The decision was to build both rather than drop
+the claims.
 
-```sh
-grep -rn "feature = \"blocking\"" src/   # no matches
-grep -rn "feature = \"polars\"" src/     # no matches
-```
+**`polars` is built.** `.df()` arrives as the [`ToFrame`] extension trait in
+`src/data/frame.rs`, over `BarSet`, `QuoteSet`, `TradeSet`, `AuctionSet`,
+`ForexRateSet` and a plain slice of any of their records. The type-alias problem
+named here was real — `pub type BarSet = HashMap<…>` cannot take an inherent
+`impl` — and the extension trait is the additive way out, so the newtype
+question does not need answering before 1.0 after all.
 
-That table is published on docs.rs for `0.1.0-alpha.1`, so this is not a gap in
-the plan — it is the crate claiming something untrue. `--features polars` today
-compiles the whole polars dependency and gives the caller nothing.
-`src/data/models.rs` says "the `polars` feature adds the frame conversion",
-which is false in the same way.
+What the sketch did not anticipate:
 
-**Either build them or drop the claims. Do not leave it as it is.** Dropping is
-a legitimate answer: neither is needed to use the API, and an honest crate with
-five documented features beats a dishonest one with seven.
+- **The feature had to imply `data`.** `polars = ["dep:polars"]` on its own
+  still compiled all of polars and exposed nothing, which is the same
+  dishonesty in a new place. It is `polars = ["data", "dep:polars"]` now, with a
+  `just features` line pinning it.
+- **`lazy` is gone from the polars dependency.** Nothing here needs it, it is
+  the expensive half to compile, and a caller doing frame work depends on polars
+  directly anyway — so they enable it and cargo unifies the two.
+- **The crate re-exports `polars`.** `.df()` returns a `polars::DataFrame`, and a
+  caller on a different polars version gets two incompatible types with the same
+  name and a bewildering error. `alpaca_sdk::polars` is the one that matches.
+- **`DailyAuctions` is not a row.** It carries two lists of prints, so it
+  flattens to one row per print with a `session` column. The internal column
+  trait has to allow one record to become many rows, which is why it reports a
+  row count rather than assuming one.
+- **Dtypes are the thing worth testing.** Timestamps are
+  `Datetime(Nanoseconds, "UTC")` and conditions are `List(String)` even when
+  every row is null — building that column the obvious way infers `List(Null)`
+  from an all-null input, and crypto quotes routinely carry no conditions. A
+  frame with the right numbers under the wrong types is worse than no frame:
+  the arithmetic still works and the joins silently do not.
 
-If they are built:
+**`blocking` is not built yet.** It has one trap worth naming in the code: a
+synchronous façade built on `Handle::block_on` panics when called from inside an
+async context, which is exactly what a caller experimenting in an async `main`
+will do. Owning a runtime avoids the panic and costs a thread; detecting the
+async context and returning an error beats documenting the panic.
 
-- **`polars` collides with a type-alias decision.** `BarSet`, `QuoteSet`,
-  `TradeSet` and `AuctionSet` are `pub type … = HashMap<String, Vec<T>>`, and an
-  alias cannot take an inherent `impl`, so there is nowhere to hang a `.df()`.
-  The two ways out differ in cost: an **extension trait** (`ToFrame`, brought in
-  with a `use`) is additive and can ship any time; a **newtype** is a breaking
-  change and therefore a `0.x` decision. alpaca-py's `.df` is a property on a
-  real class, which is why the question does not arise there.
-- **`blocking` has one trap worth naming in the code.** A synchronous façade
-  built on `Handle::block_on` panics when called from inside an async context,
-  which is exactly what a caller experimenting in an async `main` will do. Owning
-  a runtime avoids the panic and costs a thread. Whichever is chosen, the failure
-  mode belongs in the rustdoc, not in an issue.
+[`ToFrame`]: https://docs.rs/alpaca-sdk/latest/alpaca_sdk/data/trait.ToFrame.html
 
 ### Breaking changes, so `0.x` or never
 

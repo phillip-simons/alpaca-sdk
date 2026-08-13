@@ -29,7 +29,7 @@
 //! | `data` | yes | Historical and live market data |
 //! | `broker` | no | The broker API, including its SSE event streams |
 //! | `blocking` | no | A synchronous façade over the async clients |
-//! | `polars` | no | `DataFrame` conversion for market data collections |
+//! | `polars` | no | `DataFrame` conversion for market data collections, via [`data::ToFrame`]. Implies `data` |
 //! | `rustls-tls` | yes | TLS via rustls |
 //! | `native-tls` | no | TLS via the platform library |
 //!
@@ -57,6 +57,16 @@ pub mod data;
 #[cfg(feature = "trading")]
 #[cfg_attr(docsrs, doc(cfg(feature = "trading")))]
 pub mod trading;
+
+/// The `polars` this crate was built against.
+///
+/// Re-exported because [`ToFrame`](crate::data::ToFrame) hands back a
+/// `polars::prelude::DataFrame`, and a caller who depends on a different polars
+/// version gets two incompatible `DataFrame` types with the same name. Reach for
+/// this one, or match the version in `Cargo.toml`.
+#[cfg(feature = "polars")]
+#[cfg_attr(docsrs, doc(cfg(feature = "polars")))]
+pub use polars;
 
 pub use auth::Credentials;
 pub use config::{BaseUrl, RetryBackoff, RetryConfig};

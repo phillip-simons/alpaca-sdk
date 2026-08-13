@@ -60,6 +60,10 @@ features:
     cargo check --no-default-features --features trading,rustls-tls
     cargo check --no-default-features --features data,rustls-tls
     cargo check --no-default-features --features broker,rustls-tls
+    # `polars` alone, to pin the implication: it enables `data`, because the
+    # frame conversion is for the market data collections and the feature would
+    # otherwise compile all of polars and expose nothing.
+    cargo check --no-default-features --features polars,rustls-tls
     cargo check --no-default-features --features trading,data,broker,blocking,polars,native-tls
 
 # Build against the MSRV. Needs `rustup toolchain install 1.88.0`.

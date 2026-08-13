@@ -503,7 +503,9 @@ pub struct Movers {
 ///
 /// alpaca-py wraps these in `BarSet`, `QuoteSet`, and `TradeSet`, which support
 /// `set[symbol]` lookup and a `.df` property. In Rust the map is the natural
-/// shape; the `polars` feature adds the frame conversion.
+/// shape, and the `polars` feature adds `.df()` through the
+/// [`ToFrame`](crate::data::ToFrame) extension trait — an alias cannot take an
+/// inherent `impl`, so the method arrives with a `use` rather than for free.
 pub type BarSet = HashMap<String, Vec<Bar>>;
 
 /// Multi-symbol quotes keyed by symbol.

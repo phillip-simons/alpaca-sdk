@@ -3,6 +3,8 @@
 mod corporate_actions;
 mod enums;
 mod events;
+#[cfg(feature = "polars")]
+mod frame;
 mod historical;
 pub mod live;
 mod meta;
@@ -14,6 +16,9 @@ mod timeframe;
 pub use corporate_actions::*;
 pub use enums::*;
 pub use events::{CorporateActionEventType, CorporateActionEventsRequest, CorporateActionRegion};
+#[cfg(feature = "polars")]
+#[cfg_attr(docsrs, doc(cfg(feature = "polars")))]
+pub use frame::ToFrame;
 pub use historical::{
     CorporateActionsClient, CryptoHistoricalDataClient, ForexDataClient, LogoClient, NewsClient,
     OptionHistoricalDataClient, ScreenerClient, StockHistoricalDataClient,
