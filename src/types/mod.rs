@@ -6,6 +6,7 @@ mod common_enums;
 pub mod decimal;
 mod ident;
 mod logo;
+pub(crate) mod path;
 pub mod serde_util;
 mod shared_enums;
 pub mod timestamp;

@@ -29,7 +29,7 @@ use alpaca_sdk::trading::{
     MintTokenRequest, ReplaceOrderRequest, TokenizationIssuer, TokenizationNetwork,
     TransferFeeEstimateRequest, UpdateWatchlistRequest,
 };
-use alpaca_sdk::types::AssetIdent;
+use alpaca_sdk::types::{AssetIdent, SupportedCurrencies};
 use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use rust_decimal::Decimal;
 use serde_json::json;
@@ -622,7 +622,11 @@ async fn the_funding_wallet_writes_are_v1beta() {
     let server = expect_route("POST", "/v1beta/demo/banking/funding").await;
     assert!(
         client(&server)
-            .create_demo_funding(&DemoFundingRequest::new(Decimal::ONE, "USD", "9001"))
+            .create_demo_funding(&DemoFundingRequest::new(
+                Decimal::ONE,
+                SupportedCurrencies::Usd,
+                "9001"
+            ))
             .await
             .is_err()
     );

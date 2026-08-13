@@ -244,6 +244,7 @@ impl CreateAccountRequest {
 /// The response [`Contact`] requires an email address; an update that only
 /// changes a postal code should not have to restate one.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UpdatableContact {
     /// Primary email address.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -282,6 +283,7 @@ pub struct UpdatableContact {
 ///
 /// [patchaccount]: https://docs.alpaca.markets/us/reference/patchaccount
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UpdatableIdentity {
     /// Given name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -439,6 +441,7 @@ pub enum CreateACHRelationshipRequest {
 
 /// Bank details for an ACH relationship opened by hand.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ManualACHRelationship {
     /// The name on the bank account.
     pub account_owner_name: String,
@@ -455,9 +458,46 @@ pub struct ManualACHRelationship {
 
 /// The processor token from a completed Plaid link.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PlaidACHRelationship {
     /// The Alpaca-specific processor token Plaid returned.
     pub processor_token: String,
+}
+
+impl ManualACHRelationship {
+    /// The four details Alpaca requires, with the nickname left unset.
+    #[must_use]
+    pub fn new(
+        account_owner_name: impl Into<String>,
+        bank_account_type: BankAccountType,
+        bank_account_number: impl Into<String>,
+        bank_routing_number: impl Into<String>,
+    ) -> Self {
+        Self {
+            account_owner_name: account_owner_name.into(),
+            bank_account_type,
+            bank_account_number: bank_account_number.into(),
+            bank_routing_number: bank_routing_number.into(),
+            nickname: None,
+        }
+    }
+
+    /// Names the relationship.
+    #[must_use]
+    pub fn nickname(mut self, nickname: impl Into<String>) -> Self {
+        self.nickname = Some(nickname.into());
+        self
+    }
+}
+
+impl PlaidACHRelationship {
+    /// Wraps the processor token Plaid returned.
+    #[must_use]
+    pub fn new(processor_token: impl Into<String>) -> Self {
+        Self {
+            processor_token: processor_token.into(),
+        }
+    }
 }
 
 /// The body that connects a recipient bank for wires.
@@ -575,7 +615,12 @@ impl CreateBankRequest {
 }
 
 /// Where an international bank is located. Every field is required.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Built from [`Default`] and then assigned field by field: all five are
+/// `String`, so a positional constructor would let a city and a postal code
+/// swap places with nothing to catch it. Named assignment cannot.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct BankAddress {
     /// The bank's country.
     pub country: String,

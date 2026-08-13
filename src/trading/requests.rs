@@ -45,6 +45,34 @@ pub enum OrderAmount {
     Notional(Decimal),
 }
 
+/// The two prices a stop-limit order carries.
+///
+/// A struct rather than two positional `Decimal` parameters, for the reason
+/// [`OrderAmount`] and [`Trail`] are their own types: the constructor took them
+/// adjacent and same-typed, in the reverse of the field order used everywhere
+/// else in this file and in Alpaca's own schema. Transposing them compiled, and
+/// produced a *legal* order that Alpaca accepted — so nothing errored anywhere.
+/// A protective sell stop-limit built the wrong way round arms a dollar late and
+/// rests above its trigger, which is unlikely to fill in the decline it was
+/// written for.
+///
+/// ```
+/// # use alpaca_sdk::trading::StopLimit;
+/// # use alpaca_sdk::Decimal;
+/// let prices = StopLimit {
+///     stop: Decimal::new(9500, 2),  // triggers at 95.00
+///     limit: Decimal::new(9450, 2), // fills no worse than 94.50
+/// };
+/// # let _ = prices;
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StopLimit {
+    /// The price that turns the order live.
+    pub stop: Decimal,
+    /// The worst price it may then fill at.
+    pub limit: Decimal,
+}
+
 /// How far a trailing stop trails the high water mark.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Trail {
@@ -347,13 +375,12 @@ impl OrderRequest {
         side: OrderSide,
         amount: OrderAmount,
         time_in_force: TimeInForce,
-        stop_price: Decimal,
-        limit_price: Decimal,
+        prices: StopLimit,
     ) -> Self {
         let mut request =
             Self::single_leg(OrderType::StopLimit, symbol, side, amount, time_in_force);
-        request.stop_price = Some(stop_price);
-        request.limit_price = Some(limit_price);
+        request.stop_price = Some(prices.stop);
+        request.limit_price = Some(prices.limit);
         request
     }
 
@@ -418,18 +445,27 @@ impl OrderRequest {
     }
 
     /// Makes this a one-triggers-other order with a take-profit exit.
+    ///
+    /// An OTO order carries exactly one exit, so this *replaces* any stop-loss
+    /// leg rather than adding to it — chaining both builders leaves the last one
+    /// called, not both. For two exits use [`bracket`](Self::bracket).
     #[must_use]
     pub fn oto_take_profit(mut self, take_profit: TakeProfitRequest) -> Self {
         self.order_class = Some(OrderClass::Oto);
         self.take_profit = Some(take_profit);
+        self.stop_loss = None;
         self
     }
 
     /// Makes this a one-triggers-other order with a stop-loss exit.
+    ///
+    /// Replaces any take-profit leg, for the same reason as
+    /// [`oto_take_profit`](Self::oto_take_profit).
     #[must_use]
     pub fn oto_stop_loss(mut self, stop_loss: StopLossRequest) -> Self {
         self.order_class = Some(OrderClass::Oto);
         self.stop_loss = Some(stop_loss);
+        self.take_profit = None;
         self
     }
 
@@ -475,6 +511,16 @@ impl OrderRequest {
             }
             Some(OrderClass::Oto) if self.take_profit.is_none() && self.stop_loss.is_none() => {
                 return invalid("oto orders require either take_profit or stop_loss".to_owned());
+            }
+            // Belt and braces: the builders clear the sibling leg, but the
+            // fields are public and can be set directly. Two legs on an `oto`
+            // is a bracket written the wrong way, and the API would take it as
+            // something the caller did not mean.
+            Some(OrderClass::Oto) if self.take_profit.is_some() && self.stop_loss.is_some() => {
+                return invalid(
+                    "oto orders take exactly one exit; use the bracket order class for both"
+                        .to_owned(),
+                );
             }
             _ => {}
         }

@@ -6,6 +6,12 @@
 //! that survives a round trip exactly. Reading them as `f64` loses precision on
 //! fractional-share quantities.
 //!
+//! "Exactly" covers every price and quantity Alpaca quotes, which run to nine
+//! decimal places at the most. It does not cover every figure Alpaca *derives*:
+//! a `cost_basis` can arrive with thirty significant digits against `Decimal`'s
+//! twenty-eight, and those are rounded rather than refused, because refusing
+//! them would make a real response undecodable.
+//!
 //! Market data floats (bar OHLCV, vwap) stay `f64`: they arrive as JSON numbers
 //! and are already approximate on the wire, so `Decimal` would add cost without
 //! adding accuracy.
@@ -29,6 +35,35 @@ use rust_decimal::prelude::FromPrimitive as _;
 use serde::de::{self, Unexpected, Visitor};
 use serde::{Deserializer, Serializer};
 
+/// Parses a money string, refusing input that is not a number on any wire.
+///
+/// `Decimal::from_str` accepts `_` as a digit separator, which is Rust source
+/// syntax and not something any API sends — so `"1_000"` parsed as one thousand
+/// rather than failing. That is refused here.
+///
+/// # What is *not* refused, and why
+///
+/// Precision beyond what [`Decimal`] holds is accepted and rounded. That is a
+/// real loss, and it is still the right answer: Alpaca sends derived quantities
+/// with more precision than the type has. This crate's own captured payload for
+/// `GET /v1/accounts/positions` carries
+/// `"cost_basis": "49.6499849505605227113711001112"` — 30 significant digits
+/// against `Decimal`'s 28. Refusing those would make a genuine, already-captured
+/// response undecodable, which is a worse failure than rounding the twenty-ninth
+/// digit of a computed cost basis.
+///
+/// So the module's promise holds for what Alpaca *quotes* — prices and
+/// quantities, nine decimal places at the most — and not for every derived
+/// figure it computes. The distinction is worth stating rather than implying.
+fn parse_exact(value: &str) -> Option<Decimal> {
+    // Rust's digit separator. Never sent by an API, and accepted by
+    // `Decimal::from_str`, so `1_000` would silently parse as 1000.
+    if value.contains('_') {
+        return None;
+    }
+    value.parse::<Decimal>().ok()
+}
+
 struct DecimalVisitor;
 
 impl Visitor<'_> for DecimalVisitor {
@@ -39,10 +74,7 @@ impl Visitor<'_> for DecimalVisitor {
     }
 
     fn visit_str<E: de::Error>(self, value: &str) -> Result<Self::Value, E> {
-        value
-            .trim()
-            .parse::<Decimal>()
-            .map_err(|_| E::invalid_value(Unexpected::Str(value), &self))
+        parse_exact(value.trim()).ok_or_else(|| E::invalid_value(Unexpected::Str(value), &self))
     }
 
     fn visit_f64<E: de::Error>(self, value: f64) -> Result<Self::Value, E> {
@@ -182,8 +214,53 @@ pub mod option {
 
 #[cfg(test)]
 mod tests {
+    use super::parse_exact;
     use rust_decimal::Decimal;
     use serde::{Deserialize, Serialize};
+
+    /// Rust's digit separator is not wire syntax, and `Decimal::from_str`
+    /// accepts it — so `"1_000"` used to parse as one thousand.
+    #[test]
+    fn a_digit_separator_is_not_a_number() {
+        assert_eq!("1_000".parse::<Decimal>().unwrap(), Decimal::from(1000));
+        assert_eq!(parse_exact("1_000"), None);
+    }
+
+    /// The deliberate non-rule. Alpaca sends derived figures with more precision
+    /// than `Decimal` holds — this exact value is in the captured payload for
+    /// `GET /v1/accounts/positions` — so rejecting them would make a real
+    /// response undecodable. Rounding the far tail of a computed cost basis is
+    /// the lesser loss, and this pins that it is a choice rather than an
+    /// oversight.
+    #[test]
+    fn precision_beyond_the_type_is_rounded_rather_than_refused() {
+        let captured = "49.6499849505605227113711001112";
+        let parsed = parse_exact(captured).expect("a real captured value must decode");
+        assert!(parsed > Decimal::new(496, 1) && parsed < Decimal::new(497, 1));
+    }
+
+    /// And the forms that are genuinely exact still parse, including the
+    /// trailing zeros Alpaca sends on prices.
+    #[test]
+    fn the_exact_forms_still_parse() {
+        for value in [
+            "185.50",
+            "0.5",
+            "-0.5",
+            "+1.25",
+            "0",
+            "-0",
+            "1000",
+            "0001",
+            "9.999999999",
+            "79228162514264337593543950335",
+        ] {
+            assert!(parse_exact(value).is_some(), "{value} should parse exactly");
+        }
+        // Value and scale both survive.
+        assert_eq!(parse_exact("185.50").unwrap().to_string(), "185.50");
+        assert_eq!(parse_exact("+1.25").unwrap(), Decimal::new(125, 2));
+    }
 
     #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
     struct Order {

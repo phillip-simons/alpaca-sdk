@@ -1,6 +1,7 @@
 //! Request types for the market data API.
 
 use chrono::{DateTime, NaiveDate, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::data::enums::{
@@ -428,11 +429,27 @@ pub struct OptionChainRequest {
     #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
     pub contract_type: Option<ContractType>,
     /// Only contracts struck at or above this price.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub strike_price_gte: Option<f64>,
+    ///
+    /// `Decimal`, matching [`OptionContract::strike_price`] and the identical
+    /// filter on the trading API's own option-contracts request. It was the one
+    /// `f64` money field in this crate's request surface, so paging from a
+    /// contract into this filter meant a `to_f64` round trip through the exact
+    /// type the crate exists to avoid.
+    ///
+    /// [`OptionContract::strike_price`]: crate::trading::OptionContract::strike_price
+    #[serde(
+        default,
+        with = "crate::types::option_decimal",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub strike_price_gte: Option<Decimal>,
     /// Only contracts struck at or below this price.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub strike_price_lte: Option<f64>,
+    #[serde(
+        default,
+        with = "crate::types::option_decimal",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub strike_price_lte: Option<Decimal>,
     /// Only contracts expiring on this date.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expiration_date: Option<NaiveDate>,
@@ -863,6 +880,10 @@ pub struct CorporateActionsRequest {
     )]
     pub ids: Option<Vec<String>>,
     /// Maximum number of actions across all pages.
+    ///
+    /// `None` walks every page. This is a cap on the **total** across all
+    /// pages, not a page size, so setting it to the endpoint's own page size
+    /// stops the walk after page one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
     /// Chronological ordering of the response.
@@ -871,7 +892,7 @@ pub struct CorporateActionsRequest {
 }
 
 impl CorporateActionsRequest {
-    /// A request with the route's own defaults: 1,000 items, ascending.
+    /// A request that walks every page, ascending.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -909,7 +930,13 @@ impl Default for CorporateActionsRequest {
             start: None,
             end: None,
             ids: None,
-            limit: Some(1000),
+            // `None`, like every other request type in this module. It was
+            // 1,000 — the route's own page size — and because `limit` caps the
+            // total across all pages rather than the page size, page one filled
+            // the cap exactly and the walk stopped there. A year of market-wide
+            // dividends came back silently truncated to the first page, with
+            // the `next_page_token` discarded and unrecoverable.
+            limit: None,
             sort: Some(Sort::Asc),
         }
     }
@@ -977,10 +1004,15 @@ mod tests {
         assert_eq!(json["top"], 5);
     }
 
+    /// `limit` caps the *total* across every page, and the corporate-actions
+    /// page size is itself 1,000 — so a default of `Some(1000)` filled the cap
+    /// with page one and ended the walk there, discarding a `next_page_token`
+    /// the request type has no field to send back. Every other request in this
+    /// module defaults to `None`, and so does this one now.
     #[test]
-    fn corporate_actions_defaults_are_a_thousand_ascending() {
+    fn corporate_actions_default_to_walking_every_page_ascending() {
         let request = CorporateActionsRequest::new();
-        assert_eq!(request.limit, Some(1000));
+        assert_eq!(request.limit, None);
         assert_eq!(request.sort, Some(Sort::Asc));
     }
 

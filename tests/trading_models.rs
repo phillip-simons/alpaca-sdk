@@ -15,6 +15,7 @@ use alpaca_sdk::trading::{
     ClosePositionResponse, Order, OrderClass, OrderStatus, OrderType, PositionIntent, TimeInForce,
     TradeAccount, Watchlist,
 };
+use alpaca_sdk::types::SupportedCurrencies;
 use rust_decimal::Decimal;
 
 fn fixture(name: &str) -> String {
@@ -36,7 +37,9 @@ fn account_deserializes_from_the_captured_response() {
     let account: TradeAccount = parse("trading/test_account_routes__test_get_account__01.json");
 
     assert_eq!(account.account_number, "010203ABCD");
-    assert_eq!(account.currency.as_deref(), Some("USD"));
+    // Typed rather than a `String`, so a case mismatch is a compile error
+    // instead of a comparison that quietly evaluates false.
+    assert_eq!(account.currency, Some(SupportedCurrencies::Usd));
     assert_eq!(account.cash, Some(Decimal::new(-231_402, 1)));
     assert_eq!(account.equity, Some(Decimal::new(10_382_056, 2)));
     assert_eq!(account.shorting_enabled, Some(true));
@@ -268,6 +271,9 @@ fn close_all_positions_response_distinguishes_success_from_failure() {
         match &response.body {
             ClosePositionBody::Order(order) => assert!(!order.client_order_id.is_empty()),
             ClosePositionBody::Failed(failure) => assert!(!failure.message.is_empty()),
+            // The type is `#[non_exhaustive]`: Alpaca may add a body shape, and
+            // this crate should not need a major version to describe it.
+            other => panic!("unexpected close-position body: {other:?}"),
         }
     }
 }

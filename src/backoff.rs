@@ -38,7 +38,22 @@ pub fn reconnect_delay(retries: u32, min_backoff: Duration, max_backoff: Duratio
     } else {
         0.0
     };
-    Duration::from_secs_f64(half + jitter)
+    seconds_to_duration(half + jitter, max_backoff)
+}
+
+/// Converts a delay in seconds back to a [`Duration`], falling back to `ceiling`
+/// rather than panicking.
+///
+/// `Duration::from_secs_f64` panics on a value that will not fit, and this
+/// arithmetic can produce one from a perfectly legal configuration:
+/// `RetryBackoff::Exponential { max: Duration::MAX }` is public, and
+/// `Duration::MAX.as_secs_f64()` rounds up to just past `u64::MAX` seconds. A
+/// panic here fires inside an async task, in a crate that forbids unsafe code
+/// and never otherwise panics on caller input.
+fn seconds_to_duration(seconds: f64, ceiling: Duration) -> Duration {
+    Duration::try_from_secs_f64(seconds)
+        .unwrap_or(ceiling)
+        .min(ceiling)
 }
 
 /// The deterministic, pre-jitter delay. Exposed for tests and for callers that
@@ -56,12 +71,35 @@ pub fn capped_delay(retries: u32, min_backoff: Duration, max_backoff: Duration) 
         capped *= 2.0;
     }
 
-    Duration::from_secs_f64(capped.min(max))
+    seconds_to_duration(capped.min(max), max_backoff)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `Duration::MAX` is reachable through the public
+    /// `RetryBackoff::Exponential { max }`, and `as_secs_f64` rounds it to just
+    /// past what `Duration::from_secs_f64` will accept — so the arithmetic used
+    /// to panic inside an async task rather than return a delay.
+    #[test]
+    fn an_unbounded_ceiling_saturates_instead_of_panicking() {
+        assert_eq!(
+            capped_delay(65, Duration::from_secs(1), Duration::MAX),
+            Duration::MAX
+        );
+        // And with jitter applied, which does its own conversion.
+        let delay = reconnect_delay(65, Duration::from_secs(1), Duration::MAX);
+        assert!(delay <= Duration::MAX);
+    }
+
+    /// The same, at the boundary rather than far past it.
+    #[test]
+    fn a_ceiling_near_the_representable_limit_is_still_a_duration() {
+        let huge = Duration::from_secs(u64::MAX / 2);
+        assert!(capped_delay(100, Duration::from_secs(1), huge) <= huge);
+        assert!(reconnect_delay(100, Duration::from_secs(1), huge) <= huge);
+    }
 
     const MIN: Duration = DEFAULT_MIN_BACKOFF;
     const MAX: Duration = DEFAULT_MAX_BACKOFF;

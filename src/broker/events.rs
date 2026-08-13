@@ -101,9 +101,14 @@ impl GetEventsRequest {
         }
     }
 
-    /// Events after this ULID cursor, which is how a dropped stream is resumed.
+    /// Events from this ULID cursor onwards, which is how a dropped stream is
+    /// resumed.
+    ///
+    /// Deduplicate on the event id: whether the cursor event is itself
+    /// redelivered varies by stream, the same way it does for
+    /// [`EventStreamRequest::since_id`](crate::EventStreamRequest::since_id).
     #[must_use]
-    pub fn after_ulid(since_id: impl Into<String>) -> Self {
+    pub fn from_ulid(since_id: impl Into<String>) -> Self {
         Self {
             since_id: Some(since_id.into()),
             ..Self::default()

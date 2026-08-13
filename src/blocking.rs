@@ -34,7 +34,7 @@
 
 use std::future::Future;
 
-use tokio::runtime::{Builder, Handle, Runtime};
+use tokio::runtime::{Builder, Runtime};
 
 use crate::error::{Error, Result};
 
@@ -49,9 +49,15 @@ use crate::error::{Error, Result};
 /// are reachable by a caller who tries this inside an `#[tokio::main]` fn:
 ///
 /// - Blocking on a runtime from inside another runtime's thread.
-///   [`call`](Self::call) checks for an ambient runtime and returns
-///   [`Error::InvalidRequest`] rather than panicking. In an async context, use
-///   the async client directly — it is what this is wrapping.
+///   [`call`](Self::call) catches that panic and returns
+///   [`Error::InvalidRequest`] instead. In an async context, use the async
+///   client directly — it is what this is wrapping.
+///
+///   The exception is [`tokio::task::spawn_blocking`], which is the supported
+///   bridge from an async program into this façade: those threads are not
+///   driving the reactor, so blocking on them is allowed and a call made there
+///   succeeds. They do carry an ambient runtime handle, which is why the check
+///   is tokio's rather than a test for one.
 /// - *Dropping* a runtime from inside one. This is the easier of the two to hit
 ///   by accident, because it needs no call at all: constructing a `Blocking` in
 ///   an async fn and letting it fall out of scope is enough. The runtime is shut
@@ -111,23 +117,40 @@ impl<C> Blocking<C> {
         F: FnOnce(&'a C) -> Fut,
         Fut: Future<Output = Result<T>> + 'a,
     {
-        if Handle::try_current().is_ok() {
-            return Err(Error::InvalidRequest(
-                "a blocking call cannot be made from inside an async runtime; \
-                 use the async client directly here"
-                    .to_owned(),
-            ));
-        }
-
-        match self.runtime.as_ref() {
-            Some(runtime) => runtime.block_on(call(&self.client)),
+        let Some(runtime) = self.runtime.as_ref() else {
             // Unreachable: the runtime is only taken in `Drop`, which consumes
             // the value. Reported rather than unwrapped so a future refactor
             // that breaks the invariant fails a call instead of the process.
-            None => Err(Error::InvalidRequest(
+            return Err(Error::InvalidRequest(
                 "the blocking runtime has already shut down".to_owned(),
-            )),
-        }
+            ));
+        };
+
+        // Tokio's own check decides this, rather than a guess at it.
+        //
+        // The guess used to be `Handle::try_current().is_ok()`, which is true in
+        // two different situations that behave differently. Inside an async fn,
+        // `block_on` panics — the case worth refusing. Inside `spawn_blocking`,
+        // a `Handle` is equally present and `block_on` works perfectly well,
+        // because that thread is not driving the reactor. Refusing on the
+        // handle alone therefore failed the one bridge an async caller has into
+        // this façade, and failed it with an error on a call that would have
+        // returned a result.
+        //
+        // `catch_unwind` asks the question that actually matters by letting
+        // tokio answer it. Note that the panic hook still runs first, so an
+        // async-context misuse prints tokio's message before this returns.
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            runtime.block_on(call(&self.client))
+        }))
+        .unwrap_or_else(|_| {
+            Err(Error::InvalidRequest(
+                "a blocking call cannot be made from inside an async runtime; \
+                 use the async client directly here, or move the call onto \
+                 `tokio::task::spawn_blocking`"
+                    .to_owned(),
+            ))
+        })
     }
 
     /// The wrapped client, for anything this façade does not cover — including

@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use serde::de::DeserializeOwned;
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use crate::auth::Credentials;
 use crate::config::BaseUrl;
@@ -19,6 +19,7 @@ use crate::data::models::{
     AuctionSet, Bar, BarSet, DailyAuctions, ForexRate, ForexRateSet, MostActives, Movers, News,
     NewsSet, OptionsSnapshot, Orderbook, Quote, QuoteSet, Snapshot, Trade, TradeSet, WithSymbol,
 };
+use crate::data::pagination::Merged;
 use crate::data::pagination::{MarketDataRequest, get_marketdata};
 use crate::data::requests::{
     CorporateActionsRequest, CryptoBarsRequest, CryptoLatestRequest, CryptoSnapshotRequest,
@@ -30,20 +31,40 @@ use crate::data::requests::{
 use crate::error::{Error, Result};
 use crate::rest::{Empty, RestClient, RestConfig};
 use crate::types::LogoRequest;
+use crate::types::path::segment;
+
+/// Whether a symbol's entry means "nothing for this one".
+///
+/// A multi-symbol request returns a key per symbol, and Alpaca answers `null`
+/// for a symbol it has nothing for — a delisted or misspelled ticker. That is
+/// not a payload that failed to parse, it is the absence of a payload, and
+/// propagating a decode error for it threw away every *good* symbol in the same
+/// response. A request takes up to 100 symbols, so one bad ticker made the whole
+/// batch unusable.
+///
+/// `fixtures/go/marketdata__test_snapshots__01.json` — a captured payload that
+/// ships in this crate — is exactly this shape: `"INVALID": null` beside a valid
+/// AAPL and MSFT.
+fn is_absent(value: &Value) -> bool {
+    value.is_null()
+}
 
 /// Deserializes a merged payload into a map of symbol to a list of records,
 /// filling in the symbol each list was keyed by.
-fn into_sets<T>(merged: Map<String, Value>) -> Result<HashMap<String, Vec<T>>>
+fn into_sets<T>(merged: Merged) -> Result<HashMap<String, Vec<T>>>
 where
     T: DeserializeOwned + WithSymbol,
 {
-    let mut sets = HashMap::with_capacity(merged.len());
+    let mut sets = HashMap::with_capacity(merged.data.len());
 
-    for (symbol, value) in merged {
+    for (symbol, value) in merged.data {
+        if is_absent(&value) {
+            continue;
+        }
         let mut records: Vec<T> =
-            serde_json::from_value(value).map_err(|source| Error::Decode {
-                path: symbol.clone(),
-                body: String::new(),
+            serde_json::from_value(value.clone()).map_err(|source| Error::Decode {
+                path: merged.path.clone(),
+                body: decode_body(&symbol, &value),
                 source,
             })?;
         for record in &mut records {
@@ -55,22 +76,37 @@ where
     Ok(sets)
 }
 
+/// The offending entry, for [`Error::Decode`]'s `body`.
+///
+/// That field is documented as carrying the payload "so the mismatch can be
+/// diagnosed without re-issuing", and these helpers used to pass an empty
+/// string — leaving a decode failure with nothing to diagnose from.
+fn decode_body(key: &str, value: &Value) -> String {
+    crate::rest::truncate(&format!("{key}: {value}"))
+}
+
 /// Deserializes one single-symbol payload: a bare list under `key`, with the
 /// symbol beside it rather than above it.
 ///
 /// The multi-symbol routes key their records by symbol and the record carries
 /// none; these name the symbol in a sibling field. Both end up with the symbol
 /// filled in, so the models are shared.
-fn into_single<T>(mut merged: Map<String, Value>, key: &str, symbol: &str) -> Result<Vec<T>>
+fn into_single<T>(mut merged: Merged, key: &str, symbol: &str) -> Result<Vec<T>>
 where
     T: DeserializeOwned + WithSymbol,
 {
-    let records = merged.remove(key).unwrap_or(Value::Array(Vec::new()));
-    let mut records: Vec<T> = serde_json::from_value(records).map_err(|source| Error::Decode {
-        path: key.to_owned(),
-        body: String::new(),
-        source,
-    })?;
+    let records = merged.data.remove(key).unwrap_or(Value::Array(Vec::new()));
+    // A `null` under the key means the endpoint had nothing for this symbol,
+    // which is an empty result rather than a malformed one.
+    if is_absent(&records) {
+        return Ok(Vec::new());
+    }
+    let mut records: Vec<T> =
+        serde_json::from_value(records.clone()).map_err(|source| Error::Decode {
+            path: merged.path.clone(),
+            body: decode_body(key, &records),
+            source,
+        })?;
     for record in &mut records {
         record.set_symbol(symbol);
     }
@@ -78,18 +114,22 @@ where
 }
 
 /// Deserializes a merged payload into a map of symbol to a single record.
-fn into_latest<T>(merged: Map<String, Value>) -> Result<HashMap<String, T>>
+fn into_latest<T>(merged: Merged) -> Result<HashMap<String, T>>
 where
     T: DeserializeOwned + WithSymbol,
 {
-    let mut latest = HashMap::with_capacity(merged.len());
+    let mut latest = HashMap::with_capacity(merged.data.len());
 
-    for (symbol, value) in merged {
-        let mut record: T = serde_json::from_value(value).map_err(|source| Error::Decode {
-            path: symbol.clone(),
-            body: String::new(),
-            source,
-        })?;
+    for (symbol, value) in merged.data {
+        if is_absent(&value) {
+            continue;
+        }
+        let mut record: T =
+            serde_json::from_value(value.clone()).map_err(|source| Error::Decode {
+                path: merged.path.clone(),
+                body: decode_body(&symbol, &value),
+                source,
+            })?;
         record.set_symbol(&symbol);
         latest.insert(symbol, record);
     }
@@ -273,7 +313,7 @@ impl StockHistoricalDataClient {
         symbol: &str,
         request: &SingleSymbolRequest,
     ) -> Result<Vec<Bar>> {
-        let path = format!("/stocks/{symbol}/bars");
+        let path = format!("/stocks/{}/bars", segment(symbol)?);
         let merged = get_marketdata(
             &self.rest,
             &MarketDataRequest::paged(&path).whole_body(),
@@ -292,7 +332,7 @@ impl StockHistoricalDataClient {
         symbol: &str,
         request: &SingleSymbolRequest,
     ) -> Result<Vec<Quote>> {
-        let path = format!("/stocks/{symbol}/quotes");
+        let path = format!("/stocks/{}/quotes", segment(symbol)?);
         let merged = get_marketdata(
             &self.rest,
             &MarketDataRequest::paged(&path).whole_body(),
@@ -311,7 +351,7 @@ impl StockHistoricalDataClient {
         symbol: &str,
         request: &SingleSymbolRequest,
     ) -> Result<Vec<Trade>> {
-        let path = format!("/stocks/{symbol}/trades");
+        let path = format!("/stocks/{}/trades", segment(symbol)?);
         let merged = get_marketdata(
             &self.rest,
             &MarketDataRequest::paged(&path).whole_body(),
@@ -330,7 +370,7 @@ impl StockHistoricalDataClient {
         symbol: &str,
         request: &SingleSymbolRequest,
     ) -> Result<Vec<DailyAuctions>> {
-        let path = format!("/stocks/{symbol}/auctions");
+        let path = format!("/stocks/{}/auctions", segment(symbol)?);
         let merged = get_marketdata(
             &self.rest,
             &MarketDataRequest::paged(&path).whole_body(),
@@ -349,7 +389,7 @@ impl StockHistoricalDataClient {
         symbol: &str,
         request: &SingleSymbolRequest,
     ) -> Result<Bar> {
-        let path = format!("/stocks/{symbol}/bars/latest");
+        let path = format!("/stocks/{}/bars/latest", segment(symbol)?);
         self.latest_for_symbol(&path, "bar", symbol, request).await
     }
 
@@ -362,7 +402,7 @@ impl StockHistoricalDataClient {
         symbol: &str,
         request: &SingleSymbolRequest,
     ) -> Result<Quote> {
-        let path = format!("/stocks/{symbol}/quotes/latest");
+        let path = format!("/stocks/{}/quotes/latest", segment(symbol)?);
         self.latest_for_symbol(&path, "quote", symbol, request)
             .await
     }
@@ -376,7 +416,7 @@ impl StockHistoricalDataClient {
         symbol: &str,
         request: &SingleSymbolRequest,
     ) -> Result<Trade> {
-        let path = format!("/stocks/{symbol}/trades/latest");
+        let path = format!("/stocks/{}/trades/latest", segment(symbol)?);
         self.latest_for_symbol(&path, "trade", symbol, request)
             .await
     }
@@ -392,7 +432,7 @@ impl StockHistoricalDataClient {
     ) -> Result<Snapshot> {
         // No wrapping key at all on this one, unlike its three siblings: the
         // snapshot's fields are the response body.
-        let path = format!("/stocks/{symbol}/snapshot");
+        let path = format!("/stocks/{}/snapshot", segment(symbol)?);
         let merged = get_marketdata(
             &self.rest,
             &MarketDataRequest::latest(&path).whole_body(),
@@ -400,10 +440,11 @@ impl StockHistoricalDataClient {
         )
         .await?;
 
+        let body = Value::Object(merged.data);
         let mut snapshot: Snapshot =
-            serde_json::from_value(Value::Object(merged)).map_err(|source| Error::Decode {
-                path,
-                body: String::new(),
+            serde_json::from_value(body.clone()).map_err(|source| Error::Decode {
+                path: merged.path,
+                body: crate::rest::truncate(&body.to_string()),
                 source,
             })?;
         snapshot.set_symbol(symbol);
@@ -429,10 +470,10 @@ impl StockHistoricalDataClient {
         )
         .await?;
 
-        let Some(record) = merged.remove(key) else {
-            // `remove` left `merged` untouched when it answered `None`, so the
-            // response can still be reported alongside the reason.
-            let body = serde_json::to_string(&merged).unwrap_or_default();
+        let Some(record) = merged.data.remove(key) else {
+            // `remove` left the payload untouched when it answered `None`, so
+            // the response can still be reported alongside the reason.
+            let body = serde_json::to_string(&merged.data).unwrap_or_default();
             return Err(Error::decode_shape(
                 path,
                 &body,
@@ -471,7 +512,7 @@ impl StockHistoricalDataClient {
         tick_type: &TickType,
         tape: Tape,
     ) -> Result<Codes> {
-        let path = format!("/stocks/meta/conditions/{tick_type}");
+        let path = format!("/stocks/meta/conditions/{}", segment(tick_type)?);
         self.rest.get(&path, &TapeQuery { tape }).await
     }
 }
@@ -536,7 +577,7 @@ impl CryptoHistoricalDataClient {
         request: &CryptoBarsRequest,
         feed: CryptoFeed,
     ) -> Result<BarSet> {
-        let path = format!("/crypto/{feed}/bars");
+        let path = format!("/crypto/{}/bars", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::paged(&path), request).await?;
         into_sets(merged)
     }
@@ -550,7 +591,7 @@ impl CryptoHistoricalDataClient {
         request: &TimeseriesRequest,
         feed: CryptoFeed,
     ) -> Result<QuoteSet> {
-        let path = format!("/crypto/{feed}/quotes");
+        let path = format!("/crypto/{}/quotes", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::paged(&path), request).await?;
         into_sets(merged)
     }
@@ -564,7 +605,7 @@ impl CryptoHistoricalDataClient {
         request: &TimeseriesRequest,
         feed: CryptoFeed,
     ) -> Result<TradeSet> {
-        let path = format!("/crypto/{feed}/trades");
+        let path = format!("/crypto/{}/trades", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::paged(&path), request).await?;
         into_sets(merged)
     }
@@ -578,7 +619,7 @@ impl CryptoHistoricalDataClient {
         request: &CryptoLatestRequest,
         feed: CryptoFeed,
     ) -> Result<HashMap<String, Trade>> {
-        let path = format!("/crypto/{feed}/latest/trades");
+        let path = format!("/crypto/{}/latest/trades", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::latest(&path), request).await?;
         into_latest(merged)
     }
@@ -592,7 +633,7 @@ impl CryptoHistoricalDataClient {
         request: &CryptoLatestRequest,
         feed: CryptoFeed,
     ) -> Result<HashMap<String, Quote>> {
-        let path = format!("/crypto/{feed}/latest/quotes");
+        let path = format!("/crypto/{}/latest/quotes", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::latest(&path), request).await?;
         into_latest(merged)
     }
@@ -606,7 +647,7 @@ impl CryptoHistoricalDataClient {
         request: &CryptoLatestRequest,
         feed: CryptoFeed,
     ) -> Result<HashMap<String, Bar>> {
-        let path = format!("/crypto/{feed}/latest/bars");
+        let path = format!("/crypto/{}/latest/bars", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::latest(&path), request).await?;
         into_latest(merged)
     }
@@ -620,7 +661,7 @@ impl CryptoHistoricalDataClient {
         request: &CryptoLatestRequest,
         feed: CryptoFeed,
     ) -> Result<HashMap<String, Orderbook>> {
-        let path = format!("/crypto/{feed}/latest/orderbooks");
+        let path = format!("/crypto/{}/latest/orderbooks", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::latest(&path), request).await?;
         into_latest(merged)
     }
@@ -634,7 +675,7 @@ impl CryptoHistoricalDataClient {
         request: &CryptoSnapshotRequest,
         feed: CryptoFeed,
     ) -> Result<HashMap<String, Snapshot>> {
-        let path = format!("/crypto/{feed}/snapshots");
+        let path = format!("/crypto/{}/snapshots", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::latest(&path), request).await?;
         into_latest(merged)
     }
@@ -786,7 +827,7 @@ impl OptionHistoricalDataClient {
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_option_condition_codes(&self, tick_type: &TickType) -> Result<Codes> {
-        let path = format!("/options/meta/conditions/{tick_type}");
+        let path = format!("/options/meta/conditions/{}", segment(tick_type)?);
         self.rest.get(&path, &Empty).await
     }
 }
@@ -914,7 +955,7 @@ impl LogoClient {
     /// # Errors
     /// Propagates transport and API failures.
     pub async fn get_logo(&self, symbol: &str, request: &LogoRequest) -> Result<Vec<u8>> {
-        let path = format!("/logos/{symbol}");
+        let path = format!("/logos/{}", segment(symbol)?);
         self.rest.get_bytes(&path, request).await
     }
 }
@@ -967,6 +1008,7 @@ impl NewsClient {
         .await?;
 
         let articles: Vec<News> = merged
+            .data
             .get("news")
             .cloned()
             .map(serde_json::from_value)
@@ -1073,7 +1115,7 @@ impl CorporateActionsClient {
     /// Returns an error if the credentials cannot be encoded as headers.
     pub fn with_config(credentials: &Credentials, config: RestConfig) -> Result<Self> {
         Ok(Self {
-            raw: crate::sse::streaming_client(credentials, &config)?,
+            raw: crate::sse::streaming_client(credentials, crate::sse::Redirects::Refuse)?,
             base_url: config.base_url.clone(),
             rest: RestClient::new(credentials, config)?,
         })
@@ -1100,9 +1142,10 @@ impl CorporateActionsClient {
         )
         .await?;
 
-        serde_json::from_value(Value::Object(merged)).map_err(|source| Error::Decode {
-            path: "/corporate-actions".to_owned(),
-            body: String::new(),
+        let body = Value::Object(merged.data);
+        serde_json::from_value(body.clone()).map_err(|source| Error::Decode {
+            path: merged.path,
+            body: crate::rest::truncate(&body.to_string()),
             source,
         })
     }

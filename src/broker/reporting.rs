@@ -80,7 +80,7 @@ pub struct CashInterestDetail {
     pub date: Option<NaiveDate>,
     /// The currency.
     #[serde(default)]
-    pub currency: Option<String>,
+    pub currency: Option<crate::types::SupportedCurrencies>,
     /// The cash it was earned on.
     #[serde(default)]
     pub cash_balance: Option<Decimal>,
@@ -143,7 +143,7 @@ pub struct AprTier {
     pub name: Option<String>,
     /// The currency it applies to.
     #[serde(default)]
-    pub currency: Option<String>,
+    pub currency: Option<crate::types::SupportedCurrencies>,
     /// What the account earns, in basis points.
     #[serde(default)]
     pub account_rate_bps: Option<i64>,
@@ -227,13 +227,15 @@ pub struct GetAggregatePositionsRequest {
         serialize_with = "comma_separated"
     )]
     pub symbols: Option<Vec<String>>,
-    /// Only these firm accounts.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        serialize_with = "comma_separated"
-    )]
-    pub firm_accounts: Option<Vec<String>>,
+    /// Whether to include firm accounts in the aggregate.
+    ///
+    /// A flag, not a list — despite sitting next to `symbols`, which is one.
+    /// Alpaca's reference: *"Defaults to True which includes firm accounts.
+    /// Passing False will exclude all firm accounts."* Sending a comma-separated
+    /// list of account ids here got parsed as a boolean, and the report came back
+    /// silently missing the firm inventory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub firm_accounts: Option<bool>,
 }
 
 impl GetAggregatePositionsRequest {
@@ -251,6 +253,13 @@ impl GetAggregatePositionsRequest {
     #[must_use]
     pub fn symbols(mut self, symbols: Vec<String>) -> Self {
         self.symbols = Some(symbols);
+        self
+    }
+
+    /// Whether to include firm accounts. Alpaca includes them by default.
+    #[must_use]
+    pub fn firm_accounts(mut self, include: bool) -> Self {
+        self.firm_accounts = Some(include);
         self
     }
 }

@@ -201,7 +201,7 @@ async fn crypto_stream_connects_and_receives() {
     // Crypto trades around the clock, so this proves the msgpack path end to
     // end — including that timestamps really do arrive as extension types —
     // regardless of when it runs.
-    let mut stream = CryptoDataStream::new(credentials(), CryptoFeed::Us);
+    let mut stream = CryptoDataStream::new(credentials(), CryptoFeed::Us).unwrap();
     stream.subscribe_trades(["BTC/USD", "ETH/USD"]);
     stream.subscribe_quotes(["BTC/USD"]);
 

@@ -43,6 +43,30 @@ fn retry_after(headers: &HeaderMap) -> Option<Duration> {
         .map(Duration::from_secs)
 }
 
+/// Whether replaying this request could do its work a second time.
+///
+/// The retry policy is a set of status codes, and a status code alone cannot
+/// answer this. A 504 means the gateway gave up waiting for the *answer*, not
+/// that nothing happened: Alpaca may well have accepted the order. Replaying it
+/// three times on the default policy is four orders, and the caller is handed
+/// [`Error::RetriesExhausted`] — so they believe zero were placed.
+///
+/// A 429 is the exception, and the reason this takes the status as well as the
+/// method. It is refused by the rate limiter before it reaches anything that
+/// acts on it, so nothing was done and replaying is safe whatever the method.
+///
+/// Everything else defers to HTTP's own idempotency definition: `GET`, `HEAD`,
+/// `PUT`, `DELETE`, `OPTIONS` and `TRACE` may be replayed; `POST` and `PATCH`
+/// may not. Alpaca's money-moving routes — `POST /v2/orders`,
+/// `POST /v1/journals`, every transfer — are all `POST`.
+///
+/// Alpaca's reference names the mechanism that would make a `POST` replayable:
+/// *"Always supply `Idempotency-Key` when creating journals"*. Until this crate
+/// sends one, not replaying is the only safe answer.
+fn replay_is_safe(method: &Method, status: u16) -> bool {
+    status == 429 || method.is_idempotent()
+}
+
 /// A request with no query parameters or body.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct Empty;
@@ -61,12 +85,17 @@ pub struct RestConfig {
     pub api_version: String,
     /// How retryable failures are handled.
     pub retry: RetryConfig,
-    /// Per-request timeout.
+    /// Per-request timeout, for REST requests only.
     ///
     /// `None` by default, and deliberately: Alpaca publishes no latency
     /// guarantee to pick a number from, and a timeout short enough to be useful
     /// on a quiet endpoint will fire on a slow one. Set it per client if the
     /// caller has a deadline of their own.
+    ///
+    /// It does **not** reach the event streams. This is a total deadline on a
+    /// whole request, and an event stream's response body is never finished, so
+    /// applying it there would cap the life of every subscription rather than
+    /// bound a slow call.
     pub timeout: Option<Duration>,
 }
 
@@ -316,7 +345,7 @@ impl RestClient {
         Q: Serialize + ?Sized,
     {
         let request = self.http.get(self.url(path)).query(query);
-        self.execute_bytes(request, path).await
+        self.execute_bytes(&Method::GET, request, path).await
     }
 
     /// Issues a request and returns the raw response body without deserializing.
@@ -361,33 +390,43 @@ impl RestClient {
         Q: Serialize + ?Sized,
         B: Serialize + ?Sized,
     {
-        let mut request = self.http.request(method, self.url(path));
+        let mut request = self.http.request(method.clone(), self.url(path));
         if let Some(query) = query {
             request = request.query(query);
         }
         if let Some(body) = body {
             request = request.json(body);
         }
-        self.execute(request, path).await
+        self.execute(&method, request, path).await
     }
 
     /// Runs the retry loop and reads the successful body as text.
-    async fn execute(&self, request: RequestBuilder, path: &str) -> Result<String> {
-        self.execute_response(request, path)
+    async fn execute(
+        &self,
+        method: &Method,
+        request: RequestBuilder,
+        path: &str,
+    ) -> Result<String> {
+        self.execute_response(method, request, path)
             .await?
             .text()
             .await
-            .map_err(Error::Transport)
+            .map_err(Error::from)
     }
 
     /// Runs the retry loop and reads the successful body as bytes.
-    async fn execute_bytes(&self, request: RequestBuilder, path: &str) -> Result<Vec<u8>> {
+    async fn execute_bytes(
+        &self,
+        method: &Method,
+        request: RequestBuilder,
+        path: &str,
+    ) -> Result<Vec<u8>> {
         Ok(self
-            .execute_response(request, path)
+            .execute_response(method, request, path)
             .await?
             .bytes()
             .await
-            .map_err(Error::Transport)?
+            .map_err(Error::from)?
             .to_vec())
     }
 
@@ -395,6 +434,7 @@ impl RestClient {
     /// than per request type.
     async fn execute_response(
         &self,
+        method: &Method,
         request: RequestBuilder,
         path: &str,
     ) -> Result<reqwest::Response> {
@@ -416,7 +456,7 @@ impl RestClient {
                 None
             };
 
-            let response = current.send().await.map_err(Error::Transport)?;
+            let response = current.send().await.map_err(Error::from)?;
             let status = response.status().as_u16();
 
             if response.status().is_success() {
@@ -431,7 +471,7 @@ impl RestClient {
             let api_error = ApiError::from_body(status, path, body);
 
             let last_attempt = attempt == total_attempts;
-            if !retry.should_retry(status) {
+            if !retry.should_retry(status) || !replay_is_safe(method, status) {
                 return Err(Error::Api(api_error));
             }
             if last_attempt {

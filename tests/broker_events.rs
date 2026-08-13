@@ -285,7 +285,7 @@ async fn the_ulid_cursor_is_spelled_for_the_version_being_called() {
 
     drop(
         client(&server)
-            .get_trade_events(Some(&GetEventsRequest::after_ulid(
+            .get_trade_events(Some(&GetEventsRequest::from_ulid(
                 "01ARZ3NDEKTSV4RRFFQ69G5FAV",
             )))
             .await
@@ -303,7 +303,7 @@ async fn the_ulid_cursor_is_spelled_for_the_version_being_called() {
 
     drop(
         client(&server)
-            .get_account_status_events(Some(&GetEventsRequest::after_ulid(
+            .get_account_status_events(Some(&GetEventsRequest::from_ulid(
                 "01ARZ3NDEKTSV4RRFFQ69G5FAV",
             )))
             .await

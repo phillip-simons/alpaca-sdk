@@ -14,7 +14,7 @@
 //! Subscribing is `{"action":"listen","data":{"streams":["trade_updates"]}}`, and
 //! every update arrives as `{"stream":"trade_updates","data":{…}}`.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures_util::{SinkExt as _, Stream, StreamExt as _};
 use serde_json::Value;
@@ -148,25 +148,40 @@ impl TradingStream {
                     }
                 };
 
-                retries = retries.saturating_add(1);
+                // The connection came up, so the consecutive-failure count the
+                // backoff curve reads is zero. This matters more here than on
+                // the data stream: a silent account is this stream's documented
+                // normal state, so the old reset — only on a trade update —
+                // never ran, and a few server-side recycles left every
+                // reconnect waiting the maximum. There is no replay on this
+                // socket, so a fill in that window is gone.
+                retries = 0;
+
+                // Reset by trade updates, so `data_timeout` measures elapsed
+                // time since the last one rather than the length of one read.
+                let mut last_update = Instant::now();
 
                 loop {
                     let poll = match self.data_timeout {
-                        Some(timeout) => RECEIVE_POLL.min(timeout),
-                        None => RECEIVE_POLL,
-                    };
-
-                    let frame = match tokio::time::timeout(poll, socket.next()).await {
-                        Err(_) => {
-                            if self.data_timeout.is_some() {
+                        Some(timeout) => {
+                            let remaining = timeout.saturating_sub(last_update.elapsed());
+                            if remaining.is_zero() {
                                 tracing::warn!(
                                     endpoint = %self.endpoint,
+                                    ?timeout,
                                     "no trade updates within the timeout, reconnecting"
                                 );
                                 break;
                             }
-                            continue;
+                            RECEIVE_POLL.min(remaining)
                         }
+                        None => RECEIVE_POLL,
+                    };
+
+                    let frame = match tokio::time::timeout(poll, socket.next()).await {
+                        // Staleness is decided at the top of the loop, from the
+                        // clock rather than from this one read.
+                        Err(_) => continue,
                         Ok(None) => break,
                         Ok(Some(Err(error))) => {
                             tracing::warn!(%error, "trade update stream error, reconnecting");
@@ -185,7 +200,7 @@ impl TradingStream {
                     match decode(&payload) {
                         Ok(Some(message)) => {
                             if message.is_trade_update() {
-                                retries = 0;
+                                last_update = Instant::now();
                             }
                             yield Ok(message);
                         }

@@ -65,6 +65,8 @@ use crate::error::Result;
 use crate::rest::{Empty, RestClient, RestConfig};
 use crate::sse::EventStreamRequest;
 use crate::trading::{Activity, Position, Watchlist};
+use crate::types::path::segment;
+use crate::types::serde_util::OneOrMany;
 
 /// A conventional ceiling on documents per upload.
 ///
@@ -122,9 +124,11 @@ pub struct BrokerClient {
     ///
     /// Two need it. The document download answers `301` to a presigned storage
     /// URL, and `RestClient` refuses redirects deliberately; this client follows
-    /// them and drops the credentials when one crosses to another host, which is
-    /// what keeps broker credentials off a storage provider. The event streams need a response body that is read
-    /// incrementally rather than decoded whole.
+    /// them. What keeps broker credentials off the storage provider is not this
+    /// client but the credential *form*: `with_config` converts to basic auth,
+    /// and reqwest strips `Authorization` when a redirect crosses hosts. The
+    /// event streams need a response body read incrementally rather than
+    /// decoded whole.
     raw: reqwest::Client,
 }
 
@@ -152,14 +156,20 @@ impl BrokerClient {
         // where the trading and data APIs take the pair as two headers.
         let credentials = credentials.clone().into_basic();
         Ok(Self {
-            raw: Self::raw_client(&credentials, &config)?,
+            raw: Self::raw_client(&credentials)?,
             rest: RestClient::new(&credentials, config)?,
         })
     }
 
     /// Builds the client used by the document download and the event streams.
-    fn raw_client(credentials: &Credentials, config: &RestConfig) -> Result<reqwest::Client> {
-        crate::sse::streaming_client(credentials, config)
+    ///
+    /// `Follow`, not `Refuse`: the document download answers a redirect to a
+    /// presigned storage URL. Safe here because [`BrokerClient::with_config`]
+    /// converts the credentials to basic auth, which reqwest strips on a
+    /// cross-host hop — unlike the key-pair headers the trading and data
+    /// clients send, which is why those two refuse redirects instead.
+    fn raw_client(credentials: &Credentials) -> Result<reqwest::Client> {
+        crate::sse::streaming_client(credentials, crate::sse::Redirects::Follow)
     }
 
     /// The underlying transport, for routes this client does not wrap.
@@ -480,7 +490,7 @@ impl BrokerClient {
     ) -> Result<()> {
         self.send_void(
             Method::DELETE,
-            &format!("/accounts/{account_id}/transfers/{transfer_id}"),
+            &format!("/accounts/{account_id}/transfers/{}", segment(transfer_id)?),
             None::<&Empty>,
         )
         .await
@@ -649,7 +659,10 @@ impl BrokerClient {
         // Untyped for the same reason the streams are: no captured payload
         // exists for this route in any SDK, and inventing a struct from the
         // spec alone would claim more than is known.
-        let path = format!("/accounts/{account_id}/events/activities/{event_id}");
+        let path = format!(
+            "/accounts/{account_id}/events/activities/{}",
+            segment(event_id)?
+        );
         // Its own version segment, like the stream it pairs with, so it cannot
         // go through the client's `v1`-configured transport.
         let url = format!(
@@ -661,7 +674,7 @@ impl BrokerClient {
             .get(&url)
             .send()
             .await
-            .map_err(crate::Error::Transport)?;
+            .map_err(crate::Error::from)?;
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
         if !status.is_success() {
@@ -930,15 +943,11 @@ impl BrokerClient {
                 .get(&url)
                 .send()
                 .await
-                .map_err(crate::Error::Transport)?;
+                .map_err(crate::Error::from)?;
             let status = response.status().as_u16();
 
             if response.status().is_success() {
-                return Ok(response
-                    .bytes()
-                    .await
-                    .map_err(crate::Error::Transport)?
-                    .to_vec());
+                return Ok(response.bytes().await.map_err(crate::Error::from)?.to_vec());
             }
 
             let body = response.text().await.unwrap_or_default();
@@ -1385,7 +1394,10 @@ impl BrokerClient {
     ) -> Result<Position> {
         self.rest
             .get(
-                &format!("/trading/accounts/{account_id}/positions/{asset}"),
+                &format!(
+                    "/trading/accounts/{account_id}/positions/{}",
+                    asset.as_path_segment()?
+                ),
                 &Empty,
             )
             .await
@@ -1417,7 +1429,10 @@ impl BrokerClient {
         asset: &crate::types::AssetIdent,
         close: Option<crate::trading::ClosePositionRequest>,
     ) -> Result<Order> {
-        let path = format!("/trading/accounts/{account_id}/positions/{asset}");
+        let path = format!(
+            "/trading/accounts/{account_id}/positions/{}",
+            asset.as_path_segment()?
+        );
         match close {
             Some(close) => self.rest.delete(&path, &close.to_query()).await,
             None => self.rest.delete(&path, &Empty).await,
@@ -1439,7 +1454,10 @@ impl BrokerClient {
     ) -> Result<()> {
         self.send_void(
             Method::POST,
-            &format!("/trading/accounts/{account_id}/positions/{contract}/exercise"),
+            &format!(
+                "/trading/accounts/{account_id}/positions/{}/exercise",
+                contract.as_path_segment()?
+            ),
             Some(exercise),
         )
         .await
@@ -1490,7 +1508,10 @@ impl BrokerClient {
         order_id: Uuid,
         filter: Option<&crate::trading::GetOrderByIdRequest>,
     ) -> Result<Order> {
-        let path = format!("/trading/accounts/{account_id}/orders/{order_id}");
+        let path = format!(
+            "/trading/accounts/{account_id}/orders/{}",
+            segment(order_id)?
+        );
         match filter {
             Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
@@ -1527,7 +1548,10 @@ impl BrokerClient {
         order_id: Uuid,
         replacement: Option<&crate::trading::ReplaceOrderRequest>,
     ) -> Result<Order> {
-        let path = format!("/trading/accounts/{account_id}/orders/{order_id}");
+        let path = format!(
+            "/trading/accounts/{account_id}/orders/{}",
+            segment(order_id)?
+        );
         match replacement {
             Some(replacement) => {
                 replacement.validate()?;
@@ -1561,7 +1585,10 @@ impl BrokerClient {
     ) -> Result<()> {
         self.send_void(
             Method::DELETE,
-            &format!("/trading/accounts/{account_id}/orders/{order_id}"),
+            &format!(
+                "/trading/accounts/{account_id}/orders/{}",
+                segment(order_id)?
+            ),
             None::<&Empty>,
         )
         .await
@@ -1698,7 +1725,10 @@ impl BrokerClient {
     ) -> Result<Watchlist> {
         self.rest
             .delete(
-                &format!("/trading/accounts/{account_id}/watchlists/{watchlist_id}/{symbol}"),
+                &format!(
+                    "/trading/accounts/{account_id}/watchlists/{watchlist_id}/{}",
+                    segment(symbol)?
+                ),
                 &Empty,
             )
             .await
@@ -1748,7 +1778,9 @@ impl BrokerClient {
         &self,
         asset: &crate::types::AssetIdent,
     ) -> Result<crate::trading::Asset> {
-        self.rest.get(&format!("/assets/{asset}"), &Empty).await
+        self.rest
+            .get(&format!("/assets/{}", asset.as_path_segment()?), &Empty)
+            .await
     }
 
     // ---------------------------------------------- corporate announcements
@@ -1830,7 +1862,7 @@ impl BrokerClient {
         market: &crate::trading::Market,
         filter: Option<&crate::trading::GetMarketCalendarRequest>,
     ) -> Result<crate::trading::MarketCalendar> {
-        let path = format!("/calendar/{market}");
+        let path = format!("/calendar/{}", segment(market)?);
         match filter {
             Some(filter) => self.rest.at_version("v2").get(&path, filter).await,
             None => self.rest.at_version("v2").get(&path, &Empty).await,
@@ -1849,7 +1881,7 @@ impl BrokerClient {
         symbol: &str,
         request: &crate::types::LogoRequest,
     ) -> Result<Vec<u8>> {
-        let path = format!("/logos/{symbol}");
+        let path = format!("/logos/{}", segment(symbol)?);
         self.rest
             .at_version("v1beta1")
             .get_bytes(&path, request)
@@ -1874,7 +1906,7 @@ impl BrokerClient {
         activity_type: &crate::trading::ActivityType,
         filter: Option<&GetAccountActivitiesRequest>,
     ) -> Result<Vec<Activity>> {
-        let path = format!("/accounts/activities/{activity_type}");
+        let path = format!("/accounts/activities/{}", segment(activity_type)?);
         match filter {
             Some(filter) => {
                 filter.validate()?;
@@ -1980,7 +2012,10 @@ impl BrokerClient {
     /// Propagates transport, API, and decoding failures.
     pub async fn get_instant_funding_by_id(&self, funding_id: &str) -> Result<InstantFunding> {
         self.rest
-            .get(&format!("/instant_funding/{funding_id}"), &Empty)
+            .get(
+                &format!("/instant_funding/{}", segment(funding_id)?),
+                &Empty,
+            )
             .await
     }
 
@@ -1991,7 +2026,7 @@ impl BrokerClient {
     pub async fn cancel_instant_funding(&self, funding_id: &str) -> Result<()> {
         self.send_void(
             Method::DELETE,
-            &format!("/instant_funding/{funding_id}"),
+            &format!("/instant_funding/{}", segment(funding_id)?),
             None::<&Empty>,
         )
         .await
@@ -2092,7 +2127,7 @@ impl BrokerClient {
         ledger_id: &str,
         filter: Option<&GetJitBalancesRequest>,
     ) -> Result<JitLedgerBalances> {
-        let path = format!("/transfers/jit/{ledger_id}/balances");
+        let path = format!("/transfers/jit/{}/balances", segment(ledger_id)?);
         match filter {
             Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
@@ -2219,7 +2254,7 @@ impl BrokerClient {
     /// Propagates transport, API, and decoding failures.
     pub async fn get_ipo_offering(&self, offering_reference: &str) -> Result<IpoOfferingResponse> {
         self.rest
-            .get(&format!("/ipos/{offering_reference}"), &Empty)
+            .get(&format!("/ipos/{}", segment(offering_reference)?), &Empty)
             .await
     }
 
@@ -2285,7 +2320,7 @@ impl BrokerClient {
         client_id: Uuid,
         filter: Option<&GetOAuthClientRequest>,
     ) -> Result<OAuthClient> {
-        let path = format!("/oauth/clients/{client_id}");
+        let path = format!("/oauth/clients/{}", segment(client_id)?);
         match filter {
             Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
@@ -2418,7 +2453,10 @@ impl BrokerClient {
         account_id: Uuid,
         transfer_id: Uuid,
     ) -> Result<FundingWalletTransfer> {
-        let path = format!("/accounts/{account_id}/funding_wallet/transfers/{transfer_id}");
+        let path = format!(
+            "/accounts/{account_id}/funding_wallet/transfers/{}",
+            segment(transfer_id)?
+        );
         self.rest.at_version("v1beta").get(&path, &Empty).await
     }
 
@@ -2583,7 +2621,10 @@ impl BrokerClient {
     ) -> Result<()> {
         self.send_void(
             Method::POST,
-            &format!("/trading/accounts/{account_id}/positions/{contract}/do-not-exercise"),
+            &format!(
+                "/trading/accounts/{account_id}/positions/{}/do-not-exercise",
+                contract.as_path_segment()?
+            ),
             None::<&Empty>,
         )
         .await
@@ -2634,7 +2675,10 @@ impl BrokerClient {
         account_id: Uuid,
         request_id: Uuid,
     ) -> Result<crate::trading::TokenizationRequest> {
-        let path = format!("/accounts/{account_id}/tokenization/requests/{request_id}");
+        let path = format!(
+            "/accounts/{account_id}/tokenization/requests/{}",
+            segment(request_id)?
+        );
         self.rest.get(&path, &Empty).await
     }
 
@@ -2712,12 +2756,13 @@ impl BrokerClient {
         &self,
         account_id: Uuid,
         filter: Option<&crate::trading::GetCryptoWalletsRequest>,
-    ) -> Result<crate::trading::CryptoWallet> {
+    ) -> Result<Vec<crate::trading::CryptoWallet>> {
         let path = format!("/accounts/{account_id}/wallets");
-        match filter {
-            Some(filter) => self.rest.get(&path, filter).await,
-            None => self.rest.get(&path, &Empty).await,
-        }
+        let wallets: OneOrMany<crate::trading::CryptoWallet> = match filter {
+            Some(filter) => self.rest.get(&path, filter).await?,
+            None => self.rest.get(&path, &Empty).await?,
+        };
+        Ok(wallets.into_vec())
     }
 
     /// An account's on-chain transfers.
@@ -2727,9 +2772,11 @@ impl BrokerClient {
     pub async fn get_crypto_transfers_for_account(
         &self,
         account_id: Uuid,
-    ) -> Result<crate::trading::CryptoTransfer> {
+    ) -> Result<Vec<crate::trading::CryptoTransfer>> {
         let path = format!("/accounts/{account_id}/wallets/transfers");
-        self.rest.get(&path, &Empty).await
+        let transfers: OneOrMany<crate::trading::CryptoTransfer> =
+            self.rest.get(&path, &Empty).await?;
+        Ok(transfers.into_vec())
     }
 
     /// Fetches one of an account's on-chain transfers.
@@ -2741,7 +2788,10 @@ impl BrokerClient {
         account_id: Uuid,
         transfer_id: &str,
     ) -> Result<crate::trading::CryptoTransfer> {
-        let path = format!("/accounts/{account_id}/wallets/transfers/{transfer_id}");
+        let path = format!(
+            "/accounts/{account_id}/wallets/transfers/{}",
+            segment(transfer_id)?
+        );
         self.rest.get(&path, &Empty).await
     }
 
@@ -2770,9 +2820,11 @@ impl BrokerClient {
     pub async fn get_whitelisted_addresses_for_account(
         &self,
         account_id: Uuid,
-    ) -> Result<crate::trading::WhitelistedAddress> {
+    ) -> Result<Vec<crate::trading::WhitelistedAddress>> {
         let path = format!("/accounts/{account_id}/wallets/whitelists");
-        self.rest.get(&path, &Empty).await
+        let addresses: OneOrMany<crate::trading::WhitelistedAddress> =
+            self.rest.get(&path, &Empty).await?;
+        Ok(addresses.into_vec())
     }
 
     /// Allowlists a withdrawal address for an account.
@@ -2799,7 +2851,10 @@ impl BrokerClient {
     ) -> Result<()> {
         self.send_void(
             Method::DELETE,
-            &format!("/accounts/{account_id}/wallets/whitelists/{address_id}"),
+            &format!(
+                "/accounts/{account_id}/wallets/whitelists/{}",
+                segment(address_id)?
+            ),
             None::<&Empty>,
         )
         .await

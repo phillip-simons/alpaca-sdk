@@ -16,6 +16,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::broker::settlements::{SettlementAssetClass, TransmitterInfo};
+use crate::types::SupportedCurrencies;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -171,7 +172,18 @@ pub enum JitReport {
 }
 
 /// A report served in the response body.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// One field per [`JitReportType`], and exactly one of them is populated: the
+/// one matching the report that was asked for.
+///
+/// `Deserialize` is hand-written rather than derived because every field is
+/// optional. A derived one accepts *any* JSON object — including one carrying a
+/// key none of these names — and produces an all-`None` value. Sitting inside an
+/// untagged enum, that made [`JitReport`] unable to fail: an unrecognised body
+/// became `Inline` with nothing in it, so a settlement report came back
+/// silently empty instead of erroring.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[non_exhaustive]
 pub struct JitReportInline {
     /// The detail report.
     #[serde(default)]
@@ -185,9 +197,82 @@ pub struct JitReportInline {
     /// The final net payment.
     #[serde(default)]
     pub net_payment_final: Option<String>,
+    /// The gross summary.
+    #[serde(default)]
+    pub gross_summary: Option<String>,
+    /// The gross payment.
+    #[serde(default)]
+    pub gross_payment: Option<String>,
+    /// The final gross payment.
+    #[serde(default)]
+    pub gross_payment_final: Option<String>,
     /// The obligation report.
     #[serde(default)]
     pub obligation: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for JitReportInline {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Raw {
+            #[serde(default)]
+            detail: Option<String>,
+            #[serde(default)]
+            net_summary: Option<String>,
+            #[serde(default)]
+            net_payment: Option<String>,
+            #[serde(default)]
+            net_payment_final: Option<String>,
+            #[serde(default)]
+            gross_summary: Option<String>,
+            #[serde(default)]
+            gross_payment: Option<String>,
+            #[serde(default)]
+            gross_payment_final: Option<String>,
+            #[serde(default)]
+            obligation: Option<String>,
+        }
+
+        let raw = Raw::deserialize(deserializer)?;
+        let report = Self {
+            detail: raw.detail,
+            net_summary: raw.net_summary,
+            net_payment: raw.net_payment,
+            net_payment_final: raw.net_payment_final,
+            gross_summary: raw.gross_summary,
+            gross_payment: raw.gross_payment,
+            gross_payment_final: raw.gross_payment_final,
+            obligation: raw.obligation,
+        };
+
+        // The check that makes the untagged enum able to fail: a body with none
+        // of the known report keys is not an empty report, it is a shape this
+        // crate does not model.
+        if report.report().is_none() {
+            return Err(serde::de::Error::custom(
+                "no known JIT report key in the response body; expected one of \
+                 detail, net_summary, net_payment, net_payment_final, \
+                 gross_summary, gross_payment, gross_payment_final, obligation",
+            ));
+        }
+        Ok(report)
+    }
+}
+
+impl JitReportInline {
+    /// The populated report, whichever kind was asked for.
+    #[must_use]
+    pub fn report(&self) -> Option<&str> {
+        self.detail
+            .as_deref()
+            .or(self.net_summary.as_deref())
+            .or(self.net_payment.as_deref())
+            .or(self.net_payment_final.as_deref())
+            .or(self.gross_summary.as_deref())
+            .or(self.gross_payment.as_deref())
+            .or(self.gross_payment_final.as_deref())
+            .or(self.obligation.as_deref())
+    }
 }
 
 /// A report served as a link.
@@ -303,7 +388,7 @@ pub struct CreateJitSettlementRequest {
     /// Which book.
     pub asset_class: SettlementAssetClass,
     /// The currency.
-    pub currency: String,
+    pub currency: crate::types::SupportedCurrencies,
     /// Free-form notes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub additional_info: Option<String>,
@@ -314,12 +399,12 @@ impl CreateJitSettlementRequest {
     pub fn new(
         accounts: Vec<JitSettlementAccount>,
         asset_class: SettlementAssetClass,
-        currency: impl Into<String>,
+        currency: SupportedCurrencies,
     ) -> Self {
         Self {
             accounts,
             asset_class,
-            currency: currency.into(),
+            currency,
             additional_info: None,
         }
     }
@@ -383,8 +468,11 @@ mod tests {
 
     #[test]
     fn a_settlement_that_settles_nothing_is_refused() {
-        let request =
-            CreateJitSettlementRequest::new(Vec::new(), SettlementAssetClass::UsEquity, "USD");
+        let request = CreateJitSettlementRequest::new(
+            Vec::new(),
+            SettlementAssetClass::UsEquity,
+            SupportedCurrencies::Usd,
+        );
         assert!(request.validate().is_err());
     }
 
@@ -397,7 +485,7 @@ mod tests {
                 transmitter_info: TransmitterInfo::default(),
             }],
             SettlementAssetClass::Crypto,
-            "USD",
+            SupportedCurrencies::Usd,
         );
         assert!(request.validate().is_err());
     }

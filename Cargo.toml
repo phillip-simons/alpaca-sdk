@@ -13,7 +13,7 @@ keywords = ["alpaca", "trading", "stocks", "crypto", "finance"]
 categories = ["api-bindings", "finance"]
 # `fixtures/` is deliberately included: `tests/` ships too, and every one of
 # those tests reads a captured payload out of it at runtime. Shipping tests
-# that cannot run would be worse than shipping neither. It costs 135KB.
+# that cannot run would be worse than shipping neither. It costs 232KiB.
 #
 # What is excluded is what cannot work, or has no meaning, outside a clone:
 # `scripts/` needs other SDKs' checkouts and downloaded specs, `RELEASING.md`
@@ -54,11 +54,19 @@ base64 = "0.23.1"
 chrono = { version = "0.4.45", features = ["serde"] }
 eventsource-stream = { version = "0.2.3", optional = true }
 futures-util = "0.3.34"
+percent-encoding = "2.3"
 # No `lazy`. Nothing here needs it, it is the expensive half of polars to
 # compile, and a caller doing frame work depends on polars directly anyway — so
 # they enable it themselves and cargo unifies the two.
+#
+# `fmt_no_tty` is here for the opposite reason: without it a `DataFrame` prints
+# its shape and then "to see more, compile with the 'fmt' or 'fmt_no_tty'
+# feature", every cell suppressed — including in this crate's own `ToFrame`
+# example. `fmt_no_tty` rather than `fmt` because the difference between them is
+# terminal-width detection, which a library has no business doing.
 polars = { version = "0.55.2", default-features = false, features = [
     "dtype-full",
+    "fmt_no_tty",
 ], optional = true }
 rand = "0.10.2"
 reqwest = { version = "0.13.4", default-features = false, features = [

@@ -15,7 +15,7 @@ pub use messages::{Channel, StreamError, StreamMessage, Subscriptions};
 pub use streams::{CryptoDataStream, NewsDataStream, OptionDataStream, StockDataStream};
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures_util::{SinkExt as _, Stream, StreamExt as _};
 use serde_json::Value;
@@ -38,10 +38,15 @@ use crate::error::{Error, Result};
 const MAX_FRAME_SIZE: usize = 32_768;
 
 /// How long to wait for a frame before re-checking the staleness clock.
+///
+/// Poll granularity only — never the timeout itself. Feeding this straight to
+/// the socket read and treating an elapsed read as staleness is what made
+/// `data_timeout` mean a hardcoded five seconds whatever the caller set.
 const RECEIVE_POLL: Duration = Duration::from_secs(5);
 
 /// Configuration for a market data stream.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct StreamConfig {
     /// The websocket endpoint.
     pub endpoint: String,
@@ -53,9 +58,17 @@ pub struct StreamConfig {
     /// subscriptions expected to be busy.
     pub data_timeout: Option<Duration>,
     /// Base delay for the first reconnect attempt.
-    pub min_backoff: Duration,
-    /// Ceiling for the reconnect delay.
-    pub max_backoff: Duration,
+    ///
+    /// Private, and set through [`StreamConfig::backoff`], because zero is a
+    /// reasonable-looking way to say "reconnect immediately" and is in fact a
+    /// hot loop: the curve stays at zero through every doubling, the jitter
+    /// branch is skipped, and the client opens thousands of connections a second
+    /// against an endpoint that allows one. The sibling knob has been validated
+    /// for exactly this since it was added.
+    min_backoff: Duration,
+    /// Ceiling for the reconnect delay. Set through
+    /// [`StreamConfig::backoff`].
+    max_backoff: Duration,
 }
 
 impl StreamConfig {
@@ -90,6 +103,44 @@ impl StreamConfig {
         }
         self.data_timeout = Some(timeout);
         Ok(self)
+    }
+
+    /// The reconnect backoff window.
+    ///
+    /// The delay starts at `min`, doubles on each consecutive failure, and is
+    /// capped at `max`.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if `min` is zero — which would spin —
+    /// or if `max` is smaller than `min`.
+    pub fn backoff(mut self, min: Duration, max: Duration) -> Result<Self> {
+        if min.is_zero() {
+            return Err(Error::InvalidRequest(
+                "min_backoff must be a positive duration; zero reconnects \
+                 continuously rather than immediately"
+                    .to_owned(),
+            ));
+        }
+        if max < min {
+            return Err(Error::InvalidRequest(
+                "max_backoff must be at least min_backoff".to_owned(),
+            ));
+        }
+        self.min_backoff = min;
+        self.max_backoff = max;
+        Ok(self)
+    }
+
+    /// The base delay for the first reconnect attempt.
+    #[must_use]
+    pub fn min_backoff(&self) -> Duration {
+        self.min_backoff
+    }
+
+    /// The ceiling for the reconnect delay.
+    #[must_use]
+    pub fn max_backoff(&self) -> Duration {
+        self.max_backoff
     }
 }
 
@@ -293,8 +344,6 @@ impl DataStream {
             let mut retries: u32 = 0;
 
             loop {
-                let mut received_data = false;
-
                 let connected = connect(&self.config, &self.credentials, &self.subscriptions).await;
                 let mut socket = match connected {
                     Ok(socket) => socket,
@@ -313,23 +362,42 @@ impl DataStream {
                     }
                 };
 
-                retries = retries.saturating_add(1);
+                // A connection that came up is not a failure, and the backoff
+                // curve is indexed by consecutive *failures*. Incrementing here
+                // made every successful session push the next reconnect further
+                // out, so a stream that reconnected cleanly a few times ended up
+                // waiting the maximum before trying again.
+                retries = 0;
+
+                // The staleness clock. Starts at connect and is pushed forward
+                // by market data, so `data_timeout` measures what it says:
+                // elapsed time since the last market data message.
+                let mut last_data = Instant::now();
 
                 let outcome = 'session: loop {
-                    let poll = receive_timeout(&self.config, received_data);
-
-                    let frame = match tokio::time::timeout(poll, socket.next()).await {
-                        // Timed out waiting; the staleness check decides.
-                        Err(_) => {
-                            if self.config.data_timeout.is_some() {
+                    let poll = match self.config.data_timeout {
+                        Some(timeout) => {
+                            let remaining = timeout.saturating_sub(last_data.elapsed());
+                            if remaining.is_zero() {
                                 tracing::warn!(
                                     endpoint = %self.config.endpoint,
+                                    ?timeout,
                                     "no market data within the timeout, reconnecting"
                                 );
                                 break 'session Outcome::Reconnect;
                             }
-                            continue;
+                            // Wake at least every `RECEIVE_POLL` so the check
+                            // above runs, but never later than the deadline.
+                            RECEIVE_POLL.min(remaining)
                         }
+                        None => RECEIVE_POLL,
+                    };
+
+                    let frame = match tokio::time::timeout(poll, socket.next()).await {
+                        // Nothing arrived within the poll window. Whether that
+                        // is staleness is decided at the top of the loop, from
+                        // the clock rather than from this one read.
+                        Err(_) => continue,
                         Ok(None) => break 'session Outcome::Reconnect,
                         Ok(Some(Err(error))) => {
                             tracing::warn!(%error, "websocket error, reconnecting");
@@ -356,8 +424,7 @@ impl DataStream {
                                     break 'session Outcome::Fatal;
                                 }
                                 if message.is_market_data() {
-                                    received_data = true;
-                                    retries = 0;
+                                    last_data = Instant::now();
                                 }
                                 yield Ok(message);
                             }
@@ -377,17 +444,6 @@ impl DataStream {
                 }
             }
         }
-    }
-}
-
-/// How long to wait for the next frame.
-///
-/// Without a staleness timeout this is just a poll interval. With one, it never
-/// exceeds the remaining budget, so the check fires on time.
-fn receive_timeout(config: &StreamConfig, _received_data: bool) -> Duration {
-    match config.data_timeout {
-        Some(timeout) => RECEIVE_POLL.min(timeout),
-        None => RECEIVE_POLL,
     }
 }
 

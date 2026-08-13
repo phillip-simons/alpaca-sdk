@@ -51,6 +51,18 @@ fn client(server: &MockServer) -> BrokerClient {
     .unwrap()
 }
 
+/// `BankAddress` is `#[non_exhaustive]` and all five fields are `String`, so it
+/// is filled in by name rather than positionally — which is the point.
+fn bank_address() -> BankAddress {
+    let mut address = BankAddress::default();
+    address.country = "USA".to_owned();
+    address.state_province = "CA".to_owned();
+    address.postal_code = "94401".to_owned();
+    address.city = "San Mateo".to_owned();
+    address.street_address = "20 N San Mateo Dr".to_owned();
+    address
+}
+
 fn account_id() -> Uuid {
     Uuid::parse_str(ACCOUNT_ID).unwrap()
 }
@@ -91,13 +103,12 @@ async fn creating_an_ach_relationship_takes_bank_details_or_a_plaid_token() {
     client(&server)
         .create_ach_relationship_for_account(
             account_id(),
-            &CreateACHRelationshipRequest::Manual(ManualACHRelationship {
-                account_owner_name: "John Doe".to_owned(),
-                bank_account_type: BankAccountType::Savings,
-                bank_account_number: "123456789abc".to_owned(),
-                bank_routing_number: "123456789".to_owned(),
-                nickname: None,
-            }),
+            &CreateACHRelationshipRequest::Manual(ManualACHRelationship::new(
+                "John Doe",
+                BankAccountType::Savings,
+                "123456789abc",
+                "123456789",
+            )),
         )
         .await
         .unwrap();
@@ -119,9 +130,9 @@ async fn creating_an_ach_relationship_takes_bank_details_or_a_plaid_token() {
     client(&server)
         .create_ach_relationship_for_account(
             account_id(),
-            &CreateACHRelationshipRequest::Plaid(PlaidACHRelationship {
-                processor_token: "processor-sandbox-abc".to_owned(),
-            }),
+            &CreateACHRelationshipRequest::Plaid(PlaidACHRelationship::new(
+                "processor-sandbox-abc",
+            )),
         )
         .await
         .unwrap();
@@ -221,18 +232,8 @@ fn a_domestic_bank_may_not_carry_an_address_and_an_international_one_must() {
     domestic.city = Some("San Mateo".to_owned());
     assert!(domestic.validate().is_err());
 
-    let international = CreateBankRequest::international(
-        "My Bank",
-        "BOFAUS3N",
-        "123456789abc",
-        BankAddress {
-            country: "USA".to_owned(),
-            state_province: "CA".to_owned(),
-            postal_code: "94401".to_owned(),
-            city: "San Mateo".to_owned(),
-            street_address: "20 N San Mateo Dr".to_owned(),
-        },
-    );
+    let international =
+        CreateBankRequest::international("My Bank", "BOFAUS3N", "123456789abc", bank_address());
     assert!(international.validate().is_ok());
 
     // The reference marks every one of the five address fields optional, so an

@@ -20,11 +20,12 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::data::enums::NewsImageSize;
+use crate::data::enums::{Exchange, NewsImageSize};
 use crate::types::serde_util::string_or_list;
 
 /// One bar of aggregated trade data over an interval.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Bar {
     /// The symbol this bar is for, filled in from the response key.
     #[serde(default, skip_deserializing)]
@@ -57,6 +58,7 @@ pub struct Bar {
 
 /// One quote: the best bid and ask at a point in time.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Quote {
     /// The symbol this quote is for, filled in from the response key.
     #[serde(default, skip_deserializing)]
@@ -72,7 +74,7 @@ pub struct Quote {
     pub bid_size: f64,
     /// Exchange the bid is on.
     #[serde(rename = "bx", default)]
-    pub bid_exchange: Option<String>,
+    pub bid_exchange: Option<Exchange>,
     /// The lowest sell offer.
     #[serde(rename = "ap")]
     pub ask_price: f64,
@@ -81,7 +83,7 @@ pub struct Quote {
     pub ask_size: f64,
     /// Exchange the ask is on.
     #[serde(rename = "ax", default)]
-    pub ask_exchange: Option<String>,
+    pub ask_exchange: Option<Exchange>,
     /// Condition codes.
     ///
     /// Stocks send a list and crypto sends a bare string; both normalize here.
@@ -94,6 +96,7 @@ pub struct Quote {
 
 /// One executed trade.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Trade {
     /// The symbol this trade is for, filled in from the response key.
     #[serde(default, skip_deserializing)]
@@ -103,7 +106,7 @@ pub struct Trade {
     pub timestamp: DateTime<Utc>,
     /// Exchange the trade executed on.
     #[serde(rename = "x", default)]
-    pub exchange: Option<String>,
+    pub exchange: Option<Exchange>,
     /// Price per share.
     #[serde(rename = "p")]
     pub price: f64,
@@ -126,6 +129,7 @@ pub struct Trade {
 
 /// A trading status update, such as a halt or resumption.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TradingStatus {
     /// The symbol this status is for, filled in from the response key.
     #[serde(default, skip_deserializing)]
@@ -152,6 +156,7 @@ pub struct TradingStatus {
 
 /// A cancellation of a previously reported trade.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TradeCancel {
     /// The symbol this cancellation is for, filled in from the response key.
     #[serde(default, skip_deserializing)]
@@ -161,7 +166,7 @@ pub struct TradeCancel {
     pub timestamp: DateTime<Utc>,
     /// Exchange the cancelled trade was on.
     #[serde(rename = "x")]
-    pub exchange: String,
+    pub exchange: Exchange,
     /// Price of the cancelled trade.
     #[serde(rename = "p")]
     pub price: f64,
@@ -181,6 +186,7 @@ pub struct TradeCancel {
 
 /// A correction to a previously reported trade.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TradeCorrection {
     /// The symbol this correction is for, filled in from the response key.
     #[serde(default, skip_deserializing)]
@@ -190,7 +196,7 @@ pub struct TradeCorrection {
     pub timestamp: DateTime<Utc>,
     /// Exchange the corrected trade was on.
     #[serde(rename = "x")]
-    pub exchange: String,
+    pub exchange: Exchange,
     /// Identifier of the original trade.
     #[serde(rename = "oi", default)]
     pub original_id: Option<i64>,
@@ -225,6 +231,7 @@ pub struct TradeCorrection {
 /// `s` is absent on some prints, which is why the size is optional while the
 /// price is not — the spec marks `t`, `x`, `p` and `c` required and `s` not.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Auction {
     /// When the auction printed.
     #[serde(rename = "t", with = "crate::types::timestamp")]
@@ -234,7 +241,7 @@ pub struct Auction {
     /// A single-letter code; [`Codes`](crate::data::Codes) from
     /// `/v2/stocks/meta/exchanges` turns it into a name.
     #[serde(rename = "x")]
-    pub exchange: String,
+    pub exchange: Exchange,
     /// The auction price.
     #[serde(rename = "p")]
     pub price: f64,
@@ -250,6 +257,7 @@ pub struct Auction {
 
 /// One day's opening and closing auctions for a symbol.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct DailyAuctions {
     /// The symbol these auctions are for, filled in from the response key.
     #[serde(default, skip_deserializing)]
@@ -276,6 +284,7 @@ pub type AuctionSet = HashMap<String, Vec<DailyAuctions>>;
 /// Every field is a JSON number, so the prices are `f64` like the rest of market
 /// data rather than [`Decimal`](rust_decimal::Decimal).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ForexRate {
     /// The currency pair this rate is for, filled in from the response key.
     #[serde(default, skip_deserializing)]
@@ -299,6 +308,7 @@ pub type ForexRateSet = HashMap<String, Vec<ForexRate>>;
 
 /// One price level in an orderbook.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OrderbookQuote {
     /// Price at this level.
     #[serde(rename = "p")]
@@ -310,6 +320,7 @@ pub struct OrderbookQuote {
 
 /// A snapshot of the bids and asks for a symbol.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Orderbook {
     /// The symbol this book is for, filled in from the response key.
     #[serde(default, skip_deserializing)]
@@ -330,6 +341,7 @@ pub struct Orderbook {
 
 /// The most recent trade, quote, and bars for a symbol.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Snapshot {
     /// The symbol this snapshot is for, filled in from the response key.
     #[serde(default, skip_deserializing)]
@@ -353,6 +365,7 @@ pub struct Snapshot {
 
 /// The option greeks for a contract.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OptionsGreeks {
     /// Sensitivity to the underlying price.
     pub delta: f64,
@@ -368,6 +381,7 @@ pub struct OptionsGreeks {
 
 /// The latest trade, quote, and analytics for an option contract.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OptionsSnapshot {
     /// The contract symbol, filled in from the response key.
     #[serde(default, skip_deserializing)]
@@ -388,6 +402,7 @@ pub struct OptionsSnapshot {
 
 /// One image attached to a news article.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NewsImage {
     /// The rendition size.
     pub size: NewsImageSize,
@@ -397,6 +412,7 @@ pub struct NewsImage {
 
 /// A news article.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct News {
     /// Alpaca's identifier for the article.
     pub id: i64,
@@ -438,6 +454,7 @@ pub struct News {
 
 /// A page of news articles.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NewsSet {
     /// The articles.
     #[serde(
@@ -452,6 +469,7 @@ pub struct NewsSet {
 
 /// One of the most actively traded stocks.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ActiveStock {
     /// The ticker symbol.
     pub symbol: String,
@@ -463,6 +481,7 @@ pub struct ActiveStock {
 
 /// The most actively traded stocks.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MostActives {
     /// The ranked list.
     pub most_actives: Vec<ActiveStock>,
@@ -472,6 +491,7 @@ pub struct MostActives {
 
 /// One symbol in the movers ranking.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Mover {
     /// The ticker symbol.
     pub symbol: String,
@@ -485,6 +505,7 @@ pub struct Mover {
 
 /// The day's biggest gainers and losers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Movers {
     /// Symbols that rose the most.
     pub gainers: Vec<Mover>,

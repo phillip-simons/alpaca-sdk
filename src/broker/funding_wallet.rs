@@ -18,6 +18,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::types::SupportedCurrencies;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -167,7 +168,7 @@ pub struct FundingFee {
     /// How much.
     pub amount: Decimal,
     /// In what currency.
-    pub currency: String,
+    pub currency: crate::types::SupportedCurrencies,
     /// How it is charged.
     pub payment_type: String,
 }
@@ -281,7 +282,7 @@ pub struct RecipientBank {
     pub country: Option<String>,
     /// The currency it takes.
     #[serde(default)]
-    pub currency: Option<String>,
+    pub currency: Option<crate::types::SupportedCurrencies>,
     /// Which rails may reach it.
     #[serde(
         default,
@@ -324,7 +325,7 @@ pub struct GetFundingDetailsRequest {
     pub payment_type: Option<PaymentType>,
     /// Only details for this currency.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub currency: Option<String>,
+    pub currency: Option<crate::types::SupportedCurrencies>,
 }
 
 /// A request to register a bank a withdrawal may be sent to.
@@ -338,7 +339,7 @@ pub struct CreateRecipientBankRequest {
     /// Which country it is in.
     pub bank_country: String,
     /// The currency it takes.
-    pub currency: String,
+    pub currency: crate::types::SupportedCurrencies,
     /// Street address.
     pub street_address: String,
     /// City.
@@ -383,7 +384,7 @@ impl CreateRecipientBankRequest {
         account_number: impl Into<String>,
         bank_name: impl Into<String>,
         bank_country: impl Into<String>,
-        currency: impl Into<String>,
+        currency: SupportedCurrencies,
         street_address: impl Into<String>,
         city: impl Into<String>,
     ) -> Self {
@@ -391,7 +392,7 @@ impl CreateRecipientBankRequest {
             account_number: account_number.into(),
             bank_name: bank_name.into(),
             bank_country: bank_country.into(),
-            currency: currency.into(),
+            currency,
             street_address: street_address.into(),
             city: city.into(),
             state_or_province: None,
@@ -433,7 +434,16 @@ impl CreateRecipientBankRequest {
 #[non_exhaustive]
 pub struct CreateWithdrawalRequest {
     /// How much to send, in USD.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ///
+    /// Encoded explicitly through this crate's decimal codec — a string on the
+    /// wire — rather than relying on `rust_decimal`'s own `Serialize`, which is
+    /// what every other money field here does and which a dependency bump could
+    /// otherwise change underneath a withdrawal.
+    #[serde(
+        default,
+        with = "crate::types::option_decimal",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub usd_amount: Option<Decimal>,
     /// What to convert it to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -488,7 +498,7 @@ pub struct DemoFundingRequest {
     pub amount: Option<Decimal>,
     /// In what currency.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub currency: Option<String>,
+    pub currency: Option<crate::types::SupportedCurrencies>,
     /// The account number to credit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub receiver_account_number: Option<String>,
@@ -502,12 +512,12 @@ impl DemoFundingRequest {
     #[must_use]
     pub fn new(
         amount: Decimal,
-        currency: impl Into<String>,
+        currency: SupportedCurrencies,
         receiver_account_number: impl Into<String>,
     ) -> Self {
         Self {
             amount: Some(amount),
-            currency: Some(currency.into()),
+            currency: Some(currency),
             receiver_account_number: Some(receiver_account_number.into()),
             receiver_routing_code: None,
         }
@@ -554,7 +564,7 @@ mod tests {
             "12345678",
             "Example Bank",
             "GB",
-            "GBP",
+            SupportedCurrencies::Gbp,
             "1 Example Street",
             "London",
         );

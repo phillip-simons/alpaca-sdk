@@ -13,6 +13,7 @@ use crate::data::models::{
 /// one-letter `T` on an incoming frame. Both live on this enum so the two
 /// spellings of a channel cannot drift apart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[non_exhaustive]
 pub enum Channel {
     /// Executed trades.
     Trades,
@@ -87,7 +88,13 @@ impl Channel {
     }
 
     /// Every channel, for iteration.
-    pub const ALL: [Self; 11] = [
+    ///
+    /// A slice rather than `[Self; 11]`: an array puts the variant *count* in a
+    /// public type signature, so adding a channel — Alpaca has added
+    /// `updatedBars`, `lulds`, `orderbooks`, `corrections` and `cancelErrors`
+    /// over time — would change `[Channel; 11]` to `[Channel; 12]` and break
+    /// every binding and fixed-size collection built from it.
+    pub const ALL: &'static [Self] = &[
         Self::Trades,
         Self::Quotes,
         Self::Orderbooks,
@@ -104,6 +111,7 @@ impl Channel {
 
 /// What the server currently believes this connection is subscribed to.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Subscriptions {
     /// Symbols subscribed for trades.
     #[serde(default)]
@@ -136,6 +144,7 @@ pub struct Subscriptions {
 
 /// An error frame from the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct StreamError {
     /// Alpaca's numeric error code.
     #[serde(default)]

@@ -12,11 +12,11 @@ env:
 jobs:
   # Which jobs need to run at all.
   #
-  # A docs-only change does not need the compiler, but the nine Rust jobs below
-  # are *required* status checks — so they cannot simply be filtered out of the
-  # workflow. A workflow that never runs never reports, and branch protection
-  # waits for a report that will never arrive, which blocks the pull request
-  # permanently.
+  # A docs-only change does not need the compiler, but `all checks` — which
+  # gates on the Rust jobs below — is a *required* status check, so they cannot
+  # simply be filtered out of the workflow. A workflow that never runs never
+  # reports, and branch protection waits for a report that will never arrive,
+  # which blocks the pull request permanently.
   #
   # Skipping at the *job* level instead is what works: a skipped job still
   # reports, and a skipped required check counts as satisfied. Hence the `needs`

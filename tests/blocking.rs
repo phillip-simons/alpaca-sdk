@@ -124,3 +124,33 @@ async fn calling_from_inside_a_runtime_is_an_error_not_a_panic() {
         other => panic!("expected InvalidRequest, got {other:?}"),
     }
 }
+
+/// The bridge that used to be refused.
+///
+/// `spawn_blocking` threads carry an ambient runtime handle, so a check for one
+/// rejected them — but they are not driving the reactor, and blocking on them is
+/// exactly what they exist for. The call works, and this is how an async program
+/// reaches the façade.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_call_from_spawn_blocking_succeeds() {
+    let server = tokio::task::spawn_blocking(account_server).await.unwrap();
+    let uri = server.uri();
+
+    let account = tokio::task::spawn_blocking(move || {
+        let credentials = Credentials::new("key", "secret").unwrap();
+        let client = TradingClient::with_config(
+            &credentials,
+            RestConfig::new(uri).retry(RetryConfig::none()),
+        )
+        .unwrap();
+        Blocking::new(client)
+            .unwrap()
+            .call(|client| client.get_account())
+    })
+    .await
+    .unwrap()
+    .expect("spawn_blocking is the supported bridge into the blocking façade");
+
+    assert!(!account.id.is_nil());
+    drop(server);
+}

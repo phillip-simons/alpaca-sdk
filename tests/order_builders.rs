@@ -14,7 +14,8 @@
 
 use alpaca_sdk::trading::{
     GetCorporateAnnouncementsRequest, OptionLegRequest, OrderAmount, OrderClass, OrderRequest,
-    OrderSide, OrderType, PositionIntent, StopLossRequest, TakeProfitRequest, TimeInForce, Trail,
+    OrderSide, OrderType, PositionIntent, StopLimit, StopLossRequest, TakeProfitRequest,
+    TimeInForce, Trail,
 };
 use rust_decimal::Decimal;
 use serde_json::{Value, json};
@@ -112,13 +113,17 @@ fn a_stop_order_carries_a_stop_price_and_no_limit_price() {
 
 #[test]
 fn a_stop_limit_order_carries_both_prices_under_their_own_names() {
+    // Named fields rather than two adjacent `Decimal` arguments: transposing
+    // positional ones compiled and produced a legal-but-different order.
     let order = OrderRequest::stop_limit(
         "AAPL",
         OrderSide::Sell,
         qty(1),
         TimeInForce::Day,
-        price(140),
-        price(139),
+        StopLimit {
+            stop: price(140),
+            limit: price(139),
+        },
     );
 
     let body = body(&order);

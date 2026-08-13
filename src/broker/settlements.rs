@@ -93,7 +93,7 @@ pub struct Settlement {
     pub asset_class: Option<SettlementAssetClass>,
     /// The currency.
     #[serde(default)]
-    pub currency: Option<String>,
+    pub currency: Option<crate::types::SupportedCurrencies>,
     /// The account the money came from.
     #[serde(default)]
     pub source_account_number: Option<String>,

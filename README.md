@@ -119,7 +119,7 @@ use futures_util::StreamExt as _;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mut stream = CryptoDataStream::new(Credentials::from_env()?, CryptoFeed::Us);
+    let mut stream = CryptoDataStream::new(Credentials::from_env()?, CryptoFeed::Us)?;
     stream.subscribe_trades(["BTC/USD"]);
 
     let mut messages = Box::pin(stream.run());
@@ -199,7 +199,7 @@ That order is not academic. Three event streams were in the specs, looked
 healthy from the crate's side, and had been switched off; the reference was the
 only source that said so.
 
-`fixtures/` holds 135 real API responses, and every model is checked against
+`fixtures/` holds 227 real API responses, and every model is checked against
 them. `just coverage`, `just parameters` and `just enums-drift` diff this crate
 against the specs and the reference by machine, because reading does not scale
 to 251 routes — each of the three found something a careful read had missed.

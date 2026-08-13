@@ -646,3 +646,133 @@ async fn timeframe_serializes_into_the_query() {
         .await
         .unwrap();
 }
+
+// ------------------------------------------------------- absent symbols
+//
+// A multi-symbol request returns one key per symbol, and Alpaca answers `null`
+// for a symbol it has nothing for. That used to propagate a decode error and
+// discard the whole response — every good symbol with it.
+
+/// Driven by a captured payload that ships in this crate:
+/// `fixtures/go/marketdata__test_snapshots__01.json` carries `"INVALID": null`
+/// beside a valid AAPL and MSFT. A request takes up to 100 symbols, so one
+/// delisted ticker used to make the entire batch unusable.
+#[tokio::test]
+async fn a_null_symbol_is_skipped_rather_than_failing_the_whole_response() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v2/stocks/snapshots"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixture("go/marketdata__test_snapshots__01.json")),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let request = alpaca_sdk::data::StockSnapshotRequest::new(["AAPL", "INVALID", "MSFT"]);
+    let snapshots = stock_client(&server)
+        .get_stock_snapshot(&request)
+        .await
+        .expect("a null entry must not fail the response");
+
+    assert_eq!(
+        snapshots.len(),
+        2,
+        "expected AAPL and MSFT, got {snapshots:?}"
+    );
+    assert!(snapshots.contains_key("AAPL"));
+    assert!(snapshots.contains_key("MSFT"));
+    assert!(
+        !snapshots.contains_key("INVALID"),
+        "an absent symbol should be omitted, not present as an empty value"
+    );
+}
+
+/// The other half of the contract: a value that is genuinely the wrong *shape*
+/// must still be an error, and must carry enough to diagnose it. `body` used to
+/// be the empty string, so the one field documented as "the raw payload, so the
+/// mismatch can be diagnosed without re-issuing" carried nothing.
+#[tokio::test]
+async fn a_malformed_symbol_entry_still_errors_and_names_the_route() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v2/stocks/snapshots"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"AAPL": 42})))
+        .mount(&server)
+        .await;
+
+    let request = alpaca_sdk::data::StockSnapshotRequest::new(["AAPL"]);
+    let err = stock_client(&server)
+        .get_stock_snapshot(&request)
+        .await
+        .unwrap_err();
+
+    match err {
+        alpaca_sdk::Error::Decode { path, body, .. } => {
+            assert_eq!(path, "/stocks/snapshots", "path should name the route");
+            assert!(
+                body.contains("AAPL"),
+                "body should carry the payload, got {body:?}"
+            );
+        }
+        other => panic!("expected Decode, got {other:?}"),
+    }
+}
+
+/// A minimal cash dividend carrying every field the model requires.
+fn dividend(symbol: &str, ex_date: &str) -> serde_json::Value {
+    json!({
+        "symbol": symbol,
+        "cusip": "037833100",
+        "rate": 0.24,
+        "special": false,
+        "foreign": false,
+        "process_date": ex_date,
+        "ex_date": ex_date
+    })
+}
+
+/// `limit` caps the total across all pages, and the corporate-actions endpoint
+/// serves 1,000 per page — so a default of 1,000 stopped the walk after page
+/// one and threw away the `next_page_token`, silently truncating a year of
+/// dividends with no error.
+#[tokio::test]
+async fn corporate_actions_walk_past_the_first_full_page_by_default() {
+    let server = MockServer::start().await;
+
+    // Page one: full, and pointing at a second page.
+    Mock::given(method("GET"))
+        .and(path("/v1/corporate-actions"))
+        .and(query_param("page_token", "page2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "corporate_actions": {"cash_dividends": [dividend("MSFT", "2024-01-03")]},
+            "next_page_token": null
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/corporate-actions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "corporate_actions": {"cash_dividends": [dividend("AAPL", "2024-01-02")]},
+            "next_page_token": "page2"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client =
+        CorporateActionsClient::with_config(&credentials(), config(&server, "v1")).unwrap();
+    let actions = client
+        .get_corporate_actions(&CorporateActionsRequest::new())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        actions.cash_dividends.len(),
+        2,
+        "the second page was not fetched: {actions:?}"
+    );
+}

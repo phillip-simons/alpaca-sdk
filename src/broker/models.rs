@@ -16,16 +16,17 @@ use uuid::Uuid;
 use crate::broker::enums::{
     ACHRelationshipStatus, AccountType, AgreementType, BankAccountType, BankStatus,
     CIPApprovalStatus, CIPProvider, CIPResult, CIPStatus, CalendarSubType, ClearingBroker,
-    DocumentType, DriftBandSubType, FeePaymentMethod, FundingSource, IdentifierType,
-    JournalEntryType, JournalStatus, PortfolioStatus, RebalancingConditionsType, RunInitiatedFrom,
-    RunStatus, RunType, TaxIdType, TradeDocumentSubType, TradeDocumentType, TransferDirection,
-    TransferStatus, TransferType, VisaType, WeightType,
+    DocumentType, DriftBandSubType, EmploymentStatus, FeePaymentMethod, FundingSource,
+    IdentifierType, JournalEntryType, JournalStatus, PortfolioStatus, RebalancingConditionsType,
+    RunInitiatedFrom, RunStatus, RunType, TaxIdType, TradeDocumentSubType, TradeDocumentType,
+    TransferDirection, TransferStatus, TransferType, VisaType, WeightType,
 };
 use crate::trading::AccountStatus;
 use crate::types::serde_util::empty_string_as_none;
 
 /// How to reach the account holder.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Contact {
     /// Primary email address.
     pub email_address: String,
@@ -57,6 +58,7 @@ pub struct Contact {
 
 /// Who the account holder is.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Identity {
     /// Given name.
     pub given_name: String,
@@ -123,6 +125,7 @@ pub struct Identity {
 
 /// Regulatory disclosures about the account holder.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Disclosures {
     /// Whether the holder controls a public company.
     #[serde(default)]
@@ -143,8 +146,15 @@ pub struct Disclosures {
     #[serde(default)]
     pub is_discretionary: Option<bool>,
     /// Employment status.
+    ///
+    /// The enum, not a `String`. `broker::EmploymentStatus` existed, was
+    /// exported, and was referenced by nothing — so a caller filling in the
+    /// required `Disclosures` had no way to learn the vocabulary is `EMPLOYED`
+    /// rather than `employed`, and the application 400'd. It carries an
+    /// `Unknown(String)` variant, so a value this crate does not know still
+    /// decodes.
     #[serde(default, deserialize_with = "empty_string_as_none")]
-    pub employment_status: Option<String>,
+    pub employment_status: Option<EmploymentStatus>,
     /// Employer name.
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub employer_name: Option<String>,
@@ -158,6 +168,7 @@ pub struct Disclosures {
 
 /// An agreement the account holder signed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Agreement {
     /// Which agreement was signed.
     pub agreement: AgreementType,
@@ -171,8 +182,27 @@ pub struct Agreement {
     pub revision: Option<String>,
 }
 
+impl Agreement {
+    /// A signed agreement, with the optional attribution left unset.
+    ///
+    /// The type is `#[non_exhaustive]` — Alpaca adds agreement fields — so this
+    /// is how one is built from outside the crate. Set `ip_address` and
+    /// `revision` on the result if you have them; Alpaca wants the IP for
+    /// anything signed through your own interface.
+    #[must_use]
+    pub fn new(agreement: AgreementType, signed_at: DateTime<Utc>) -> Self {
+        Self {
+            agreement,
+            signed_at,
+            ip_address: None,
+            revision: None,
+        }
+    }
+}
+
 /// A document attached to an account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountDocument {
     /// Alpaca's id for the document.
     #[serde(default, deserialize_with = "empty_string_as_none")]
@@ -192,6 +222,7 @@ pub struct AccountDocument {
 
 /// Someone to contact about the account other than the holder.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TrustedContact {
     /// Given name.
     #[serde(default, deserialize_with = "empty_string_as_none")]
@@ -227,6 +258,7 @@ pub struct TrustedContact {
 /// The per-check payloads vary by provider and are not modelled; they are kept
 /// as raw JSON rather than guessed at.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct KycResults {
     /// Checks that rejected.
     #[serde(default)]
@@ -247,6 +279,7 @@ pub struct KycResults {
 
 /// A brokerage account opened through the broker API.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Account {
     /// Alpaca's id for the account.
     pub id: Uuid,
@@ -259,7 +292,7 @@ pub struct Account {
     pub crypto_status: Option<AccountStatus>,
     /// Account currency.
     #[serde(default, deserialize_with = "empty_string_as_none")]
-    pub currency: Option<String>,
+    pub currency: Option<crate::types::SupportedCurrencies>,
     /// Equity as of the previous trading day's close.
     #[serde(default, with = "crate::types::option_decimal")]
     pub last_equity: Option<Decimal>,
@@ -305,6 +338,7 @@ pub struct Account {
 /// fields through
 /// [`account`](Self::account).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TradeAccount {
     /// Every field the trading API also returns.
     #[serde(flatten)]
@@ -357,6 +391,7 @@ pub struct TradeAccount {
 /// Identical to the trading API's [`crate::trading::Order`] but for the
 /// commission the correspondent charged, which only the broker API reports.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Order {
     /// Every field the trading API also returns.
     #[serde(flatten)]
@@ -371,6 +406,7 @@ pub struct Order {
 
 /// A link between an account and a bank account, for ACH transfers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ACHRelationship {
     /// Alpaca's id for the relationship.
     pub id: Uuid,
@@ -403,6 +439,7 @@ pub struct ACHRelationship {
 
 /// A bank an account may wire money to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Bank {
     /// Alpaca's id for the bank connection.
     pub id: Uuid,
@@ -444,6 +481,7 @@ pub struct Bank {
 
 /// Money moving into or out of an account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Transfer {
     /// Alpaca's id for the transfer.
     pub id: Uuid,
@@ -496,6 +534,7 @@ pub struct Transfer {
 /// payload — so they are [`Decimal`] here. Reading a string price as a float is
 /// the precision loss the money types exist to avoid.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Journal {
     /// Alpaca's id for the journal.
     pub id: Uuid,
@@ -554,6 +593,7 @@ pub struct Journal {
 /// carries its reason rather than failing the whole request — so
 /// `error_message` has to be read, not assumed empty.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct BatchJournalResponse {
     /// The journal itself.
     #[serde(flatten)]
@@ -568,6 +608,7 @@ pub struct BatchJournalResponse {
 /// Distinct from [`AccountDocument`], which is the identity paperwork attached
 /// to the brokerage account itself.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TradeDocument {
     /// Alpaca's id for the document.
     pub id: Uuid,
@@ -589,6 +630,13 @@ pub struct TradeDocument {
 }
 
 /// A W-8BEN form filled in field by field rather than uploaded as a file.
+///
+/// Deliberately **not** `#[non_exhaustive]`, unlike every other model here. The
+/// reason the rest carry it is that Alpaca adds fields on its own schedule; this
+/// one transcribes an IRS form, whose fields change when the IRS changes them,
+/// and it has eleven required fields — so a constructor taking all of them would
+/// be a row of interchangeable `String`s, which is a worse hazard than the one
+/// the attribute prevents. A caller fills it in as a struct literal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct W8BenDocument {
     /// The country the applicant is a citizen of.
@@ -679,6 +727,7 @@ impl W8BenDocument {
 /// the inconsistency — and a `percent` assigned directly to the field is the
 /// caller's to round.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Weight {
     /// Whether this line is cash or a security.
     #[serde(rename = "type")]
@@ -747,6 +796,7 @@ impl Weight {
 /// the first one tried would always match. The two value sets are disjoint, so
 /// the wire value alone decides.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum RebalancingSubType {
     /// A drift band condition's sub type.
     DriftBand(DriftBandSubType),
@@ -806,6 +856,7 @@ impl<'de> Deserialize<'de> for RebalancingSubType {
 
 /// When a portfolio should be rebalanced.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct RebalancingCondition {
     /// Whether the trigger is drift or the calendar.
     #[serde(rename = "type")]
@@ -822,6 +873,7 @@ pub struct RebalancingCondition {
 
 /// A target allocation that accounts can subscribe to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Portfolio {
     /// Alpaca's id for the portfolio.
     pub id: Uuid,
@@ -852,6 +904,7 @@ pub struct Portfolio {
 
 /// An account's subscription to a portfolio.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Subscription {
     /// Alpaca's id for the subscription.
     pub id: Uuid,
@@ -868,6 +921,7 @@ pub struct Subscription {
 
 /// An order a rebalancing run chose not to place.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SkippedOrder {
     /// The security the order would have been for.
     pub symbol: String,
@@ -879,7 +933,7 @@ pub struct SkippedOrder {
     pub notional: Option<Decimal>,
     /// The currency of that value.
     #[serde(default, deserialize_with = "empty_string_as_none")]
-    pub currency: Option<String>,
+    pub currency: Option<crate::types::SupportedCurrencies>,
     /// Why it was skipped.
     #[serde(default)]
     pub reason: String,
@@ -890,6 +944,7 @@ pub struct SkippedOrder {
 
 /// One attempt to move an account towards its portfolio's weights.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct RebalancingRun {
     /// Alpaca's id for the run.
     pub id: Uuid,
@@ -943,6 +998,7 @@ pub struct RebalancingRun {
 /// Unlike the portfolio list, which is a bare array, this route wraps its
 /// results and pages by token.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SubscriptionsPage {
     /// The subscriptions on this page.
     #[serde(
@@ -957,6 +1013,7 @@ pub struct SubscriptionsPage {
 
 /// One page of rebalancing runs.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct RunsPage {
     /// The runs on this page.
     #[serde(
@@ -973,6 +1030,7 @@ pub struct RunsPage {
 ///
 /// Every field is optional, because which of them a provider fills in varies.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CIPKycInfo {
     /// The provider's id for this check.
     pub id: String,
@@ -1034,6 +1092,7 @@ pub struct CIPKycInfo {
 
 /// The provider's checks on an identity document.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CIPDocument {
     /// The provider's id for this check.
     pub id: String,
@@ -1101,6 +1160,7 @@ pub struct CIPDocument {
 
 /// The provider's checks on a submitted photo.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CIPPhoto {
     /// The provider's id for this check.
     pub id: String,
@@ -1142,6 +1202,7 @@ pub struct CIPPhoto {
 
 /// The provider's checks against identity databases.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CIPIdentity {
     /// The provider's id for this check.
     pub id: String,
@@ -1188,6 +1249,7 @@ pub struct CIPIdentity {
 
 /// The provider's checks against sanctions and watchlists.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CIPWatchlist {
     /// The provider's id for this check.
     pub id: String,
@@ -1227,6 +1289,7 @@ pub struct CIPWatchlist {
 /// ever met a real payload. They follow the broker spec. Treat a
 /// decode failure here as a bug report rather than a surprise.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CIPInfo {
     /// Alpaca's id for the record.
     pub id: Uuid,
@@ -1261,6 +1324,7 @@ pub struct CIPInfo {
 
 /// Positions held across every account, as of the last market close.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AllAccountsPositions {
     /// When the snapshot was taken.
     pub as_of: DateTime<Utc>,

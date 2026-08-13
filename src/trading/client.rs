@@ -33,6 +33,9 @@ use crate::trading::wallets::{
     TransferFeeEstimate, TransferFeeEstimateRequest, WhitelistedAddress,
 };
 use crate::types::AssetIdent;
+use crate::types::Sort;
+use crate::types::path::segment;
+use crate::types::serde_util::OneOrMany;
 
 /// A client for Alpaca's trading API.
 ///
@@ -72,7 +75,7 @@ impl TradingClient {
     /// underlying HTTP client fails to build.
     pub fn with_config(credentials: &Credentials, config: RestConfig) -> Result<Self> {
         Ok(Self {
-            raw: crate::sse::streaming_client(credentials, &config)?,
+            raw: crate::sse::streaming_client(credentials, crate::sse::Redirects::Refuse)?,
             rest: RestClient::new(credentials, config)?,
         })
     }
@@ -111,6 +114,11 @@ impl TradingClient {
 
     /// Lists orders, optionally filtered.
     ///
+    /// **One page.** Alpaca returns 50 orders by default and at most 500, and
+    /// this sends exactly what it is given — so an account with more history
+    /// than that gets a silently truncated list rather than an error. Use
+    /// [`get_all_orders`](Self::get_all_orders) to walk the whole history.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_orders(&self, filter: Option<&GetOrdersRequest>) -> Result<Vec<Order>> {
@@ -118,6 +126,70 @@ impl TradingClient {
             Some(filter) => self.rest.get("/orders", filter).await,
             None => self.rest.get("/orders", &Empty).await,
         }
+    }
+
+    /// Every order matching `filter`, following the cursor across pages.
+    ///
+    /// `/v2/orders` has no `next_page_token`; it is walked with
+    /// [`before_order_id`](GetOrdersRequest::before_order_id), which needs the
+    /// response sorted newest-first. This therefore fixes `direction` to
+    /// [`Sort::Desc`] and `limit` to the API maximum of 500, overriding whatever
+    /// the filter carried for those two — every other filter is passed through.
+    ///
+    /// `max_items` bounds the total returned; `None` means every order there is.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_all_orders(
+        &self,
+        filter: Option<&GetOrdersRequest>,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Order>> {
+        /// The API's own ceiling for one page.
+        const PAGE: u32 = 500;
+
+        let mut request = filter.cloned().unwrap_or_default();
+        request.limit = Some(PAGE);
+        request.direction = Some(Sort::Desc);
+
+        let mut all: Vec<Order> = Vec::new();
+        loop {
+            let page = self.rest.get::<Vec<Order>, _>("/orders", &request).await?;
+            let short_page = page.len() < PAGE as usize;
+
+            // The cursor is the oldest id on this page, and it has to be read
+            // before the page is moved into the accumulator.
+            let oldest = page.last().map(|order| order.id);
+            all.extend(page);
+
+            if let Some(max) = max_items
+                && all.len() >= max
+            {
+                all.truncate(max);
+                break;
+            }
+
+            // A page shorter than the maximum is the last one. An exactly-full
+            // final page costs one extra empty request, which is the price of
+            // an endpoint that does not say whether more remain.
+            if short_page {
+                break;
+            }
+
+            let Some(oldest) = oldest else { break };
+            // Defensive: an endpoint that kept returning the same last id would
+            // otherwise loop forever accumulating duplicates.
+            if request.before_order_id == Some(oldest) {
+                tracing::warn!(
+                    order_id = %oldest,
+                    "order cursor stopped advancing; stopping the walk"
+                );
+                break;
+            }
+            request.before_order_id = Some(oldest);
+        }
+
+        Ok(all)
     }
 
     /// Fetches one order by its Alpaca id.
@@ -129,7 +201,7 @@ impl TradingClient {
         order_id: Uuid,
         filter: Option<&GetOrderByIdRequest>,
     ) -> Result<Order> {
-        let path = format!("/orders/{order_id}");
+        let path = format!("/orders/{}", segment(order_id)?);
         match filter {
             Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
@@ -159,7 +231,7 @@ impl TradingClient {
         order_id: Uuid,
         replacement: Option<&ReplaceOrderRequest>,
     ) -> Result<Order> {
-        let path = format!("/orders/{order_id}");
+        let path = format!("/orders/{}", segment(order_id)?);
         match replacement {
             Some(replacement) => {
                 replacement.validate()?;
@@ -182,7 +254,7 @@ impl TradingClient {
     /// # Errors
     /// Propagates transport and API failures.
     pub async fn cancel_order_by_id(&self, order_id: Uuid) -> Result<()> {
-        self.send_void(Method::DELETE, &format!("/orders/{order_id}"))
+        self.send_void(Method::DELETE, &format!("/orders/{}", segment(order_id)?))
             .await
     }
 
@@ -201,7 +273,9 @@ impl TradingClient {
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_open_position(&self, asset: &AssetIdent) -> Result<Position> {
-        self.rest.get(&format!("/positions/{asset}"), &Empty).await
+        self.rest
+            .get(&format!("/positions/{}", asset.as_path_segment()?), &Empty)
+            .await
     }
 
     /// Liquidates every open position, reporting the outcome for each.
@@ -231,7 +305,7 @@ impl TradingClient {
         asset: &AssetIdent,
         close: Option<ClosePositionRequest>,
     ) -> Result<Order> {
-        let path = format!("/positions/{asset}");
+        let path = format!("/positions/{}", asset.as_path_segment()?);
         match close {
             Some(close) => self.rest.delete(&path, &close.to_query()).await,
             None => self.rest.delete(&path, &Empty).await,
@@ -243,8 +317,11 @@ impl TradingClient {
     /// # Errors
     /// Propagates transport and API failures.
     pub async fn exercise_options_position(&self, contract: &AssetIdent) -> Result<()> {
-        self.send_void(Method::POST, &format!("/positions/{contract}/exercise"))
-            .await
+        self.send_void(
+            Method::POST,
+            &format!("/positions/{}/exercise", contract.as_path_segment()?),
+        )
+        .await
     }
 
     // ------------------------------------------------------------ account
@@ -335,7 +412,9 @@ impl TradingClient {
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_asset(&self, asset: &AssetIdent) -> Result<Asset> {
-        self.rest.get(&format!("/assets/{asset}"), &Empty).await
+        self.rest
+            .get(&format!("/assets/{}", asset.as_path_segment()?), &Empty)
+            .await
     }
 
     // ------------------------------------------------------ market status
@@ -432,7 +511,10 @@ impl TradingClient {
         symbol: &str,
     ) -> Result<Watchlist> {
         self.rest
-            .delete(&format!("/watchlists/{watchlist_id}/{symbol}"), &Empty)
+            .delete(
+                &format!("/watchlists/{watchlist_id}/{}", segment(symbol)?),
+                &Empty,
+            )
             .await
     }
 
@@ -507,7 +589,10 @@ impl TradingClient {
     /// Propagates transport, API, and decoding failures.
     pub async fn get_option_contract(&self, contract: &AssetIdent) -> Result<OptionContract> {
         self.rest
-            .get(&format!("/options/contracts/{contract}"), &Empty)
+            .get(
+                &format!("/options/contracts/{}", contract.as_path_segment()?),
+                &Empty,
+            )
             .await
     }
 
@@ -518,7 +603,7 @@ impl TradingClient {
     /// # Errors
     /// Propagates transport and API failures.
     pub async fn exercise_do_not_exercise(&self, contract: &AssetIdent) -> Result<()> {
-        let path = format!("/positions/{contract}/do-not-exercise");
+        let path = format!("/positions/{}/do-not-exercise", contract.as_path_segment()?);
         self.rest.post(&path, &Empty).await
     }
 
@@ -545,7 +630,7 @@ impl TradingClient {
         activity_type: &ActivityType,
         filter: Option<&GetAccountActivitiesRequest>,
     ) -> Result<Vec<Activity>> {
-        let path = format!("/account/activities/{activity_type}");
+        let path = format!("/account/activities/{}", segment(activity_type)?);
         match filter {
             Some(filter) => {
                 filter.validate()?;
@@ -635,7 +720,7 @@ impl TradingClient {
         market: &Market,
         filter: Option<&GetMarketCalendarRequest>,
     ) -> Result<MarketCalendar> {
-        let path = format!("/calendar/{market}");
+        let path = format!("/calendar/{}", segment(market)?);
         match filter {
             Some(filter) => self.rest.at_version("v3").get(&path, filter).await,
             None => self.rest.at_version("v3").get(&path, &Empty).await,
@@ -730,7 +815,10 @@ impl TradingClient {
     /// Propagates transport, API, and decoding failures.
     pub async fn get_tokenization_request(&self, request_id: Uuid) -> Result<TokenizationRequest> {
         self.rest
-            .get(&format!("/tokenization/requests/{request_id}"), &Empty)
+            .get(
+                &format!("/tokenization/requests/{}", segment(request_id)?),
+                &Empty,
+            )
             .await
     }
 
@@ -756,11 +844,12 @@ impl TradingClient {
     pub async fn get_crypto_wallets(
         &self,
         filter: Option<&GetCryptoWalletsRequest>,
-    ) -> Result<CryptoWallet> {
-        match filter {
-            Some(filter) => self.rest.get("/wallets", filter).await,
-            None => self.rest.get("/wallets", &Empty).await,
-        }
+    ) -> Result<Vec<CryptoWallet>> {
+        let wallets: OneOrMany<CryptoWallet> = match filter {
+            Some(filter) => self.rest.get("/wallets", filter).await?,
+            None => self.rest.get("/wallets", &Empty).await?,
+        };
+        Ok(wallets.into_vec())
     }
 
     /// The account's on-chain transfers.
@@ -772,8 +861,10 @@ impl TradingClient {
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
-    pub async fn get_crypto_transfers(&self) -> Result<CryptoTransfer> {
-        self.rest.get("/wallets/transfers", &Empty).await
+    pub async fn get_crypto_transfers(&self) -> Result<Vec<CryptoTransfer>> {
+        let transfers: OneOrMany<CryptoTransfer> =
+            self.rest.get("/wallets/transfers", &Empty).await?;
+        Ok(transfers.into_vec())
     }
 
     /// Fetches one on-chain transfer.
@@ -782,7 +873,10 @@ impl TradingClient {
     /// Propagates transport, API, and decoding failures.
     pub async fn get_crypto_transfer(&self, transfer_id: &str) -> Result<CryptoTransfer> {
         self.rest
-            .get(&format!("/wallets/transfers/{transfer_id}"), &Empty)
+            .get(
+                &format!("/wallets/transfers/{}", segment(transfer_id)?),
+                &Empty,
+            )
             .await
     }
 
@@ -790,8 +884,10 @@ impl TradingClient {
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
-    pub async fn get_whitelisted_addresses(&self) -> Result<WhitelistedAddress> {
-        self.rest.get("/wallets/whitelists", &Empty).await
+    pub async fn get_whitelisted_addresses(&self) -> Result<Vec<WhitelistedAddress>> {
+        let addresses: OneOrMany<WhitelistedAddress> =
+            self.rest.get("/wallets/whitelists", &Empty).await?;
+        Ok(addresses.into_vec())
     }
 
     /// Allowlists a withdrawal address.
@@ -814,7 +910,10 @@ impl TradingClient {
     /// Propagates transport and API failures.
     pub async fn delete_whitelisted_address(&self, address_id: &str) -> Result<()> {
         self.rest
-            .delete(&format!("/wallets/whitelists/{address_id}"), &Empty)
+            .delete(
+                &format!("/wallets/whitelists/{}", segment(address_id)?),
+                &Empty,
+            )
             .await
     }
 

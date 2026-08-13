@@ -11,7 +11,180 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-Nothing yet.
+A pre-release audit of the whole crate, and the fixes it produced. Nothing here
+has shipped, so none of it is a break from a published version — but the
+behaviour changes are worth reading before the first release rather than after.
+
+### Fixed — correctness
+
+- **Path segments are percent-encoded.** Every route interpolated caller-supplied
+  text into its path raw, so a crypto pair split into two segments and *no crypto
+  position could be read or closed*: `close_position("BTC/USD")` addressed
+  `/v2/positions/BTC/USD` and 404'd. Alpaca's reference asks for the encoded form
+  (`/v2/assets/BTC%2FUSDT`) and now gets it. The same defect let `..` in a symbol
+  reach a route the caller never named — `close_position("../positions")` issued
+  `DELETE /v2/positions`, the close-all route, and returned a normal-looking
+  success. A segment that is exactly `.`, `..`, or empty is now refused with
+  `Error::InvalidRequest`, because no encoding survives a URL parser's dot-segment
+  removal.
+- **A 504 no longer replays a `POST` or `PATCH`.** The retry policy was a set of
+  status codes and nothing else, so one gateway timeout on `submit_order` sent
+  four orders and then handed back `RetriesExhausted` — telling the caller none
+  had been placed. Retries are now gated on the method as well: idempotent
+  methods replay, `POST` and `PATCH` do not, and a 429 replays whatever the
+  method because the rate limiter refuses the request before anything acts on it.
+- **Credentials no longer follow a cross-host redirect.** The event-stream client
+  put the Alpaca key pair in `default_headers` and allowed ten redirects. reqwest
+  strips `Authorization` on a cross-host hop and nothing else, so the custom
+  `APCA-API-*` headers rode along. The trading and market-data streaming clients
+  now refuse redirects; only the broker document download follows them, where the
+  credentials are basic auth and therefore stripped.
+- **`RestConfig::timeout` is no longer applied to event streams.** It is a total
+  deadline on a whole request, and an event stream's body never finishes, so
+  setting it gave every subscription a fixed lifespan: events until the deadline,
+  then a timeout, forever.
+- **`data_timeout` is measured, not guessed.** Both websocket loops treated one
+  elapsed 5-second socket read as the staleness signal, so any `data_timeout`
+  above five seconds behaved as exactly five — an overnight stock stream
+  reconnected every five seconds against an endpoint that allows one connection
+  per account. There is now a real clock, reset by market data.
+- **Reconnect backoff resets on a successful connection.** The retry counter was
+  incremented immediately *after* a successful connect and only reset by an
+  inbound message, so a few clean server-side recycles pushed the delay to its
+  30-second ceiling. On the trade-update stream, whose own docs call a silent
+  account normal, it never reset at all.
+- **A `null` symbol no longer fails the whole market-data response.** Alpaca
+  answers `null` for a symbol it has nothing for, and that error propagated and
+  discarded every good symbol beside it. A request takes up to 100 symbols, so
+  one delisted ticker made the batch unusable. The crate's own shipped fixture
+  `fixtures/go/marketdata__test_snapshots__01.json` is exactly this shape.
+- **`CorporateActionsRequest` walks every page again.** Its `limit` defaulted to
+  1,000 — the endpoint's own page size — and `limit` caps the *total* across all
+  pages, so page one filled the cap and the walk ended there with the
+  `next_page_token` discarded and unrecoverable.
+- **`Calendar` round-trips.** `Serialize` was derived over a hand-written
+  `Deserialize`, so `to_string` → `from_str` failed and caching a calendar did
+  not work. It is now the deserializer's inverse.
+- **`AccountConfiguration` no longer PATCHes `null`.** Three optional fields had
+  no `skip_serializing_if`, so the only possible usage pattern —
+  read-modify-write, forced because every other field is non-`Option` — sent two
+  fields the current schema does not document and a `null` into an integer enum.
+- **`JitReport` can fail again.** `JitReportInline` accepted any JSON object and
+  produced an all-`None` value, so the untagged enum could never fail and a
+  settlement report came back silently empty. It now errors when no known report
+  key is present, and carries the three report types that had no field at all.
+- **The crypto funding list routes decode.** Three broker routes and their three
+  trading twins were typed as a single object against specs that say "an array
+  of…", so every call failed to decode. They now return `Vec` and accept both
+  shapes, since no payload has ever been observed — see the note below.
+- **`capped_delay` no longer panics.** `Duration::MAX` is reachable through the
+  public `RetryBackoff::Exponential { max }`, and the arithmetic produced a value
+  `Duration::from_secs_f64` rejects — a panic inside an async task.
+- **The blocking façade works from `spawn_blocking`.** Its guard tested for an
+  ambient runtime handle, which is present both inside an async fn (where
+  blocking panics) and inside `spawn_blocking` (where it is fine). The supported
+  bridge from an async program into the façade was the one path it rejected.
+- **`oto_take_profit` and `oto_stop_loss` replace rather than accumulate.**
+  Chaining both produced an `oto` order carrying two exit legs that `validate`
+  accepted.
+- **Empty `Symbols` is refused locally** instead of issuing `?symbols=`.
+- **`Error::Decode` carries the route and the payload** from the market-data
+  merge, where it used to carry the map key and an empty body.
+
+### Added
+
+- `TradingClient::get_all_orders`, which walks `/v2/orders` with the
+  `before_order_id` cursor. `get_orders` returns one page — 50 by default, 500 at
+  most — and said so nowhere, so an account with more history than that
+  reconciled against a silently truncated list.
+
+### Changed — API surface
+
+Decisions that become expensive after the first release, settled now.
+
+- **Response models are `#[non_exhaustive]`.** `CHANGELOG` stated this as a
+  guarantee; `trading/models.rs`, `broker/models.rs` and `data/models.rs` had it
+  on nothing. Alpaca adds fields without a version bump, and without the
+  attribute the crate cannot follow an *additive* upstream change without a major
+  release of its own. Several request-body components gain constructors as a
+  result: `Agreement::new`, `ManualACHRelationship::new`,
+  `PlaidACHRelationship::new`; `Contact`, `Identity`, `Disclosures`,
+  `UpdatableContact`, `UpdatableIdentity` and `BankAddress` are built from
+  `Default` and assigned by name. `W8BenDocument` is deliberately left exhaustive:
+  it transcribes an IRS form, and eleven required fields would make a constructor
+  a row of interchangeable strings.
+- **`Channel::ALL` is `&'static [Channel]`,** not `[Channel; 11]`. The array put
+  the variant count in a public type signature.
+- **`OrderRequest::stop_limit` takes a `StopLimit { stop, limit }`** instead of
+  two adjacent bare `Decimal`s in the reverse of the field order used everywhere
+  else. Transposing them compiled and produced a legal order Alpaca accepted, so
+  nothing errored anywhere — a protective sell stop-limit simply armed a dollar
+  late and rested above its trigger.
+- **`Error::Transport` carries `TransportError`,** an opaque newtype, rather than
+  `reqwest::Error`. reqwest is a `0.x` crate, so exposing it made every
+  `0.13 → 0.14` bump a breaking change here, for a dependency unrelated to
+  Alpaca. `is_timeout`, `is_connect`, `is_body`, `is_decode`, `status`, `url` and
+  `source` are forwarded.
+- **`Error::is_retryable` is now `Error::is_transient`,** and no longer reports a
+  timeout as worth retrying: a timed-out `POST` is indistinguishable from one the
+  server accepted. `ApiError::is_retryable` is now
+  `ApiError::is_retried_by_default`, which is what it measured — the default
+  status set, not the policy the client was built with.
+- **`EventStreamRequest::after_id` is now `from_id`**, and
+  `GetEventsRequest::after_ulid` is now `from_ulid`. "After" asserted an
+  exclusivity only some of these streams have: Alpaca documents `since_id` as
+  inclusive for corporate actions and exclusive for IPO events. Deduplicate on
+  the event id.
+- **`currency` is `SupportedCurrencies` everywhere,** rather than the enum on
+  some types and `String` on others — including on the one you read back after
+  setting it, where the mismatch turned a compile error into a string comparison
+  that quietly evaluated false.
+- **`strike_price_gte` / `strike_price_lte` are `Decimal`** on the market-data
+  request, matching the trading request and the model they filter. They were the
+  only `f64` money fields in the request surface.
+- **`GetAggregatePositionsRequest::firm_accounts` is `Option<bool>`.** It was a
+  comma-separated id list; Alpaca parses it as a boolean, so the report came back
+  silently missing the firm inventory.
+- **`Disclosures::employment_status` is `EmploymentStatus`**, and the market-data
+  exchange fields are `data::Exchange`. Both enums existed, were exported, and
+  were referenced by nothing.
+- **`trading::AllAccountsPositions` is removed** — a byte-for-byte duplicate of
+  the broker type, which is the one any route returns.
+- **`StreamConfig::min_backoff` and `max_backoff` are private,** set through
+  `StreamConfig::backoff`, which rejects a zero minimum. Zero looked like
+  "reconnect immediately" and was a hot loop.
+- **`CryptoDataStream::new` and `OptionDataStream::new` return `Result`,**
+  matching `StockDataStream::new`. A `wire_enum`'s `Unknown(String)` variant is
+  publicly constructible, so the feed name reached the endpoint URL unchecked.
+- **`AssetIdent::as_path_segment` returns `Result<String>`** and encodes. It was
+  `self.to_string()` — a no-op that no route called.
+- `Event` and `JitReportInline` are `#[non_exhaustive]`.
+
+### Documented
+
+- `Event` now states what the SSE transport cannot tell you: Alpaca's
+  "dropped 10000 messages" and "internal server error" notices arrive as comment
+  lines, which the parser discards before this crate sees them — and a stream
+  ending is indistinguishable from a stream failing, so `None` does not mean
+  "you have everything".
+- `types::decimal` states the real precision limit. Alpaca sends derived figures
+  — a `cost_basis` with thirty significant digits — beyond `Decimal`'s
+  twenty-eight, and those are rounded rather than refused, because refusing them
+  would make an already-captured response undecodable. The exactness promise
+  holds for what Alpaca *quotes*.
+- The fixture corpus is 227 files and 232KiB, not the 135 recorded in three
+  places. `RELEASING.md` names `all checks` rather than "the 9 required checks".
+
+### Known gaps
+
+- **The crypto funding routes are still unverified against a live payload.**
+  Nothing in this repository has ever decoded one — the route smoke tests mount a
+  404, and the live capture is recorded as `refused`. The `OneOrMany` decoder
+  accepts both documented shapes so that no guess can be wrong, but the field
+  models behind them remain spec-derived.
+- **No `Idempotency-Key`.** Not replaying a `POST` closes the defect this crate
+  introduced; it does not protect a caller who retries one themselves. Alpaca's
+  reference asks for the header on journals, and there is no way to send one yet.
 
 ## [0.1.0] — unreleased
 
@@ -118,7 +291,7 @@ And the ones a compiler will:
 ### Packaging
 
 The published tarball ships `src/`, `tests/` and `fixtures/` — the tests are
-shipped runnable, which is why the 135KB of captured payloads they read ship
+shipped runnable, which is why the 232KiB of captured payloads they read ship
 with them. `scripts/`, `RELEASING.md` and `.github/` are excluded: they cannot
 run, or have no meaning, outside a clone. `ROADMAP.md` was a working document
 for building the crate and has been removed; it is in the git history.

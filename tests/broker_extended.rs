@@ -23,6 +23,7 @@ use alpaca_sdk::broker::{
     IpoAvailability, JitReport, JitReportType, OAuthRequest, OptionsLevel,
     RequestOptionsApprovalRequest, RiskRating, SettlementAssetClass, TreasurySubtype,
 };
+use alpaca_sdk::types::SupportedCurrencies;
 use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use rust_decimal::Decimal;
 use serde_json::json;
@@ -221,8 +222,11 @@ async fn a_jit_report_decodes_as_a_download_link() {
 #[tokio::test]
 async fn a_jit_settlement_with_no_accounts_is_refused() {
     let server = MockServer::start().await;
-    let request =
-        CreateJitSettlementRequest::new(Vec::new(), SettlementAssetClass::UsEquity, "USD");
+    let request = CreateJitSettlementRequest::new(
+        Vec::new(),
+        SettlementAssetClass::UsEquity,
+        SupportedCurrencies::Usd,
+    );
     let error = client(&server)
         .create_jit_settlement(&request)
         .await
@@ -402,7 +406,7 @@ async fn a_recipient_bank_sends_only_what_was_set() {
         "12345678",
         "Example Bank",
         "GB",
-        "GBP",
+        SupportedCurrencies::Gbp,
         "1 Example Street",
         "London",
     )
@@ -520,4 +524,86 @@ async fn category_and_activity_types_cannot_both_be_set() {
         dated.validate().is_ok(),
         "an undocumented rule has not crept back in"
     );
+}
+
+// ------------------------------------------ routes nothing else exercised
+
+/// The withdrawal — money leaving the account — had only a negative test, which
+/// returned from `validate()` before any HTTP. Neither the `v1beta` version
+/// segment, nor the path, nor the body was asserted anywhere, so a dropped
+/// `.at_version("v1beta")` would have 404'd with the whole suite still green.
+#[tokio::test]
+async fn a_funding_wallet_withdrawal_posts_to_the_v1beta_route_with_the_amount_as_a_string() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1beta/accounts/{ACCOUNT}/funding_wallet/withdrawal"
+        )))
+        // Money goes out as a string, like every other amount this crate sends.
+        .and(body_json(json!({
+            "usd_amount": "250.75",
+            "desired_currency": "GBP"
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "b0b6dd9d-8b9b-48a9-ba46-b9d54906e415",
+            "status": "PENDING"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let request = CreateWithdrawalRequest::new(Decimal::new(25_075, 2), "GBP");
+    client(&server)
+        .create_funding_wallet_withdrawal(ACCOUNT, &request)
+        .await
+        .unwrap();
+}
+
+/// The only route method on either client with no test at all — not even in the
+/// route smoke test that exists for exactly this. It is also a PATCH of account
+/// configuration, so it inherits the omit-rather-than-null fix.
+#[tokio::test]
+async fn updating_an_accounts_trade_configuration_patches_the_right_route() {
+    let configuration = json!({
+        "no_shorting": false,
+        "suspend_trade": false,
+        "fractional_trading": true,
+        "max_margin_multiplier": "4",
+        "trade_confirm_email": "all",
+        "ptp_no_exception_entry": false,
+        "max_options_trading_level": 1
+    });
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/v1/trading/accounts/{ACCOUNT}/account/configurations"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(configuration.clone()))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let fetched = client(&server)
+        .get_trade_configuration_for_account(ACCOUNT)
+        .await
+        .unwrap();
+
+    let server = MockServer::start().await;
+    Mock::given(method("PATCH"))
+        .and(path(format!(
+            "/v1/trading/accounts/{ACCOUNT}/account/configurations"
+        )))
+        // Round-tripped unchanged, with no `null`s invented for the three
+        // fields the current response shape omits.
+        .and(body_json(configuration.clone()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(configuration))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    client(&server)
+        .update_trade_configuration_for_account(ACCOUNT, &fetched)
+        .await
+        .unwrap();
 }

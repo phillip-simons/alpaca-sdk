@@ -9,6 +9,7 @@
 
 #![cfg(feature = "data")]
 
+use alpaca_sdk::data::Exchange;
 use alpaca_sdk::data::{
     Codes, DataFeed, ForexDataClient, ForexLatestRatesRequest, ForexRatesRequest, LogoClient,
     LogoRequest, OptionHistoricalDataClient, SingleSymbolRequest, StockAuctionsRequest,
@@ -76,7 +77,7 @@ async fn auctions_deserialize_from_the_go_sdk_payload() {
     // condition code rather than the list a trade carries.
     let close = &apple[0].closing[0];
     assert_eq!(close.condition, "M");
-    assert_eq!(close.exchange, "P");
+    assert_eq!(close.exchange, Exchange::P);
     assert_eq!(close.price, 142.4);
     assert_eq!(close.size, Some(100.0));
     assert!(!apple[0].opening.is_empty());

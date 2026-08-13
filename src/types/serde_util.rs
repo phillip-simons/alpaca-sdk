@@ -31,6 +31,45 @@ where
     }
 }
 
+/// A response that is a bare object when there is one of something and an array
+/// when there are several.
+///
+/// The crypto funding routes are documented this way and only this way: the
+/// wallets route's own description is *"A single wallet object if an asset is
+/// specified or an array of wallet objects if no asset is specified"*, while the
+/// transfers and whitelists routes say *"An array of…"* — yet all three
+/// `$ref` the singular schema, so the specs cannot be read literally either.
+///
+/// Nothing in this repository has ever decoded one: the route smoke tests mount
+/// a 404, and the live capture is recorded as `refused`. Rather than guess
+/// between the two shapes and be wrong in a way that makes the route unusable,
+/// this accepts both and always hands the caller a `Vec`.
+///
+/// Only the trading and broker crypto-funding routes decode one, so this is
+/// gated to that surface — without the gate it is dead code in a
+/// `--features data` build, which is the kind of thing `just features` exists
+/// to catch.
+#[cfg(feature = "trading")]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum OneOrMany<T> {
+    /// The array form.
+    Many(Vec<T>),
+    /// The single-object form, which becomes a one-element `Vec`.
+    One(T),
+}
+
+#[cfg(feature = "trading")]
+impl<T> OneOrMany<T> {
+    /// Both shapes, as the sequence the caller asked for.
+    pub(crate) fn into_vec(self) -> Vec<T> {
+        match self {
+            Self::Many(values) => values,
+            Self::One(value) => vec![value],
+        }
+    }
+}
+
 /// Serde codec for integers Alpaca sends inconsistently as numbers or strings.
 ///
 /// The trading account endpoint returns `"options_approved_level": "1"` but

@@ -32,6 +32,10 @@ enum Script {
     RejectAuth,
     /// Accept auth, then reject the subscription.
     RejectSubscription,
+    /// Complete the whole handshake, then drop without ever sending market
+    /// data — a healthy session that ends, which is what a server-side recycle
+    /// looks like.
+    DropAfterHandshake,
 }
 
 /// Everything the server saw a client send, across all connections.
@@ -108,6 +112,7 @@ async fn serve(script: Script) -> (String, Received, Arc<Mutex<u32>>) {
                         // Connected, subscribed, and silent.
                         tokio::time::sleep(Duration::from_secs(30)).await;
                     }
+                    Script::DropAfterHandshake => drop(ws),
                     Script::Send(ref batches) | Script::SendThenDrop(ref batches) => {
                         let drop_after = matches!(script, Script::SendThenDrop(_));
                         for batch in batches {
@@ -487,4 +492,94 @@ async fn the_stock_stream_rejects_a_feed_without_a_live_socket() {
     );
     assert!(StockDataStream::new(credentials(), alpaca_sdk::data::DataFeed::Iex).is_ok());
     assert!(StockDataStream::new(credentials(), alpaca_sdk::data::DataFeed::Sip).is_ok());
+}
+
+// ------------------------------------------------- the staleness clock itself
+//
+// Both `data_timeout` tests above use 300ms, which is *below* the 5s internal
+// poll interval — so both took the right branch by accident, and neither could
+// tell a real clock from one that fired on every poll. These two use a timeout
+// above the poll interval, which is the only place the difference shows.
+
+/// A timeout longer than the internal poll interval must be honoured as written.
+/// Before the clock existed, a 5s poll elapsing *was* the staleness signal, so
+/// any timeout above 5s behaved as exactly 5s: an overnight stock stream
+/// reconnected every five seconds against an endpoint allowing one connection
+/// per account.
+#[tokio::test]
+async fn a_timeout_longer_than_the_poll_interval_is_not_fired_early() {
+    let (endpoint, _, connections) = serve(Script::GoMute).await;
+
+    let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
+    stream.subscribe_trades(["AAPL"]);
+    // Well above RECEIVE_POLL (5s).
+    stream
+        .data_timeout(Duration::from_secs(30))
+        .expect("a positive timeout");
+
+    let mut messages = Box::pin(stream.run());
+    // Long enough for six poll windows to elapse, nowhere near the 30s timeout.
+    let _ = tokio::time::timeout(Duration::from_secs(12), messages.next()).await;
+
+    assert_eq!(
+        *connections.lock().await,
+        1,
+        "a 30s timeout must not reconnect within 12s; the clock is being read \
+         from one poll window rather than from elapsed time"
+    );
+}
+
+/// And it does still fire once the timeout genuinely elapses.
+#[tokio::test]
+async fn a_timeout_longer_than_the_poll_interval_still_fires_eventually() {
+    let (endpoint, _, connections) = serve(Script::GoMute).await;
+
+    let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
+    stream.subscribe_trades(["AAPL"]);
+    stream
+        .data_timeout(Duration::from_secs(7))
+        .expect("a positive timeout");
+
+    let mut messages = Box::pin(stream.run());
+    let _ = tokio::time::timeout(Duration::from_secs(20), messages.next()).await;
+
+    assert!(
+        *connections.lock().await >= 2,
+        "a 7s timeout should have reconnected within 20s, saw {} connection(s)",
+        *connections.lock().await
+    );
+}
+
+/// A connection that came up is not a failure, so it must not advance the
+/// backoff curve.
+///
+/// The old loop incremented the retry counter immediately after a *successful*
+/// connect and only reset it on a market data message. A session that connected,
+/// handshook and then ended — a server-side recycle, which is routine — pushed
+/// the curve out every time: 1s, 2s, 4s, 8s, 16s, then the 30s ceiling, after
+/// six healthy sessions. Overnight on a quiet stream that meant sitting at the
+/// maximum by the opening bell and missing the first half-minute of it.
+///
+/// The default backoff is 1s jittered to [0.5s, 1s), so a curve that stays put
+/// reconnects at least a dozen times in twelve seconds, while one that doubles
+/// gets through about five.
+#[tokio::test]
+async fn a_successful_connection_does_not_advance_the_backoff_curve() {
+    let (endpoint, _, connections) = serve(Script::DropAfterHandshake).await;
+
+    let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
+    stream.subscribe_trades(["AAPL"]);
+
+    let mut messages = Box::pin(stream.run());
+    let _ = tokio::time::timeout(Duration::from_secs(12), async {
+        while messages.next().await.is_some() {}
+    })
+    .await;
+
+    let seen = *connections.lock().await;
+    assert!(
+        seen >= 8,
+        "backoff grew across successful connections: only {seen} reconnects in 12s, \
+         expected the curve to stay at its minimum"
+    );
 }

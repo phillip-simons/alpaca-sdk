@@ -59,7 +59,7 @@ git add Cargo.toml Cargo.lock CHANGELOG.md
 git commit -m "release 0.1.0"
 git push -u origin release-0.1.0
 gh pr create --fill
-gh pr merge --rebase          # after the 9 required checks go green
+gh pr merge --rebase          # after `all checks` goes green
 
 # 4. Tag the merged commit on main. Tags are not covered by branch
 #    protection, and this is what triggers the release workflow. The tag

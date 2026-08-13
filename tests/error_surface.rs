@@ -103,7 +103,10 @@ async fn a_caller_can_build_the_same_error_the_transport_would() {
 
     assert_eq!(built, received);
     assert_eq!(built.to_string(), received.to_string());
-    assert_eq!(built.is_retryable(), received.is_retryable());
+    assert_eq!(
+        built.is_retried_by_default(),
+        received.is_retried_by_default()
+    );
 
     // And it drops into `Error` where a caller's own code expects one.
     assert_eq!(Error::Api(built).status(), Some(403));
@@ -118,7 +121,7 @@ fn a_built_error_degrades_on_a_non_json_body_too() {
     assert_eq!(error.code, None);
     assert_eq!(error.message, "<html>bad gateway</html>");
     assert_eq!(error.body, "<html>bad gateway</html>");
-    assert!(!error.is_retryable());
+    assert!(!error.is_retried_by_default());
 }
 
 // ------------------------------------------------------------- classifiers
@@ -172,26 +175,26 @@ async fn retries_exhausted_reports_the_last_status_and_the_count() {
 }
 
 #[tokio::test]
-async fn is_retryable_agrees_with_the_default_policy() {
+async fn is_transient_agrees_with_the_default_policy() {
     for status in [429u16, 504] {
         let server = failing(status, json!({"message": "later"})).await;
         assert!(
-            error_from(&server).await.is_retryable(),
-            "{status} should be retryable"
+            error_from(&server).await.is_transient(),
+            "{status} should be transient"
         );
     }
 
     for status in [400u16, 401, 403, 404, 500] {
         let server = failing(status, json!({"message": "no"})).await;
         assert!(
-            !error_from(&server).await.is_retryable(),
-            "{status} should not be retryable"
+            !error_from(&server).await.is_transient(),
+            "{status} should not be transient"
         );
     }
 
     // Nothing the crate rejected locally is worth retrying.
-    assert!(!Error::InvalidRequest("no".to_owned()).is_retryable());
-    assert!(!Error::Stream("dropped".to_owned()).is_retryable());
+    assert!(!Error::InvalidRequest("no".to_owned()).is_transient());
+    assert!(!Error::Stream("dropped".to_owned()).is_transient());
 }
 
 // ----------------------------------------------------------------- decode
@@ -270,8 +273,8 @@ async fn a_connection_failure_is_a_transport_error_and_is_retryable() {
     assert!(matches!(error, Error::Transport(_)), "{error:?}");
     assert_eq!(error.status(), None);
     assert!(
-        error.is_retryable(),
-        "a refused connection is worth retrying"
+        error.is_transient(),
+        "a refused connection is worth retrying: nothing was sent"
     );
     assert!(error.source().is_some(), "the reqwest error is the source");
 }

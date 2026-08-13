@@ -109,7 +109,7 @@ fn only_the_two_feeds_that_carry_a_live_stock_stream_are_accepted() {
 
 #[test]
 fn a_crypto_stream_carries_orderbooks_and_no_trading_statuses() {
-    let mut stream = CryptoDataStream::new(credentials(), CryptoFeed::Us);
+    let mut stream = CryptoDataStream::new(credentials(), CryptoFeed::Us).unwrap();
 
     stream.subscribe_trades(["BTC/USD"]);
     stream.subscribe_quotes(["BTC/USD"]);
@@ -137,7 +137,7 @@ fn a_crypto_stream_carries_orderbooks_and_no_trading_statuses() {
 
 #[test]
 fn an_option_stream_carries_trades_and_quotes_only() {
-    let mut stream = OptionDataStream::new(credentials(), OptionsFeed::Opra);
+    let mut stream = OptionDataStream::new(credentials(), OptionsFeed::Opra).unwrap();
 
     stream.subscribe_trades(["AAPL240119C00150000"]);
     stream.subscribe_quotes(["AAPL240119C00150000"]);

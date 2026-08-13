@@ -6,6 +6,8 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::error::Result;
+
 /// An asset identified by ticker symbol or by Alpaca's UUID.
 ///
 /// Several endpoints accept either form in the same path segment. The two cases
@@ -30,10 +32,27 @@ pub enum AssetIdent {
 }
 
 impl AssetIdent {
-    /// The identifier as it appears in a request path.
-    #[must_use]
-    pub fn as_path_segment(&self) -> String {
-        self.to_string()
+    /// The identifier percent-encoded as a single request path segment.
+    ///
+    /// Not the same string as [`Display`](fmt::Display), which stays
+    /// human-readable: a crypto pair displays as `BTC/USD` and encodes as
+    /// `BTC%2FUSD`, which is the form
+    /// [Alpaca's reference asks for](https://docs.alpaca.markets/us/reference/get-v2-assets-symbol_or_asset_id)
+    /// and the only form that stays one segment.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] for a symbol that cannot be a
+    /// path segment at all — the empty string, `.`, or `..`. Those three are
+    /// refused rather than encoded because a URL parser removes a dot segment
+    /// whatever spelling it arrives in, so there is no encoding that keeps one
+    /// as a literal segment.
+    pub fn as_path_segment(&self) -> Result<String> {
+        match self {
+            // A UUID needs no encoding and cannot be a dot segment, so it skips
+            // the check rather than round-tripping through a String.
+            Self::Id(id) => Ok(id.to_string()),
+            Self::Symbol(symbol) => crate::types::path::segment(symbol),
+        }
     }
 
     /// The UUID, if this identifier is one.
@@ -132,8 +151,31 @@ mod tests {
 
     #[test]
     fn path_segment_renders_both_forms() {
-        assert_eq!(AssetIdent::from("AAPL").as_path_segment(), "AAPL");
-        assert_eq!(AssetIdent::from(UUID_STR).as_path_segment(), UUID_STR);
+        assert_eq!(AssetIdent::from("AAPL").as_path_segment().unwrap(), "AAPL");
+        assert_eq!(
+            AssetIdent::from(UUID_STR).as_path_segment().unwrap(),
+            UUID_STR
+        );
+    }
+
+    /// The whole point of the method: `Display` stays readable and the path form
+    /// is encoded, so a crypto pair addresses one segment rather than two.
+    #[test]
+    fn a_crypto_pair_displays_readably_and_encodes_for_the_path() {
+        let ident = AssetIdent::from("BTC/USD");
+
+        assert_eq!(ident.to_string(), "BTC/USD");
+        assert_eq!(ident.as_path_segment().unwrap(), "BTC%2FUSD");
+    }
+
+    #[test]
+    fn a_dot_segment_symbol_is_refused_rather_than_sent() {
+        assert!(
+            AssetIdent::Symbol("..".to_owned())
+                .as_path_segment()
+                .is_err()
+        );
+        assert!(AssetIdent::Symbol(String::new()).as_path_segment().is_err());
     }
 
     #[test]
