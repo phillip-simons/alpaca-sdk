@@ -26,7 +26,7 @@ jobs:
     name: verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # `just ci` builds against the MSRV as well as stable, via `cargo
       # +1.88.0`. Installed first so that stable, installed second, stays the
       # default — otherwise every other recipe would quietly run on 1.88 too.
@@ -72,7 +72,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
