@@ -88,3 +88,33 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --all-features --no-deps
+
+  coverage:
+    name: coverage
+    # Push-only. Nothing gates on the number — it is a map of what no test has
+    # ever run, not a target — so measuring it on every pull request would spend
+    # an instrumented test run on a report no one is blocked by. `on.push` here
+    # is `main` alone.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Measure, and write it to the run summary
+        run: |
+          set -euo pipefail
+          {
+            echo '### Coverage'
+            echo
+            echo 'Where no test has ever run. Not a threshold — see `just cov`.'
+            echo
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cargo llvm-cov --all-features --summary-only | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

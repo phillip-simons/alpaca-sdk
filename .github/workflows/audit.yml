@@ -1,0 +1,25 @@
+# Advisory and licence audit, on a schedule rather than on a commit.
+#
+# `cargo-deny` already runs in CI, but only when something is pushed. A new
+# RUSTSEC advisory against a dependency of an already-published version is not
+# a commit — nothing here changes, and the crate becomes vulnerable anyway. This
+# job is what notices in that case.
+name: Audit
+
+on:
+  schedule:
+    # Mondays, 07:00 UTC. Scheduled workflows only ever run from the default
+    # branch, which is what we want: this asks about what is published.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: EmbarkStudios/cargo-deny-action@v2
