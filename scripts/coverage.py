@@ -125,12 +125,17 @@ VOID_CALL = re.compile(
     r"send_void\s*\(\s*Method::(GET|POST|PUT|PATCH|DELETE)\s*,\s*&?\s*(?:format!\s*\(\s*)?\"([^\"]+)\"",
     re.S,
 )
+# `self.events(EventVersion::V2, "/events/trades", ..)` and its timestamp-
+# windowed sibling `self.event_stream(EventVersion::V2Beta1, "/events/…", ..)`.
 EVENT_CALL = re.compile(
-    r"\.events\s*\(\s*EventVersion::(V\d)\s*,\s*\"([^\"]+)\"",
+    r"\.event(?:s|_stream)\s*\(\s*EventVersion::(\w+)\s*,\s*\"([^\"]+)\"",
     re.S,
 )
-# The document download builds its URL by hand.
-RAW_GET = re.compile(r"let path = format!\(\s*\"([^\"]+)\"", re.S)
+# The routes that build their own URL: the document download, the logo bytes,
+# the market data paths that interpolate a feed or a symbol, and the streams
+# whose version segment is not the client's. All are GETs, and all name the
+# relative path `path` so this can find it.
+RAW_GET = re.compile(r"let path = (?:format!\s*\(\s*)?\"([^\"]+)\"", re.S)
 # Market data goes through the pagination helper rather than calling the
 # transport directly: `MarketDataRequest::paged("/stocks/bars")`. All are GETs.
 MARKET_DATA = re.compile(

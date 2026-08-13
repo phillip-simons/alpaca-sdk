@@ -20,12 +20,12 @@ exclude = [".github/"]
 default = ["trading", "data", "rustls-tls"]
 
 # API surfaces.
-trading = ["_ws"]
-data = ["_ws", "dep:rmp-serde", "dep:rmpv"]
+trading = ["_ws", "_sse"]
+data = ["_ws", "_sse", "dep:rmp-serde", "dep:rmpv"]
 # The broker API acts on behalf of trading accounts and reuses their models
 # (orders, positions, watchlists), exactly as alpaca-py's broker module imports
 # from alpaca.trading.
-broker = ["trading", "dep:eventsource-stream"]
+broker = ["trading", "_sse"]
 
 # Ergonomics.
 blocking = ["tokio/rt-multi-thread"]
@@ -37,6 +37,9 @@ native-tls = ["reqwest/native-tls", "tokio-tungstenite?/native-tls"]
 
 # Internal: websocket transport, shared by the trading and data streams.
 _ws = ["dep:tokio-tungstenite"]
+# Internal: server-sent-event transport. Not broker-only — the trading API has
+# an activity stream and the market data API a corporate-actions stream.
+_sse = ["dep:eventsource-stream"]
 
 [dependencies]
 async-stream = "0.3.6"

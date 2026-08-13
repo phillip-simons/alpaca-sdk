@@ -15,6 +15,7 @@ use crate::auth::Credentials;
 use crate::config::BaseUrl;
 use crate::data::corporate_actions::CorporateActions;
 use crate::data::enums::CryptoFeed;
+use crate::data::events::CorporateActionEventsRequest;
 use crate::data::meta::{Codes, Tape, TapeQuery, TickType};
 use crate::data::models::{
     AuctionSet, Bar, BarSet, DailyAuctions, ForexRate, ForexRateSet, MostActives, Movers, News,
@@ -1037,10 +1038,16 @@ impl ScreenerClient {
     }
 }
 
-/// Corporate actions.
+/// Corporate actions, polled or streamed.
 #[derive(Debug, Clone)]
 pub struct CorporateActionsClient {
     rest: RestClient,
+    /// A second HTTP client, for the event stream: its body is read
+    /// incrementally rather than decoded whole.
+    raw: reqwest::Client,
+    /// The endpoint, kept because the stream's version segment is `v1beta1`
+    /// while the polled route's is `v1`.
+    base_url: String,
 }
 
 impl CorporateActionsClient {
@@ -1061,6 +1068,8 @@ impl CorporateActionsClient {
     /// Returns an error if the credentials cannot be encoded as headers.
     pub fn with_config(credentials: &Credentials, config: RestConfig) -> Result<Self> {
         Ok(Self {
+            raw: crate::sse::streaming_client(credentials, &config)?,
+            base_url: config.base_url.clone(),
             rest: RestClient::new(credentials, config)?,
         })
     }
@@ -1091,5 +1100,32 @@ impl CorporateActionsClient {
             body: String::new(),
             source,
         })
+    }
+
+    /// Streams every corporate-action mutation as it happens.
+    ///
+    /// The push counterpart to
+    /// [`get_corporate_actions`](Self::get_corporate_actions), covering
+    /// `insert`, `update` and `delete` across all fifteen action types. Each
+    /// event's payload is JSON for the caller to deserialize — the envelope's
+    /// `event_type` selects which of fifteen shapes `ca` takes, and no captured
+    /// payload exists to model any of them from.
+    ///
+    /// On its own version segment, `v1beta1`, rather than the `v1` the polled
+    /// route uses.
+    ///
+    /// # Errors
+    /// Propagates transport failures and any non-success status the server
+    /// answers the subscription with.
+    pub async fn get_corporate_action_events(
+        &self,
+        filter: Option<&CorporateActionEventsRequest>,
+    ) -> Result<impl futures_util::Stream<Item = Result<crate::sse::Event>> + use<>> {
+        let path = "/events/corporate-actions";
+        let url = format!("{}/v1beta1{path}", self.base_url.trim_end_matches('/'));
+        let query = filter
+            .map(CorporateActionEventsRequest::query)
+            .unwrap_or_default();
+        crate::sse::subscribe(&self.raw, &url, path, &query).await
     }
 }

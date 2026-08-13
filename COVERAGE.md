@@ -12,7 +12,7 @@ see ROADMAP.md.
 decision, recorded with its reason in `SKIP` in the script — a route we
 have chosen against must not keep reading as a gap.
 
-## trading — 30/57 (52%), 1 deliberately skipped
+## trading — 32/57 (56%), 1 deliberately skipped
 
 ### Not implemented
 
@@ -31,13 +31,9 @@ have chosen against must not keep reading as a gap.
 
 **account**
 - `GET   ` `/v2/account/activities/{activity_type}`
-- `GET   ` `/v2/account/portfolio/history`
 
 **calendar**
 - `GET   ` `/v3/calendar/{market}`
-
-**events**
-- `GET   ` `/v2beta1/events/activities`
 
 **locates**
 - `GET   ` `/v1/locates/quotes`
@@ -64,14 +60,13 @@ have chosen against must not keep reading as a gap.
 - `POST  ` `/v2/wallets/whitelists`
 - `DELETE` `/v2/wallets/whitelists/{whitelisted_address_id}`
 
-## data — 41/42 (97%)
+## data — 42/42 (100%)
 
 ### Not implemented
 
-**events**
-- `GET   ` `/v1beta1/events/corporate-actions`
+Nothing.
 
-## broker — 75/154 (48%), 1 deliberately skipped
+## broker — 80/154 (51%), 1 deliberately skipped
 
 ### Not implemented
 
@@ -117,7 +112,6 @@ have chosen against must not keep reading as a gap.
 - `GET   ` `/v1beta/accounts/{account_id}/funding_wallet/transfers`
 - `GET   ` `/v1beta/accounts/{account_id}/funding_wallet/transfers/{transfer_id}`
 - `POST  ` `/v1beta/accounts/{account_id}/funding_wallet/withdrawal`
-- `GET   ` `/v2beta1/accounts/{account_id}/events/activities/{event_id}`
 
 **assets**
 - `GET   ` `/v1/assets/entry-requirements`
@@ -132,12 +126,6 @@ have chosen against must not keep reading as a gap.
 
 **demo**
 - `POST  ` `/v1beta/demo/banking/funding`
-
-**events**
-- `GET   ` `/v2/events/admin-actions`
-- `GET   ` `/v2/events/ipos`
-- `GET   ` `/v2/events/system`
-- `GET   ` `/v2beta1/events/activities`
 
 **fpsl**
 - `GET   ` `/v1/fpsl/analytics/{account_id}/loans`

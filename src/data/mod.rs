@@ -2,6 +2,7 @@
 
 mod corporate_actions;
 mod enums;
+mod events;
 mod historical;
 pub mod live;
 mod meta;
@@ -12,6 +13,7 @@ mod timeframe;
 
 pub use corporate_actions::*;
 pub use enums::*;
+pub use events::{CorporateActionEventType, CorporateActionEventsRequest, CorporateActionRegion};
 pub use historical::{
     CorporateActionsClient, CryptoHistoricalDataClient, ForexDataClient, LogoClient, NewsClient,
     OptionHistoricalDataClient, ScreenerClient, StockHistoricalDataClient,

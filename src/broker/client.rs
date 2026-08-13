@@ -6,8 +6,7 @@
 //! with HTTP basic auth rather than the `APCA-*` headers, and it acts *on behalf
 //! of* an account, so most routes carry an account id in the path.
 
-use eventsource_stream::Eventsource as _;
-use futures_util::{Stream, StreamExt as _};
+use futures_util::Stream;
 use reqwest::Method;
 use uuid::Uuid;
 
@@ -31,6 +30,7 @@ use crate::broker::requests::{
 use crate::config::BaseUrl;
 use crate::error::Result;
 use crate::rest::{Empty, RestClient, RestConfig};
+use crate::sse::EventStreamRequest;
 use crate::trading::{Activity, Position, Watchlist};
 
 /// The most documents alpaca-py will send in one upload.
@@ -122,20 +122,7 @@ impl BrokerClient {
 
     /// Builds the client used by the document download and the event streams.
     fn raw_client(credentials: &Credentials, config: &RestConfig) -> Result<reqwest::Client> {
-        let mut headers = reqwest::header::HeaderMap::new();
-        credentials.apply(&mut headers)?;
-        headers.insert(
-            reqwest::header::USER_AGENT,
-            reqwest::header::HeaderValue::from_static(crate::config::user_agent()),
-        );
-
-        let mut builder = reqwest::Client::builder()
-            .default_headers(headers)
-            .redirect(reqwest::redirect::Policy::limited(10));
-        if let Some(timeout) = config.timeout {
-            builder = builder.timeout(timeout);
-        }
-        Ok(builder.build()?)
+        crate::sse::streaming_client(credentials, config)
     }
 
     /// The underlying transport, for routes this client does not wrap.
@@ -536,63 +523,154 @@ impl BrokerClient {
         self.events(EventVersion::V1, "/events/nta", filter).await
     }
 
-    /// Opens one of the five event streams.
+    /// Streams account activity events as they happen.
+    ///
+    /// A `v2beta1` stream, and the account-activity counterpart to the polled
+    /// [`get_account_activities`](Self::get_account_activities). Not in
+    /// alpaca-py.
+    ///
+    /// Takes [`EventStreamRequest`] rather than [`GetEventsRequest`]: this
+    /// stream bounds its window by timestamp where the older ones use a date.
+    ///
+    /// # Errors
+    /// Propagates transport failures and any non-success status the server
+    /// answers the subscription with.
+    pub async fn get_activity_events(
+        &self,
+        filter: Option<&EventStreamRequest>,
+    ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
+        self.event_stream(EventVersion::V2Beta1, "/events/activities", filter)
+            .await
+    }
+
+    /// Streams admin actions as they happen.
+    ///
+    /// Not in alpaca-py.
+    ///
+    /// # Errors
+    /// Propagates transport failures and any non-success status the server
+    /// answers the subscription with.
+    pub async fn get_admin_action_events(
+        &self,
+        filter: Option<&EventStreamRequest>,
+    ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
+        self.event_stream(EventVersion::V2, "/events/admin-actions", filter)
+            .await
+    }
+
+    /// Streams IPO events as they happen.
+    ///
+    /// Not in alpaca-py.
+    ///
+    /// # Errors
+    /// Propagates transport failures and any non-success status the server
+    /// answers the subscription with.
+    pub async fn get_ipo_events(
+        &self,
+        filter: Option<&EventStreamRequest>,
+    ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
+        self.event_stream(EventVersion::V2, "/events/ipos", filter)
+            .await
+    }
+
+    /// Streams system events as they happen.
+    ///
+    /// Not in alpaca-py.
+    ///
+    /// # Errors
+    /// Propagates transport failures and any non-success status the server
+    /// answers the subscription with.
+    pub async fn get_system_events(
+        &self,
+        filter: Option<&EventStreamRequest>,
+    ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
+        self.event_stream(EventVersion::V2, "/events/system", filter)
+            .await
+    }
+
+    /// Fetches one account activity event by its ULID.
+    ///
+    /// The way to re-read an event whose id came off
+    /// [`get_activity_events`](Self::get_activity_events), rather than
+    /// replaying the stream from a cursor.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_account_activity_event(
+        &self,
+        account_id: Uuid,
+        event_id: &str,
+    ) -> Result<serde_json::Value> {
+        // Untyped for the same reason the streams are: no captured payload
+        // exists for this route in any SDK, and inventing a struct from the
+        // spec alone would claim more than is known.
+        let path = format!("/accounts/{account_id}/events/activities/{event_id}");
+        // Its own version segment, like the stream it pairs with, so it cannot
+        // go through the client's `v1`-configured transport.
+        let url = format!(
+            "{}/v2beta1{path}",
+            self.rest.config().base_url.trim_end_matches('/'),
+        );
+        let response = self
+            .raw
+            .get(&url)
+            .send()
+            .await
+            .map_err(crate::Error::Transport)?;
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        if !status.is_success() {
+            return Err(crate::Error::Api(crate::error::ApiError::from_body(
+                status.as_u16(),
+                &path,
+                body,
+            )));
+        }
+        serde_json::from_str(&body).map_err(|source| crate::Error::Decode { path, body, source })
+    }
+
+    /// Opens one of the broker's event streams.
     ///
     /// The version comes from the stream rather than from the client's
-    /// `api_version`: Alpaca versions these endpoints individually, so two of
-    /// the five are v1 and three are v2.
-    ///
-    /// The subscription itself is awaited so a rejected one — bad credentials, a
-    /// filter the server dislikes — surfaces as an error here rather than as a
-    /// single item on an otherwise empty stream.
+    /// `api_version`: Alpaca versions these endpoints individually, so of the
+    /// nine, two are v1, six are v2 and one is `v2beta1`.
     async fn events(
         &self,
         version: EventVersion,
         path: &str,
         filter: Option<&GetEventsRequest>,
     ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
-        let config = self.rest.config();
         let url = format!(
             "{}/{}{path}",
-            config.base_url.trim_end_matches('/'),
+            self.rest.config().base_url.trim_end_matches('/'),
             version.segment()
         );
+        // Rendered per version: the cursor parameter is named differently on
+        // each, and means something different under the v1 name.
+        let query = filter
+            .map(|filter| version.query(filter))
+            .unwrap_or_default();
+        crate::sse::subscribe(&self.raw, &url, path, &query).await
+    }
 
-        let mut request = self
-            .raw
-            .get(&url)
-            // alpaca-py's _get_sse_headers, verbatim.
-            .header(reqwest::header::CONNECTION, "keep-alive")
-            .header(reqwest::header::CACHE_CONTROL, "no-cache")
-            .header(reqwest::header::CONTENT_TYPE, "text/event-stream")
-            .header(reqwest::header::ACCEPT, "text/event-stream");
-        if let Some(filter) = filter {
-            // Rendered per version: the cursor parameter is named differently
-            // on each, and means something different under the v1 name.
-            request = request.query(&version.query(filter));
-        }
-
-        let response = request.send().await.map_err(crate::Error::Transport)?;
-        let status = response.status();
-        if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
-            return Err(crate::Error::Api(crate::error::ApiError::from_body(
-                status.as_u16(),
-                path,
-                body,
-            )));
-        }
-
-        // Nothing is retried past this point: a stream that dies mid-flight has
-        // already delivered events, and replaying it would repeat them. alpaca-py
-        // does not reconnect either.
-        Ok(response
-            .bytes_stream()
-            .eventsource()
-            .map(|event| match event {
-                Ok(event) => Ok(BrokerEvent::from(event)),
-                Err(error) => Err(crate::broker::events::stream_error(&error)),
-            }))
+    /// Opens one of the timestamp-bounded event streams.
+    ///
+    /// The four streams the reference sweep found take an RFC-3339 window where
+    /// the five alpaca-py knows about take a date, so they take a different
+    /// filter type rather than sharing one that would be wrong half the time.
+    async fn event_stream(
+        &self,
+        version: EventVersion,
+        path: &str,
+        filter: Option<&EventStreamRequest>,
+    ) -> Result<impl Stream<Item = Result<BrokerEvent>> + use<>> {
+        let url = format!(
+            "{}/{}{path}",
+            self.rest.config().base_url.trim_end_matches('/'),
+            version.segment()
+        );
+        let query = filter.map(EventStreamRequest::query).unwrap_or_default();
+        crate::sse::subscribe(&self.raw, &url, path, &query).await
     }
 
     // ------------------------------------------------- account activities

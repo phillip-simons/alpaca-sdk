@@ -1,11 +1,13 @@
 //! The broker API's [server-sent event streams](https://docs.alpaca.markets/us/docs/sse-events).
 //!
-//! Five endpoints push events as they happen: account status changes, trades,
-//! journal status, transfer status, and non-trading activity. They are plain
-//! HTTP streams of `text/event-stream`, not websockets, so none of the
-//! [`crate::data::live`] machinery applies — there is no subscribe message, no
-//! authentication handshake, and no reconnect state machine. alpaca-py iterates
-//! the stream until it ends and so does this.
+//! Nine endpoints push events as they happen: account status changes, trades,
+//! journal status, funding status, non-trading activity, account activities,
+//! admin actions, IPO events and system events. alpaca-py knows about five of
+//! them, and called retired routes for three of those.
+//!
+//! The transport itself is [`crate::sse`], which the trading and market data
+//! streams share. What lives here is what is specific to the broker's streams:
+//! the filter type, and the fact that Alpaca versions each stream individually.
 //!
 //! Each event's `data` is JSON whose shape depends on the endpoint. alpaca-py
 //! yields it as a raw string; [`BrokerEvent::json`] deserializes it into a type
@@ -13,10 +15,13 @@
 //! from.
 
 use chrono::NaiveDate;
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::error::{Error, Result};
+/// One event from a broker event stream.
+///
+/// The same type every Alpaca event stream yields; the alias keeps the broker
+/// spelling that alpaca-py's readers will look for.
+pub type BrokerEvent = crate::sse::Event;
 
 /// Filters for an event stream.
 ///
@@ -94,14 +99,17 @@ impl GetEventsRequest {
 /// Which version of the events API a stream lives on.
 ///
 /// Alpaca versions these per stream rather than per API, so this is not the
-/// client's `api_version`: account status and non-trading activity are v1, and
-/// trades, journals and funding are v2.
+/// client's `api_version`: account status and non-trading activity are v1,
+/// trades, journals, funding, admin actions, IPOs and system events are v2, and
+/// account activities is `v2beta1`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EventVersion {
     /// `/v1/events/*`.
     V1,
     /// `/v2/events/*`.
     V2,
+    /// `/v2beta1/events/*`.
+    V2Beta1,
 }
 
 impl EventVersion {
@@ -110,6 +118,7 @@ impl EventVersion {
         match self {
             Self::V1 => "v1",
             Self::V2 => "v2",
+            Self::V2Beta1 => "v2beta1",
         }
     }
 
@@ -118,7 +127,7 @@ impl EventVersion {
         match self {
             // The v1 `since_id`/`until_id` are the deprecated integer form.
             Self::V1 => ("since_ulid", "until_ulid"),
-            Self::V2 => ("since_id", "until_id"),
+            Self::V2 | Self::V2Beta1 => ("since_id", "until_id"),
         }
     }
 
@@ -146,97 +155,9 @@ impl EventVersion {
     }
 }
 
-/// One event from a broker event stream.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BrokerEvent {
-    /// The last event id the server sent.
-    ///
-    /// Per the SSE specification this persists: an event that sends no `id`
-    /// line keeps the previous one, so this is `None` only until the server has
-    /// sent a first id. That is exactly what makes it usable with
-    /// [`GetEventsRequest::after_id`] to resume a dropped stream — alpaca-py
-    /// discards it and yields only the data.
-    pub id: Option<String>,
-    /// The event's type.
-    ///
-    /// Unlike the id, this resets after every dispatch, and an event that sends
-    /// no `event` line gets the SSE specification's default of `"message"` —
-    /// so this always has a value, and that value is not always meaningful.
-    pub name: String,
-    /// The payload, as it arrived.
-    pub data: String,
-}
-
-impl BrokerEvent {
-    /// Deserializes the payload.
-    ///
-    /// These streams have no captured payloads to model from, so the type is the
-    /// caller's to choose — [`serde_json::Value`] to look first, a struct once
-    /// the shape is known.
-    ///
-    /// # Errors
-    /// Returns [`Error::Decode`] if the payload is not valid JSON for `T`.
-    pub fn json<T: DeserializeOwned>(&self) -> Result<T> {
-        serde_json::from_str(&self.data).map_err(|source| Error::Decode {
-            path: "event stream".to_owned(),
-            body: self.data.clone(),
-            source,
-        })
-    }
-}
-
-impl From<eventsource_stream::Event> for BrokerEvent {
-    fn from(event: eventsource_stream::Event) -> Self {
-        Self {
-            // The parser reports "no id yet" as the empty string, which is not
-            // the same thing as an id of "". Once the server has sent one it
-            // persists, so this is only ever None at the head of a stream.
-            id: (!event.id.is_empty()).then_some(event.id),
-            name: event.event,
-            data: event.data,
-        }
-    }
-}
-
-/// Translates a stream-level failure into this crate's error type.
-///
-/// A malformed stream is not an invalid request, but [`Error`] has no variant
-/// for a broken stream and the websocket code already reports its failures this
-/// way. Consistent and imperfect beats inconsistent and imperfect; the roadmap
-/// carries the note to add a variant for both at once.
-pub(crate) fn stream_error(error: &eventsource_stream::EventStreamError<reqwest::Error>) -> Error {
-    match error {
-        eventsource_stream::EventStreamError::Transport(source) => {
-            Error::InvalidRequest(format!("event stream failed: {source}"))
-        }
-        eventsource_stream::EventStreamError::Utf8(source) => {
-            Error::InvalidRequest(format!("event stream was not valid utf-8: {source}"))
-        }
-        eventsource_stream::EventStreamError::Parser(source) => {
-            Error::InvalidRequest(format!("event stream was malformed: {source}"))
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn no_id_yet_is_none_rather_than_an_empty_string() {
-        // The parser signals "the server has not sent an id" with an empty
-        // string. An id of "" and no id at all are different things, and only
-        // the second one is safe to resume from.
-        let event = BrokerEvent::from(eventsource_stream::Event {
-            event: "message".to_owned(),
-            data: "{}".to_owned(),
-            id: String::new(),
-            retry: None,
-        });
-
-        assert_eq!(event.id, None);
-        assert_eq!(event.name, "message");
-    }
 
     #[test]
     fn the_cursor_is_named_for_the_version_it_is_sent_to() {
@@ -287,21 +208,5 @@ mod tests {
                 ("until", "2022-02-28".to_owned()),
             ]
         );
-    }
-
-    #[test]
-    fn the_payload_deserializes_into_a_caller_chosen_type() {
-        let event = BrokerEvent {
-            id: Some("1".to_owned()),
-            name: "message".to_owned(),
-            data: r#"{"status_to":"ACTIVE"}"#.to_owned(),
-        };
-
-        let value: serde_json::Value = event.json().unwrap();
-        assert_eq!(value["status_to"], "ACTIVE");
-
-        // And a mismatch is a decode error carrying the payload, not a panic.
-        let error = event.json::<Vec<u8>>().unwrap_err();
-        assert!(matches!(error, Error::Decode { .. }));
     }
 }

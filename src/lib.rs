@@ -45,6 +45,9 @@ pub mod error;
 pub mod rest;
 pub mod types;
 
+#[cfg(feature = "_sse")]
+mod sse;
+
 #[cfg(feature = "broker")]
 #[cfg_attr(docsrs, doc(cfg(feature = "broker")))]
 pub mod broker;
@@ -59,3 +62,5 @@ pub use auth::Credentials;
 pub use config::{BaseUrl, RetryConfig};
 pub use error::{ApiError, Error, Result};
 pub use rest::{RestClient, RestConfig};
+#[cfg(feature = "_sse")]
+pub use sse::{Event as SseEvent, EventStreamRequest};
