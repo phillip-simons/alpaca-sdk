@@ -42,7 +42,7 @@ wire_enum! {
 wire_enum! {
     /// The various country specific tax identification numbers
     ///
-    /// see <https://alpaca.markets/docs/broker/api-references/accounts/accounts/#tax-id-type>
+    /// see <https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#tax-id-type>
     pub enum TaxIdType {
         /// `USA_SSN`
         UsaSsn => "USA_SSN",
@@ -142,7 +142,7 @@ wire_enum! {
     ///
     /// Please feel free to reach out to Alpaca if you need other tax ID types.
     ///
-    /// see <https://alpaca.markets/docs/broker/api-references/accounts/accounts/#visa-type>
+    /// see <https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#visa-type>
     pub enum VisaType {
         /// `B1`
         B1 => "B1",
@@ -178,7 +178,7 @@ wire_enum! {
 wire_enum! {
     /// Various sources of funding for brokerage accounts.
     ///
-    /// see <https://alpaca.markets/docs/broker/api-references/accounts/accounts/#funding-source>
+    /// see <https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#funding-source>
     pub enum FundingSource {
         /// `employment_income`
         EmploymentIncome => "employment_income",
@@ -198,7 +198,7 @@ wire_enum! {
 wire_enum! {
     /// The possible employment statuses of the user
     ///
-    /// see <https://alpaca.markets/docs/broker/api-references/accounts/accounts/#employment-status>
+    /// see <https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#employment-status>
     pub enum EmploymentStatus {
         /// `UNEMPLOYED`
         Unemployed => "UNEMPLOYED",
@@ -232,11 +232,16 @@ wire_enum! {
 }
 
 wire_enum! {
-    /// Represents the kind of document data you're uploading
+    /// The kind of document being uploaded during account onboarding.
     ///
-    /// please see <https://alpaca.markets/docs/broker/api-references/accounts/accounts/#document-type>
-    /// and <https://alpaca.markets/docs/api-references/broker-api/documents/#enumuploaddocumenttype>
-    /// for more info
+    /// Distinct from [`TradeDocumentType`], which classifies documents Alpaca
+    /// *generates* for an account — statements, confirmations, tax forms.
+    ///
+    /// See the [document type reference][types] and the [upload
+    /// enumeration][upload].
+    ///
+    /// [types]: https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#document-type
+    /// [upload]: https://docs.alpaca.markets/docs/api-references/broker-api/documents/#enumuploaddocumenttype
     pub enum DocumentType {
         /// `identity_verification`
         IdentityVerification => "identity_verification",
@@ -309,7 +314,7 @@ wire_enum! {
 wire_enum! {
     /// Enum representing what CIP provider was used.
     ///
-    /// see <https://alpaca.markets/docs/api-references/broker-api/accounts/accounts/#cip-provider> for more info
+    /// see <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/accounts/#cip-provider> for more info
     pub enum CIPProvider {
         /// `alloy`
         Alloy => "alloy",
@@ -329,7 +334,7 @@ wire_enum! {
 wire_enum! {
     /// An enum representing the status of the `CIPInfo`
     ///
-    /// see <https://alpaca.markets/docs/api-references/broker-api/accounts/accounts/#cip-status> for more info
+    /// see <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/accounts/#cip-status> for more info
     pub enum CIPStatus {
         /// `complete`
         Complete => "complete",
@@ -339,7 +344,7 @@ wire_enum! {
 }
 
 wire_enum! {
-    /// see <https://alpaca.markets/docs/api-references/broker-api/accounts/accounts/#cip-result> for more info
+    /// see <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/accounts/#cip-result> for more info
     pub enum CIPResult {
         /// `clear`
         Clear => "clear",
@@ -368,7 +373,7 @@ wire_enum! {
     ///
     /// However, for older accounts with legacy documents the other legacy values might show up.
     ///
-    /// please see <https://alpaca.markets/docs/api-references/broker-api/documents/#enumdocumenttype> for more info
+    /// please see <https://docs.alpaca.markets/docs/api-references/broker-api/documents/#enumdocumenttype> for more info
     pub enum TradeDocumentType {
         /// `account_statement`
         AccountStatement => "account_statement",
@@ -400,7 +405,7 @@ wire_enum! {
 wire_enum! {
     /// Represents additional information for whats inside a `TradeDocument` in combination with a `TradeDocumentType`
     ///
-    /// please see <https://alpaca.markets/docs/api-references/broker-api/documents/#the-document-object> for more info
+    /// please see <https://docs.alpaca.markets/docs/api-references/broker-api/documents/#the-document-object> for more info
     pub enum TradeDocumentSubType {
         /// `1099-Comp`
         Type1099Comp => "1099-Comp",
@@ -416,7 +421,7 @@ wire_enum! {
 wire_enum! {
     /// Represents a sub type for an `UploadDocumentRequest`
     ///
-    /// please see: <https://alpaca.markets/docs/api-references/broker-api/documents/#enumuploaddocumentsubtype>
+    /// please see: <https://docs.alpaca.markets/docs/api-references/broker-api/documents/#enumuploaddocumentsubtype>
     /// for more info
     pub enum UploadDocumentSubType {
         /// `Account Application`
@@ -431,7 +436,7 @@ wire_enum! {
 wire_enum! {
     /// specifies the mime type of the base64 data you're uploading as part of a `UploadDocumentRequest`
     ///
-    /// please see <https://alpaca.markets/docs/api-references/broker-api/documents/#parameters> for more info
+    /// please see <https://docs.alpaca.markets/docs/api-references/broker-api/documents/#parameters> for more info
     pub enum UploadDocumentMimeType {
         /// `application/pdf`
         Pdf => "application/pdf",
@@ -447,7 +452,7 @@ wire_enum! {
 wire_enum! {
     /// Represents the state that an `ACHRelationship` is in.
     ///
-    /// Please see <https://alpaca.markets/docs/api-references/broker-api/funding/ach/#attributes> for more details
+    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/funding/ach/#attributes> for more details
     pub enum ACHRelationshipStatus {
         /// `QUEUED`
         Queued => "QUEUED",
@@ -461,7 +466,7 @@ wire_enum! {
 wire_enum! {
     /// Represents a kind of bank account.
     ///
-    /// Please see <https://alpaca.markets/docs/api-references/broker-api/funding/ach/#attributes>
+    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/funding/ach/#attributes>
     pub enum BankAccountType {
         /// `CHECKING`
         Checking => "CHECKING",
@@ -475,7 +480,7 @@ wire_enum! {
 wire_enum! {
     /// Represents a type of bank account.
     ///
-    /// Please see <https://alpaca.markets/docs/api-references/broker-api/funding/bank/#creating-a-new-bank-relationship> for
+    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/funding/bank/#creating-a-new-bank-relationship> for
     /// more details.
     pub enum IdentifierType {
         /// `ABA`
@@ -488,7 +493,7 @@ wire_enum! {
 wire_enum! {
     /// Represents the states a Bank instance can be in.
     ///
-    /// Please see <https://alpaca.markets/docs/api-references/broker-api/funding/bank/#enumbankstatus> for more details.
+    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/funding/bank/#enumbankstatus> for more details.
     pub enum BankStatus {
         /// `QUEUED`
         Queued => "QUEUED",
@@ -504,7 +509,7 @@ wire_enum! {
 wire_enum! {
     /// Represents the types of transfers that can be made.
     ///
-    /// Please see <https://alpaca.markets/docs/api-references/broker-api/funding/transfers/#enumtransfertype> for more
+    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/funding/transfers/#enumtransfertype> for more
     /// details.
     pub enum TransferType {
         /// `ach`
@@ -517,7 +522,7 @@ wire_enum! {
 wire_enum! {
     /// Represents the states a Transfer instance can be in.
     ///
-    /// Please see <https://alpaca.markets/docs/api-references/broker-api/funding/transfers/#enumtransferstatus> for more
+    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/funding/transfers/#enumtransferstatus> for more
     /// details.
     pub enum TransferStatus {
         /// `QUEUED`
@@ -546,7 +551,7 @@ wire_enum! {
 wire_enum! {
     /// Represents the direction of the transfer.
     ///
-    /// Please see <https://alpaca.markets/docs/api-references/broker-api/funding/transfers/#enumtransferdirection> for more
+    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/funding/transfers/#enumtransferdirection> for more
     /// details.
     pub enum TransferDirection {
         /// `INCOMING`
@@ -559,7 +564,7 @@ wire_enum! {
 wire_enum! {
     /// Represents the timing of a transfer.
     ///
-    /// Please see <https://alpaca.markets/docs/api-references/broker-api/funding/transfers/#creating-a-transfer-entity> for
+    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/funding/transfers/#creating-a-transfer-entity> for
     /// more details.
     pub enum TransferTiming {
         /// `immediate`
@@ -570,7 +575,7 @@ wire_enum! {
 wire_enum! {
     /// Represents who is responsible for paying fees associated with the transfer.
     ///
-    /// Please see <https://alpaca.markets/docs/api-references/broker-api/funding/transfers/#enumfeepaymentmethod> for more
+    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/funding/transfers/#enumfeepaymentmethod> for more
     /// details.
     pub enum FeePaymentMethod {
         /// `user`
@@ -584,7 +589,7 @@ wire_enum! {
     /// Represents the types of journals. Cash journals are transfers of cash.
     /// Security journals are transfers of securities like stocks.
     ///
-    /// Please see <https://alpaca.markets/docs/api-references/broker-api/journals/> for more details.
+    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/journals/> for more details.
     pub enum JournalEntryType {
         /// `JNLC`
         Cash => "JNLC",
@@ -596,7 +601,7 @@ wire_enum! {
 wire_enum! {
     /// The various states a journal can be in during its lifecycle.
     ///
-    /// Please see <https://alpaca.markets/docs/api-references/broker-api/journals/#enumjournalstatus> for more details.
+    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/journals/#enumjournalstatus> for more details.
     pub enum JournalStatus {
         /// `queued`
         Queued => "queued",

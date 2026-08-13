@@ -283,6 +283,33 @@ mod tests {
         assert_eq!(decoded, original);
     }
 
+    /// `DecimalVisitor` implements `visit_i128`/`visit_u128` and the optional
+    /// path's `MaybeEmpty` does not, which looks like an oversight and is not:
+    /// `serde_json` does not hand a bare integer to `visit_i128` unless it
+    /// overflows `u64`, and even then the value still arrives through a visitor
+    /// both codecs implement. Both paths are asserted here so the asymmetry is
+    /// not "fixed" into a difference in behaviour.
+    #[test]
+    fn a_number_beyond_u64_decodes_the_same_required_or_optional() {
+        // 1e20: past u64::MAX (~1.8e19), inside Decimal's range (~7.9e28).
+        let huge = "100000000000000000000";
+
+        let required = parse(&format!(r#"{{"qty":{huge}}}"#));
+        assert_eq!(required.qty.to_string(), huge);
+
+        let optional = parse(&format!(r#"{{"qty":"1","limit_price":{huge}}}"#));
+        assert_eq!(optional.limit_price.unwrap().to_string(), huge);
+    }
+
+    /// A value past `Decimal`'s own range has to fail rather than saturate — a
+    /// silently clamped quantity is worse than a decode error.
+    #[test]
+    fn a_number_beyond_decimals_range_is_an_error() {
+        // Decimal tops out near 7.9e28.
+        let beyond = "1".to_owned() + &"0".repeat(40);
+        assert!(serde_json::from_str::<Order>(&format!(r#"{{"qty":{beyond}}}"#)).is_err());
+    }
+
     #[test]
     fn rejects_a_value_that_is_not_a_number() {
         let err = serde_json::from_str::<Order>(r#"{"qty":"abc"}"#).unwrap_err();
