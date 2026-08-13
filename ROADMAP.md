@@ -73,7 +73,10 @@ diff <(grep -oE '^    def [a-z_0-9]+' ../alpaca-py/alpaca/broker/client.py \
   field is likewise not rounded.
 - **The REST retry ignores Alpaca's own advice** — flat 3 seconds where the
   rate-limit page asks for exponential backoff with jitter. Carried to
-  "Phase 7", because it breaks `RetryConfig` and so has to happen before 1.0.
+  "Phase 7". It no longer *has* to happen before 1.0: `RetryConfig` is
+  `#[non_exhaustive]` now, so a wait strategy can be added rather than swapped
+  in. It still changes behaviour under load, which is a release-notes problem
+  rather than a version-number one.
 - **`Error` has no variant for a stream that breaks mid-flight**, so both the
   SSE and websocket paths call it `InvalidRequest`. Also carried to "Phase 7",
   where it turns out to be additive rather than breaking.
@@ -689,10 +692,16 @@ If they are built:
 
 ### Breaking changes, so `0.x` or never
 
-| Change | Why it breaks | Where it came from |
-|---|---|---|
-| Exponential retry backoff | `RetryConfig` is **not** `#[non_exhaustive]` and its fields are public, so replacing `wait: Duration` with a strategy breaks every struct literal | Phase 6 |
-| `RetryConfig` marked `#[non_exhaustive]` | Cheap now, impossible later, and would have made the row above additive | This section |
+**`RetryConfig` is now `#[non_exhaustive]`** — done, and it was the only entry
+here that had a deadline. It cost three builder methods (`attempts`, `wait`,
+`status_codes`) and one struct literal in `tests/rest_transport.rs`, because
+`..Default::default()` is not available on a non-exhaustive struct either. What
+it bought is the row below: a wait strategy can now arrive as a *new field*
+rather than as a replacement for `wait`, which makes it additive.
+
+That is the general lesson and not a one-off. Any public struct a caller is
+expected to build is one field away from a breaking change for as long as it is
+exhaustive; `RestConfig` is the other one, and has the same window.
 
 **The retry default contradicts Alpaca's own documentation.** `RetryConfig`
 waits a flat 3 seconds, three times, on 429 and 504 — inherited from alpaca-py.

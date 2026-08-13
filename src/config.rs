@@ -143,8 +143,21 @@ impl From<BaseUrl> for String {
 /// wants Alpaca's shape should build a [`RetryConfig`] for it; the crate should
 /// grow one and default to it.
 ///
+/// It is `#[non_exhaustive]`, so build one from [`RetryConfig::default`] or
+/// [`RetryConfig::none`] and adjust it with the methods below rather than with a
+/// struct literal. That is what lets the wait strategy above change without
+/// breaking every caller.
+///
+/// ```
+/// use std::time::Duration;
+/// use alpaca_sdk::RetryConfig;
+///
+/// let retry = RetryConfig::default().attempts(5).wait(Duration::from_secs(1));
+/// ```
+///
 /// [rate-limits]: https://docs.alpaca.markets/us/docs/broker-api-rate-limits
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RetryConfig {
     /// Number of retries after the first attempt.
     pub attempts: u32,
@@ -163,6 +176,27 @@ impl RetryConfig {
             wait: Duration::ZERO,
             status_codes: Vec::new(),
         }
+    }
+
+    /// Sets the number of retries attempted after the first request.
+    #[must_use]
+    pub fn attempts(mut self, attempts: u32) -> Self {
+        self.attempts = attempts;
+        self
+    }
+
+    /// Sets the delay between attempts.
+    #[must_use]
+    pub fn wait(mut self, wait: Duration) -> Self {
+        self.wait = wait;
+        self
+    }
+
+    /// Sets the statuses that trigger a retry, replacing the current list.
+    #[must_use]
+    pub fn status_codes(mut self, status_codes: impl Into<Vec<u16>>) -> Self {
+        self.status_codes = status_codes.into();
+        self
     }
 
     /// Whether `status` should be retried under this configuration.
@@ -228,5 +262,24 @@ mod tests {
         assert!(cfg.should_retry(429));
         assert!(cfg.should_retry(504));
         assert!(!cfg.should_retry(500));
+    }
+
+    /// The struct is `#[non_exhaustive]`, so these methods are the only way a
+    /// caller outside the crate can change one field and keep the others.
+    #[test]
+    fn retry_builders_replace_one_field_at_a_time() {
+        let cfg = RetryConfig::default()
+            .attempts(5)
+            .wait(Duration::ZERO)
+            .status_codes([500, 502]);
+
+        assert_eq!(cfg.attempts, 5);
+        assert_eq!(cfg.wait, Duration::ZERO);
+        assert!(cfg.should_retry(500));
+        assert!(!cfg.should_retry(429));
+
+        let none = RetryConfig::none();
+        assert_eq!(none.attempts, 0);
+        assert!(!none.should_retry(429));
     }
 }

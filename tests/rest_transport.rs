@@ -23,10 +23,7 @@ fn client(server: &MockServer, retry: RetryConfig) -> RestClient {
 }
 
 fn instant_retry() -> RetryConfig {
-    RetryConfig {
-        wait: Duration::ZERO,
-        ..RetryConfig::default()
-    }
+    RetryConfig::default().wait(Duration::ZERO)
 }
 
 #[tokio::test]
