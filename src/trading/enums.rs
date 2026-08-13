@@ -12,7 +12,7 @@ use crate::types::wire::wire_enum;
 wire_enum! {
     /// Represents what kind of Activity an instance of `TradeActivity` or `NonTradeActivity` is.
     ///
-    /// Please see <https://alpaca.markets/docs/api-references/broker-api/accounts/account-activities/#enumactivitytype>
+    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/account-activities/#enumactivitytype>
     /// for descriptions of each of the types
     pub enum ActivityType {
         /// Order fills (both partial and full fills)
@@ -119,7 +119,7 @@ wire_enum! {
 wire_enum! {
     /// Represents the type of `TradeActivity`.
     ///
-    /// Please see <https://alpaca.markets/docs/api-references/broker-api/accounts/account-activities/#attributes>
+    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/account-activities/#attributes>
     pub enum TradeActivityType {
         /// `partial_fill`
         PartialFill => "partial_fill",
@@ -131,7 +131,7 @@ wire_enum! {
 wire_enum! {
     /// Represents the status of a `NonTradeActivity`.
     ///
-    /// Please see <https://alpaca.markets/docs/api-references/broker-api/accounts/account-activities/#enumaccountactivity>
+    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/account-activities/#enumaccountactivity>
     /// for more info.
     pub enum NonTradeActivityStatus {
         /// `executed`
@@ -166,13 +166,21 @@ wire_enum! {
 }
 
 wire_enum! {
-    /// Represents what type of order this is.
+    /// How an order is priced and triggered.
     ///
-    /// The order types supported by Alpaca vary based on the order's security type.
-    /// The following provides a comprehensive breakdown of the supported order types for each category:
-    /// - Equity trading: market, limit, stop, `stop_limit`, `trailing_stop`.
-    /// - Options trading: market, limit, stop, `stop_limit`.
-    /// - Crypto trading: market, limit, `stop_limit`.
+    /// Which types are accepted depends on what is being traded, and sending an
+    /// unsupported one is rejected by Alpaca rather than by this crate:
+    ///
+    /// | Asset class | Accepted |
+    /// |---|---|
+    /// | Equities | `market`, `limit`, `stop`, `stop_limit`, `trailing_stop` |
+    /// | Options | `market`, `limit`, `stop`, `stop_limit` |
+    /// | Crypto | `market`, `limit`, `stop_limit` |
+    ///
+    /// Each has a constructor on
+    /// [`OrderRequest`](crate::trading::OrderRequest) that takes the fields that
+    /// type requires, so an order cannot be built missing its own stop or limit
+    /// price.
     pub enum OrderType {
         /// `market`
         Market => "market",
@@ -214,7 +222,7 @@ wire_enum! {
 wire_enum! {
     /// Represents the various states an Order can be in.
     ///
-    /// please see <https://alpaca.markets/docs/api-references/broker-api/trading/orders/#order-status> for more info
+    /// please see <https://docs.alpaca.markets/docs/api-references/broker-api/trading/orders/#order-status> for more info
     pub enum OrderStatus {
         /// `new`
         New => "new",
@@ -374,7 +382,7 @@ wire_enum! {
 wire_enum! {
     /// The general types of corporate action events.
     ///
-    /// Learn more here: <https://alpaca.markets/docs/api-references/trading-api/corporate-actions-announcements/>
+    /// Learn more here: <https://docs.alpaca.markets/docs/corporate-actions>
     pub enum CorporateActionType {
         /// `dividend`
         Dividend => "dividend",
@@ -390,7 +398,7 @@ wire_enum! {
 wire_enum! {
     /// The specific types of corporate actions. Each subtype is related to `CorporateActionType`.
     ///
-    /// Learn more here: <https://alpaca.markets/docs/api-references/trading-api/corporate-actions-announcements/>
+    /// Learn more here: <https://docs.alpaca.markets/docs/corporate-actions>
     pub enum CorporateActionSubType {
         /// `cash`
         Cash => "cash",
@@ -416,7 +424,7 @@ wire_enum! {
 wire_enum! {
     /// The various statuses each brokerage account can take during its lifetime
     ///
-    /// see <https://alpaca.markets/docs/broker/api-references/accounts/accounts/#account-status>
+    /// see <https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#account-status>
     pub enum AccountStatus {
         /// The account is closed.
         AccountClosed => "ACCOUNT_CLOSED",
@@ -530,7 +538,7 @@ wire_enum! {
     ///
     /// NOTE: These values are currently the same as `PDTCheck` however they are not guaranteed to be in sync the future
     ///
-    /// please see <https://alpaca.markets/docs/api-references/broker-api/trading/trading-configurations/#attributes>
+    /// please see <https://docs.alpaca.markets/docs/api-references/broker-api/trading/trading-configurations/#attributes>
     /// for more info.
     pub enum DTBPCheck {
         /// `both`
@@ -547,7 +555,7 @@ wire_enum! {
     ///
     /// NOTE: These values are currently the same as `DTBPCheck` however they are not guaranteed to be in sync the future
     ///
-    /// please see <https://alpaca.markets/docs/api-references/broker-api/trading/trading-configurations/#attributes>
+    /// please see <https://docs.alpaca.markets/docs/api-references/broker-api/trading/trading-configurations/#attributes>
     /// for more info.
     pub enum PDTCheck {
         /// `both`

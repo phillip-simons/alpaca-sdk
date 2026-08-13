@@ -71,8 +71,12 @@ impl From<Uuid> for AssetIdent {
 }
 
 impl From<String> for AssetIdent {
-    /// A string that parses as a UUID becomes [`AssetIdent::Id`], matching
-    /// a string that parses as a UUID is treated as an id, not a symbol.
+    /// A string that parses as a UUID becomes [`AssetIdent::Id`]; anything else
+    /// becomes [`AssetIdent::Symbol`].
+    ///
+    /// The sniff is safe in the direction that matters: no Alpaca ticker has the
+    /// shape of a UUID, so a symbol cannot be mistaken for an id. Construct the
+    /// variant directly to bypass it entirely.
     fn from(value: String) -> Self {
         match Uuid::parse_str(&value) {
             Ok(id) => Self::Id(id),
