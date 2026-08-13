@@ -18,7 +18,27 @@ Written to be picked up cold.
 | 7 — Polish | ⬜ | polars, blocking façade, docs, migration guide, 1.0 |
 
 Ported against alpaca-py `cc4cb3b`. `just pinned` reports drift against a local
-alpaca-py checkout.
+alpaca-py checkout — though alpaca-py is no longer the target; see below.
+
+**Published:** `0.1.0-alpha.1` is on crates.io and docs.rs built it. It is a
+rehearsal rather than a milestone: it exists to prove the release path end to
+end before a version anyone depends on goes out. That path is
+`.github/workflows/release.yml` with crates.io trusted publishing — no API token
+anywhere — and `RELEASING.md` has the procedure. It has now run once, so `0.1.0`
+is a version bump and a tag, not an experiment.
+
+### Blocked on credentials this account does not have
+
+Three separate things, so that a session picking this up does not spend an hour
+rediscovering which:
+
+| Wanted | Blocks |
+|---|---|
+| **Broker sandbox key** | All 74 broker routes are verified against captured payloads and the spec, never against a server. It would settle the two undocumented routes below, and whether `commission` is accepted as a string on an order request. |
+| **Nothing will settle CIP** | alpaca-py's own comment says the sandbox answers 404 for the CIP routes, which is why its two methods are stubs. A sandbox key probably leaves the six `CIP*` models exactly as unverified as they are now. |
+| **Forex / indices / logos grants** | Each answers 403 `insufficient grants` on a paid plan that reaches SIP, so they are per-product entitlements. Porting them is possible from the spec; *verifying* them is not. |
+
+Everything else has been checked against something real.
 
 ## Phase 6, as built
 
