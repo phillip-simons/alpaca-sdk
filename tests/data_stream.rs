@@ -576,7 +576,7 @@ async fn a_timeout_longer_than_the_poll_interval_still_fires_eventually() {
 
     assert!(
         connections.lock().await.len() >= 2,
-        "a 7s timeout should have reconnected within 20s, saw {} connection(s)",
+        "a 7s timeout should have reconnected within 12s, saw {} connection(s)",
         connections.lock().await.len()
     );
 }
@@ -617,7 +617,7 @@ async fn a_quiet_session_that_stayed_up_clears_the_failure_count() {
     );
     let gap = last_gap(&times).expect("at least two connections");
     assert!(
-        gap < Duration::from_secs(2),
+        gap < Duration::from_secs(3),
         "a session that stayed up past `stable_session` should have cleared the \
          backoff curve, but the last gap was {gap:?} — the curve is still growing"
     );

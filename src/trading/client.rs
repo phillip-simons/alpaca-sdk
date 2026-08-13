@@ -168,7 +168,7 @@ impl TradingClient {
         order_id: Uuid,
         filter: Option<&GetOrderByIdRequest>,
     ) -> Result<Order> {
-        let path = format!("/orders/{}", segment(order_id)?);
+        let path = format!("/orders/{}", order_id);
         match filter {
             Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
@@ -198,7 +198,7 @@ impl TradingClient {
         order_id: Uuid,
         replacement: Option<&ReplaceOrderRequest>,
     ) -> Result<Order> {
-        let path = format!("/orders/{}", segment(order_id)?);
+        let path = format!("/orders/{}", order_id);
         match replacement {
             Some(replacement) => {
                 replacement.validate()?;
@@ -221,7 +221,7 @@ impl TradingClient {
     /// # Errors
     /// Propagates transport and API failures.
     pub async fn cancel_order_by_id(&self, order_id: Uuid) -> Result<()> {
-        self.send_void(Method::DELETE, &format!("/orders/{}", segment(order_id)?))
+        self.send_void(Method::DELETE, &format!("/orders/{}", order_id))
             .await
     }
 
@@ -782,10 +782,7 @@ impl TradingClient {
     /// Propagates transport, API, and decoding failures.
     pub async fn get_tokenization_request(&self, request_id: Uuid) -> Result<TokenizationRequest> {
         self.rest
-            .get(
-                &format!("/tokenization/requests/{}", segment(request_id)?),
-                &Empty,
-            )
+            .get(&format!("/tokenization/requests/{}", request_id), &Empty)
             .await
     }
 
@@ -950,10 +947,10 @@ where
         request.limit = Some(request.limit.unwrap_or(u32::MAX).min(max));
     }
 
-    // The cursor is exclusive on this route, but Alpaca's cursors are inclusive
-    // on some others and the reference does not say which this is — so a page
-    // boundary is deduplicated rather than trusted. Without it, an inclusive
-    // cursor would repeat one order per page, silently.
+    // Alpaca's cursors are inclusive on some routes and exclusive on others,
+    // and the reference does not say which this one is — so a page boundary is
+    // deduplicated rather than trusted. If it turns out inclusive, without this
+    // every page would silently repeat one order.
     let mut seen: std::collections::HashSet<Uuid> = std::collections::HashSet::new();
     let mut all: Vec<T> = Vec::new();
 

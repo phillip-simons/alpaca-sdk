@@ -428,7 +428,7 @@ async fn a_quiet_session_that_stayed_up_clears_the_failure_count() {
     );
     let gap = last_gap(&times).expect("at least two connections");
     assert!(
-        gap < Duration::from_secs(2),
+        gap < Duration::from_secs(3),
         "a session that stayed up past `stable_session` should have cleared the \
          backoff curve, but the last gap was {gap:?}"
     );

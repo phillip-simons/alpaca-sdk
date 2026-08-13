@@ -32,7 +32,7 @@ const MAX_ERROR_BODY: usize = 2048;
 /// and a date honored badly waits either far too long or not at all. Anything
 /// that is not a plain count of seconds is treated as absent, which falls back
 /// to the curve — the behaviour before this header was read at all.
-fn retry_after(headers: &HeaderMap) -> Option<Duration> {
+pub(crate) fn retry_after(headers: &HeaderMap) -> Option<Duration> {
     headers
         .get(reqwest::header::RETRY_AFTER)?
         .to_str()

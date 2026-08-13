@@ -489,7 +489,7 @@ impl BrokerClient {
     ) -> Result<()> {
         self.send_void(
             Method::DELETE,
-            &format!("/accounts/{account_id}/transfers/{}", segment(transfer_id)?),
+            &format!("/accounts/{account_id}/transfers/{}", transfer_id),
             None::<&Empty>,
         )
         .await
@@ -949,6 +949,10 @@ impl BrokerClient {
                 return Ok(response.bytes().await.map_err(crate::Error::from)?.to_vec());
             }
 
+            // Read before the body: `text()` consumes the response, headers
+            // and all.
+            let retry_after = crate::rest::retry_after(response.headers());
+
             let body = response.text().await.unwrap_or_default();
             let api_error = crate::error::ApiError::from_body(status, path, body);
 
@@ -961,7 +965,16 @@ impl BrokerClient {
                     last: api_error,
                 });
             }
-            tokio::time::sleep(retry.wait).await;
+
+            // The same delay policy `RestClient` uses, rather than a flat wait
+            // that ignores both the backoff curve and the server's own answer.
+            // This loop is hand-rolled only because the response body is bytes;
+            // there is no reason for it to retry differently.
+            let delay = retry_after.map_or_else(
+                || retry.delay(attempt),
+                |after| after.min(retry.retry_after_cap()),
+            );
+            tokio::time::sleep(delay).await;
         }
 
         unreachable!("retry loop exited without returning")
@@ -1546,10 +1559,7 @@ impl BrokerClient {
         order_id: Uuid,
         filter: Option<&crate::trading::GetOrderByIdRequest>,
     ) -> Result<Order> {
-        let path = format!(
-            "/trading/accounts/{account_id}/orders/{}",
-            segment(order_id)?
-        );
+        let path = format!("/trading/accounts/{account_id}/orders/{}", order_id);
         match filter {
             Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
@@ -1586,10 +1596,7 @@ impl BrokerClient {
         order_id: Uuid,
         replacement: Option<&crate::trading::ReplaceOrderRequest>,
     ) -> Result<Order> {
-        let path = format!(
-            "/trading/accounts/{account_id}/orders/{}",
-            segment(order_id)?
-        );
+        let path = format!("/trading/accounts/{account_id}/orders/{}", order_id);
         match replacement {
             Some(replacement) => {
                 replacement.validate()?;
@@ -1623,10 +1630,7 @@ impl BrokerClient {
     ) -> Result<()> {
         self.send_void(
             Method::DELETE,
-            &format!(
-                "/trading/accounts/{account_id}/orders/{}",
-                segment(order_id)?
-            ),
+            &format!("/trading/accounts/{account_id}/orders/{}", order_id),
             None::<&Empty>,
         )
         .await
@@ -2358,7 +2362,7 @@ impl BrokerClient {
         client_id: Uuid,
         filter: Option<&GetOAuthClientRequest>,
     ) -> Result<OAuthClient> {
-        let path = format!("/oauth/clients/{}", segment(client_id)?);
+        let path = format!("/oauth/clients/{}", client_id);
         match filter {
             Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
@@ -2493,7 +2497,7 @@ impl BrokerClient {
     ) -> Result<FundingWalletTransfer> {
         let path = format!(
             "/accounts/{account_id}/funding_wallet/transfers/{}",
-            segment(transfer_id)?
+            transfer_id
         );
         self.rest.at_version("v1beta").get(&path, &Empty).await
     }
@@ -2715,7 +2719,7 @@ impl BrokerClient {
     ) -> Result<crate::trading::TokenizationRequest> {
         let path = format!(
             "/accounts/{account_id}/tokenization/requests/{}",
-            segment(request_id)?
+            request_id
         );
         self.rest.get(&path, &Empty).await
     }

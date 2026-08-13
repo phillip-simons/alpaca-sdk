@@ -221,10 +221,9 @@ pub(crate) fn stream_error(error: &eventsource_stream::EventStreamError<reqwest:
 /// `ClientBuilder::timeout` is a total deadline on the whole request, "until
 /// the response body has finished" — and the body of a `text/event-stream`
 /// never finishes. Applying it would give every subscription a fixed lifespan:
-/// events until the deadline, then a timeout error, forever. Since
-/// [`crate::Error::is_transient`] would report the reconnect as worthwhile, the obvious
-/// recovery loop would reconnect on that same clock and drop whatever arrived
-/// in the gap.
+/// events until the deadline, then a timeout error, forever — and a supervisor
+/// that reconnects on error would do so on that same clock, dropping whatever
+/// arrived in the gap each time.
 ///
 /// A stall detector belongs on the *reads*, not on the stream, so if one is
 /// wanted later it is `read_timeout`, which resets per chunk.

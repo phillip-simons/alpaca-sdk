@@ -131,6 +131,34 @@ impl TradingStream {
         Ok(self)
     }
 
+    /// The reconnect backoff window.
+    ///
+    /// The delay starts at `min`, doubles on each consecutive failure, and is
+    /// capped at `max`. Mirrors
+    /// [`StreamConfig::backoff`](crate::data::StreamConfig::backoff), so the two
+    /// streams are configured the same way.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if `min` is zero — which would spin —
+    /// or if `max` is smaller than `min`.
+    pub fn backoff(mut self, min: Duration, max: Duration) -> Result<Self> {
+        if min.is_zero() {
+            return Err(Error::InvalidRequest(
+                "min_backoff must be a positive duration; zero reconnects \
+                 continuously rather than immediately"
+                    .to_owned(),
+            ));
+        }
+        if max < min {
+            return Err(Error::InvalidRequest(
+                "max_backoff must be at least min_backoff".to_owned(),
+            ));
+        }
+        self.min_backoff = min;
+        self.max_backoff = max;
+        Ok(self)
+    }
+
     /// How long a session must stay up before it clears the reconnect failure
     /// count.
     ///

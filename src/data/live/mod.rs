@@ -179,6 +179,14 @@ impl StreamConfig {
     /// legitimately quiet one whose server recycles it. Defaults to
     /// [`DEFAULT_STABLE_SESSION`].
     ///
+    /// Note the interaction with [`StreamConfig::data_timeout`]: if the timeout
+    /// is the longer of the two, a stream that is up but permanently silent
+    /// reconnects on the staleness clock and each of those sessions counts as
+    /// healthy, so the backoff never escalates. That is deliberate — the
+    /// reconnect cadence is then bounded by `data_timeout` rather than by the
+    /// curve — but set `data_timeout` below this value if you would rather a
+    /// persistently silent feed backed off instead.
+    ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if the duration is zero, which would
     /// treat a connection that dropped instantly as healthy and pin the
