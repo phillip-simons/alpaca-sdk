@@ -293,8 +293,6 @@ impl DataStream {
             let mut retries: u32 = 0;
 
             loop {
-                let mut received_data = false;
-
                 let connected = connect(&self.config, &self.credentials, &self.subscriptions).await;
                 let mut socket = match connected {
                     Ok(socket) => socket,
@@ -315,15 +313,27 @@ impl DataStream {
 
                 retries = retries.saturating_add(1);
 
+                // The clock the `data_timeout` deadline is measured against.
+                // Reset by every frame that carries data, not by every wake-up:
+                // the poll firing means nothing arrived, which is the opposite
+                // of activity.
+                let mut last_data = std::time::Instant::now();
+
                 let outcome = 'session: loop {
-                    let poll = receive_timeout(&self.config, received_data);
+                    let poll = receive_timeout(&self.config);
 
                     let frame = match tokio::time::timeout(poll, socket.next()).await {
-                        // Timed out waiting; the staleness check decides.
+                        // Nothing arrived within the poll. That is only staleness
+                        // if the configured timeout has actually elapsed — the
+                        // poll is how often we look, not how long we wait.
                         Err(_) => {
-                            if self.config.data_timeout.is_some() {
+                            if let Some(timeout) = self.config.data_timeout
+                                && last_data.elapsed() >= timeout
+                            {
                                 tracing::warn!(
                                     endpoint = %self.config.endpoint,
+                                    elapsed_ms = last_data.elapsed().as_millis(),
+                                    timeout_ms = timeout.as_millis(),
                                     "no market data within the timeout, reconnecting"
                                 );
                                 break 'session Outcome::Reconnect;
@@ -356,7 +366,10 @@ impl DataStream {
                                     break 'session Outcome::Fatal;
                                 }
                                 if message.is_market_data() {
-                                    received_data = true;
+                                    // Data arrived: the staleness clock restarts
+                                    // and the connection has proved itself, so
+                                    // the backoff starts from scratch too.
+                                    last_data = std::time::Instant::now();
                                     retries = 0;
                                 }
                                 yield Ok(message);
@@ -384,7 +397,19 @@ impl DataStream {
 ///
 /// Without a staleness timeout this is just a poll interval. With one, it never
 /// exceeds the remaining budget, so the check fires on time.
-fn receive_timeout(config: &StreamConfig, _received_data: bool) -> Duration {
+/// How long to wait on the socket before looking around.
+///
+/// This is a *poll* interval, not the staleness deadline. The loop has to wake
+/// periodically whatever the configuration says — the stream is cancelled by
+/// dropping it, and a socket parked in an hour-long `timeout` would not notice —
+/// so the wait is capped at [`RECEIVE_POLL`] and the deadline is measured
+/// separately, against the clock.
+///
+/// Capping it *was* the whole staleness check, which made any `data_timeout`
+/// above five seconds behave as five: the first expiry of the poll was read as
+/// the timeout expiring. The two are now distinct, which is why this no longer
+/// needs to know whether data has been seen.
+fn receive_timeout(config: &StreamConfig) -> Duration {
     match config.data_timeout {
         Some(timeout) => RECEIVE_POLL.min(timeout),
         None => RECEIVE_POLL,

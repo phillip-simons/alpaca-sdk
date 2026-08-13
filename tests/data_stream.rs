@@ -488,3 +488,31 @@ async fn the_stock_stream_rejects_a_feed_without_a_live_socket() {
     assert!(StockDataStream::new(credentials(), alpaca_sdk::data::DataFeed::Iex).is_ok());
     assert!(StockDataStream::new(credentials(), alpaca_sdk::data::DataFeed::Sip).is_ok());
 }
+
+/// A `data_timeout` longer than the internal poll interval must be honoured as
+/// written. The poll is how often the socket is checked; it is not the timeout.
+///
+/// This is the case the 300ms test above cannot reach: any value under the poll
+/// interval reconnects on the first expiry either way, so the two behaviours are
+/// indistinguishable there. At 12 seconds they are not.
+#[tokio::test]
+async fn a_data_timeout_longer_than_the_poll_interval_is_still_honoured() {
+    let (endpoint, _, connections) = serve(Script::GoMute).await;
+
+    let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
+    stream.subscribe_trades(["AAPL"]);
+    stream
+        .data_timeout(Duration::from_secs(12))
+        .expect("a positive timeout");
+
+    let mut messages = Box::pin(stream.run());
+    // Well past the 5s internal poll, comfortably short of the 12s timeout.
+    let _ = tokio::time::timeout(Duration::from_secs(8), messages.next()).await;
+
+    assert_eq!(
+        *connections.lock().await,
+        1,
+        "reconnected before the configured 12s timeout elapsed: the poll \
+         interval is being treated as the timeout"
+    );
+}
