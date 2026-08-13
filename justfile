@@ -172,6 +172,18 @@ coverage: specs
 enums-drift:
     python3 scripts/enum_drift.py
 
+# Line and function coverage. Needs `cargo install cargo-llvm-cov`.
+#
+# The number is a map, not a target: it says which code no test has ever run,
+# which is where to look next. Route methods dominate the uncovered set, and
+# each one is a wiremock test nobody has written yet.
+cov:
+    cargo llvm-cov --all-features --summary-only
+
+# The same, as a browsable report.
+cov-open:
+    cargo llvm-cov --all-features --open
+
 # Which documented query parameters this crate never sends.
 #
 # `just coverage` compares paths and methods; a route can be implemented,

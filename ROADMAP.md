@@ -16,7 +16,7 @@ Written to be picked up cold.
 | 6 — Broker | ✅ | 75 routes, 20 models, 4 pagination schemes, 5 SSE streams |
 | 6.5 — Full API coverage | ✅ | 251/253 spec routes, 2 deliberate skips |
 | 7 — Polish | ✅ | `blocking` and `polars` built, exponential retry, `Error::Stream`, two coverage checks |
-| 8 — Spec-driven | ⬜ | Codegen harness removed, 252 alpaca-py references cut, coverage-driven tests |
+| 8 — Spec-driven | ✅ | Codegen harness removed, 252 alpaca-py references cut, 615 tests at 81% coverage |
 
 **Nothing is generated from another SDK any more.** The enum generator and the
 recipes that read a Python checkout are gone; `just fixtures` still extracts
@@ -987,6 +987,45 @@ left two routes looking invented.
 
 Test names went too: a test named after another project's behaviour fails for the
 wrong reason.
+
+### ✅ Tests aimed at what was measurably untested
+
+`just cov` (cargo-llvm-cov) reported **73.8% of regions and 67.0% of functions**
+before this phase. Rather than writing tests where they were easy, the report
+said where they were missing, and the answer was five files and 60 tests:
+
+| Area | What it pins | Line coverage |
+|---|---|---|
+| `wire_codecs.rs` | Money, time, and the four wire quirks | `serde_util` 69→77%, `timestamp` 82→89% |
+| `error_surface.rs` | `Display`, `source`, `status`, `is_retryable` | `error.rs` 68→95% |
+| `request_builders.rs` | Every market data builder's parameters | `data/requests` 57→93% |
+| `broker_route_smoke.rs` | Routing for 40 broker routes nothing called | `broker/client` 51→72% |
+| `data_route_smoke.rs` | The 17 untested market data routes, with bodies | `data/historical` 50→78% |
+
+**81.4% of lines and 78.4% of functions now.** The number is a map rather than a
+target: what is left is dominated by route methods with no test, and each one is
+a wiremock test nobody has written.
+
+Three things worth keeping from writing them:
+
+- **The route smoke tests answer 404 on purpose.** They assert the method, the
+  version segment and the path, and nothing else. Those routes have no captured
+  payloads, and a body invented in the test would only assert that the model
+  matches the guess. Routing is worth its own test because it is the failure
+  this crate has actually shipped — three streams pointed at retired routes and
+  every model behind them was correct.
+- **One of them was wrong on the first run**, and the crate was right: the
+  single account-activity event is `v2beta1`, not the client's `v1`. That is the
+  test doing its job on the day it was written.
+- **`ApiError` cannot be constructed by a caller.** It is `#[non_exhaustive]`
+  with no public constructor, so the only way to get one — here or in a caller's
+  own error-handling tests — is to make a real request fail. Worth revisiting
+  before 1.0: a constructor or a `Default` would cost nothing and it is
+  additive.
+
+The field-level serde helpers are re-exported from `types` now, so an attribute
+reads `alpaca_sdk::types::empty_string_as_none` rather than reaching two modules
+deep. `option_decimal` was already there; the other five were not.
 
 ## Also open
 

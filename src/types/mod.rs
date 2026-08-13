@@ -21,5 +21,19 @@ pub use shared_enums::*;
 /// [`decimal`].
 pub use decimal::option as option_decimal;
 
+/// Serde codec for optional timestamp fields, symmetric with [`timestamp`].
+pub use timestamp::option as option_timestamp;
+
+/// Serde codec for integers Alpaca sends as numbers or strings.
+pub use serde_util::int;
+
+/// The optional form of [`int`].
+pub use serde_util::int::option as option_int;
+
+/// The field-level helpers, re-exported so a `#[serde(...)]` attribute names
+/// `alpaca_sdk::types::…` like the codecs above rather than reaching two
+/// modules deep.
+pub use serde_util::{comma_separated, empty_string_as_none, null_as_default, string_or_list};
+
 #[cfg(test)]
 mod wire_tests;
