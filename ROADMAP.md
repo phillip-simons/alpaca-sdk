@@ -15,7 +15,7 @@ Written to be picked up cold.
 | 5 — Trade updates | ✅ | JSON websocket, single channel |
 | 6 — Broker | ✅ | 75 routes, 20 models, 4 pagination schemes, 5 SSE streams |
 | 6.5 — Exceed alpaca-py | ✅ | 251/253 spec routes, 2 deliberate skips |
-| 7 — Polish | ⬜ | polars, blocking façade, docs, migration guide, 1.0 |
+| 7 — Polish | ⬜ | Two features that do not exist, the retry default, docs, 1.0 |
 
 Ported against alpaca-py `cc4cb3b`. `just pinned` reports drift against a local
 alpaca-py checkout — though alpaca-py is no longer the target; see below.
@@ -71,16 +71,12 @@ diff <(grep -oE '^    def [a-z_0-9]+' ../alpaca-py/alpaca/broker/client.py \
   this port does not, on the grounds that editing a server's own numbers on the
   way in is worse than the divergence. A `percent` assigned directly to the
   field is likewise not rounded.
-- **The REST retry ignores Alpaca's own advice.** The rate-limit documentation
-  says to retry 429s "using exponential backoff", doubling from ~1s with jitter.
-  `RetryConfig` waits a flat 3 seconds, inherited from alpaca-py. `backoff.rs`
-  already implements exponential-with-jitter for stream reconnects, so the
-  machinery exists; the REST path just does not use it. Changing the default
-  changes how callers behave under load, so it wants a deliberate release rather
-  than a drive-by fix.
-- `Error` has no variant for a stream that breaks mid-flight. Both the SSE
-  streams and the websocket code report those as `InvalidRequest`, which is
-  wrong in the same way for both. Worth one variant covering the two.
+- **The REST retry ignores Alpaca's own advice** — flat 3 seconds where the
+  rate-limit page asks for exponential backoff with jitter. Carried to
+  "Phase 7", because it breaks `RetryConfig` and so has to happen before 1.0.
+- **`Error` has no variant for a stream that breaks mid-flight**, so both the
+  SSE and websocket paths call it `InvalidRequest`. Also carried to "Phase 7",
+  where it turns out to be additive rather than breaking.
 
 ### The broker's models are not the trading models
 
@@ -644,34 +640,142 @@ reason: `" "` is `"Regular Sale"`, a bare `HashMap` invites `.trim()` at the cal
 site, and the ordinary case is the one that would break. There is a test that
 only that distinction passes.
 
-## Also open
+## Phase 7 — polish, and the decisions 1.0 closes the door on
+
+Phase 6.5 was measurable: a route was implemented or it was not, and
+`just coverage` said which. Phase 7 mostly is not. What is left divides into
+**one thing that is wrong today**, **changes that stop being possible at 1.0**,
+documentation, and two checks that would have caught by machine what hand-
+checking caught by luck.
+
+Read the version numbers as the constraint. `0.x` may break anything; `1.0`
+may not. Everything below is sorted by whether it survives that line.
+
+### The two features that do not exist
+
+`blocking` and `polars` are declared in `Cargo.toml`, listed in the `lib.rs`
+feature table, and **implemented nowhere**. Nothing in `src/` is gated on
+either:
+
+```sh
+grep -rn "feature = \"blocking\"" src/   # no matches
+grep -rn "feature = \"polars\"" src/     # no matches
+```
+
+That table is published on docs.rs for `0.1.0-alpha.1`, so this is not a gap in
+the plan — it is the crate claiming something untrue. `--features polars` today
+compiles the whole polars dependency and gives the caller nothing.
+`src/data/models.rs` says "the `polars` feature adds the frame conversion",
+which is false in the same way.
+
+**Either build them or drop the claims. Do not leave it as it is.** Dropping is
+a legitimate answer: neither is needed to use the API, and an honest crate with
+five documented features beats a dishonest one with seven.
+
+If they are built:
+
+- **`polars` collides with a type-alias decision.** `BarSet`, `QuoteSet`,
+  `TradeSet` and `AuctionSet` are `pub type … = HashMap<String, Vec<T>>`, and an
+  alias cannot take an inherent `impl`, so there is nowhere to hang a `.df()`.
+  The two ways out differ in cost: an **extension trait** (`ToFrame`, brought in
+  with a `use`) is additive and can ship any time; a **newtype** is a breaking
+  change and therefore a `0.x` decision. alpaca-py's `.df` is a property on a
+  real class, which is why the question does not arise there.
+- **`blocking` has one trap worth naming in the code.** A synchronous façade
+  built on `Handle::block_on` panics when called from inside an async context,
+  which is exactly what a caller experimenting in an async `main` will do. Owning
+  a runtime avoids the panic and costs a thread. Whichever is chosen, the failure
+  mode belongs in the rustdoc, not in an issue.
+
+### Breaking changes, so `0.x` or never
+
+| Change | Why it breaks | Where it came from |
+|---|---|---|
+| Exponential retry backoff | `RetryConfig` is **not** `#[non_exhaustive]` and its fields are public, so replacing `wait: Duration` with a strategy breaks every struct literal | Phase 6 |
+| `RetryConfig` marked `#[non_exhaustive]` | Cheap now, impossible later, and would have made the row above additive | This section |
+
+**The retry default contradicts Alpaca's own documentation.** `RetryConfig`
+waits a flat 3 seconds, three times, on 429 and 504 — inherited from alpaca-py.
+The [rate-limit page][rate-limits] says to retry "using exponential backoff",
+doubling from ~1s with jitter. `backoff.rs` already implements
+exponential-with-jitter as `capped_delay`, for stream reconnects; the REST path
+simply does not call it. This is not a missing capability, it is two subsystems
+disagreeing, and the one that is wrong is the one Alpaca wrote about.
+
+It changes how every caller behaves under load, so it wants a release of its
+own with the change in the notes — not a drive-by.
+
+[rate-limits]: https://docs.alpaca.markets/us/docs/broker-api-rate-limits
+
+### Additive, so it need not wait for 1.0
+
+**`Error` has no variant for a stream that breaks mid-flight.** Both surfaces
+report one as `InvalidRequest`, which is a lie in both: nothing about the
+request was invalid.
+
+```
+src/sse.rs:160            Error::InvalidRequest("event stream failed: …")
+src/trading/stream.rs:230 Error::InvalidRequest("websocket connect failed: …")
+```
+
+`Error` **is** `#[non_exhaustive]`, so adding one `Stream` variant covering both
+is not a breaking change and does not need to wait. What does change observably
+is what an existing failure maps to — anyone matching `InvalidRequest` to catch
+a dead stream stops catching it — so it still belongs in release notes.
+
+### Documentation
+
+- **The migration guide.** Phase 6.5's doc audit deliberately kept the comments
+  that help someone arriving from alpaca-py — "the typed replacement for
+  `raw_data=True`" — and marked them as migration guidance rather than deleting
+  them. This is where they get collected.
+- **The `lib.rs` framing still opens "a port of the official Python SDK".** The
+  crate targets the API and treats alpaca-py as one stale source among five. The
+  header contradicts the rest of the file.
+- **The remainder of the doc-rule audit.** The comments that attribute an
+  enforced *rule* to alpaca-py were checked in 6.5. The ones that merely describe
+  its *defaults* — page sizes, sort directions — were not. They are not
+  load-bearing for correctness, which is why they were left last, and why this is
+  the lowest-value item in this section.
+
+### Two checks, because hand-checking does not scale
+
+Both of these are the same lesson twice: 6.5 found real divergences by reading,
+and reading does not survive contact with 251 routes.
 
 - **Parameter coverage is not route coverage, and nothing measures it.**
-  `just coverage` compares paths and methods; it says nothing about whether a
-  request type carries every parameter its route accepts. Checking three routes
-  by hand while auditing the doc rules found four missing parameters —
-  `asset_class`, `before_order_id` and `after_order_id` on `GET /v2/orders`, and
-  `show_deliverables` on the option contracts route — all now added. Three
-  routes out of 251 is not a sample anyone should generalize from. A parameter
-  diff, driven by `specs/reference.json`, is the natural next thing for
-  `scripts/coverage.py` to grow.
-- **The doc-rule audit is partly done.** The ~40 comments that attribute a rule
-  to alpaca-py rather than to Alpaca were sorted and the enforced ones checked;
-  that turned up one comment describing a rule the code no longer had, and the
-  missing `category` field and its documented exclusivity. The comments that
-  merely *describe* alpaca-py's defaults — page sizes, sort directions — are not
-  yet each checked against the reference. They are not load-bearing for
-  correctness, which is why they were left last.
-
+  `just coverage` compares paths and methods only. Hand-checking three routes
+  turned up four missing parameters — `asset_class`, `before_order_id` and
+  `after_order_id` on `GET /v2/orders`, `show_deliverables` on the option
+  contracts route. Three routes out of 251 is not a sample. `specs/reference.json`
+  already carries every parameter of every operation, so the diff is a scripting
+  job, not research.
 - **Enum drift.** Of 71 generated enums, only 7 of the 19 with a same-named spec
-  schema agree exactly. Missing values land in `Unknown(String)` — degrading, not
-  breaking — but should become real variants. Add a spec cross-check to
-  `scripts/gen_enums.py`. Do **not** remove values we have that the spec lacks;
-  they may be deprecated but still served. `Exchange` is not drift: the spec's
-  same-named schema is venue names, alpaca-py's is tape codes. Verify
-  `TaxIdType::ARG_AR_CUIT` (ours) against the spec's `ARG_AG_CUIT` on a live
-  response — one is a typo.
-- **docs.rs build** for 0.0.0 has not been checked.
+  schema agree exactly. Unknown values degrade to `Unknown(String)` rather than
+  breaking, so this is a quality item and not a bug. Add the cross-check to
+  `scripts/gen_enums.py`. Do **not** remove values the spec lacks — they may be
+  deprecated and still served. `Exchange` is not drift: the spec's same-named
+  schema is venue names and alpaca-py's is tape codes. One case needs a live
+  response rather than a diff: `TaxIdType::ARG_AR_CUIT` against the spec's
+  `ARG_AG_CUIT`, where one of the two is a typo.
+
+### What 1.0 itself needs
+
+The release path already works — `0.1.0-alpha.1` went out through
+`.github/workflows/release.yml` with crates.io trusted publishing, docs.rs built
+it, and `RELEASING.md` has the procedure. `just publish-dry` runs the whole
+thing including `cargo semver-checks`. So 1.0 is not a mechanics problem.
+
+It is a promise problem. Publishing 1.0 says the public surface is one worth
+keeping, and the surface currently includes two features that do nothing and a
+retry default that contradicts the vendor's advice. Fix those two and the
+version number stops being a claim the crate cannot back.
+
+## Also open
+
+Facts a reader needs rather than work to schedule. The work lives in
+"Phase 7" above.
+
 - **CIP is spec-derived and unverified.** alpaca-py's two CIP methods are empty
   stubs — its own comment says the sandbox 404s them — so the six `CIP*` models
   have never met a real response. They follow `models/cip.py` and the broker
