@@ -1888,8 +1888,8 @@ impl BrokerClient {
 
     /// The US corporate bond master list.
     ///
-    /// One of the few phase 6.5 broker routes with a real payload behind it:
-    /// see `fixtures/go/`.
+    /// One of the few spec-derived broker routes with a real captured payload
+    /// behind it, harvested from the Go SDK's tests: see `fixtures/go/`.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.

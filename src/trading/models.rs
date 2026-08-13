@@ -1,8 +1,8 @@
 //! Response models for the trading API.
 //!
-//! Field-for-field with the Python, with two systematic changes: money that
-//! arrives as a string is [`Decimal`] rather than `str`, and integers Alpaca
-//! sends inconsistently go through [`serde_util::int`].
+//! Field-for-field with what the API sends, with two systematic changes: money
+//! that arrives as a string is [`Decimal`] rather than `str`, and integers
+//! Alpaca sends inconsistently go through [`serde_util::int`].
 //!
 //! Unknown fields are ignored rather than rejected. Alpaca adds fields without
 //! warning — `Asset` grew `last_price` and `last_close_pct_change`, orders carry

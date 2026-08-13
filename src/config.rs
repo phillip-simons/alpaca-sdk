@@ -387,7 +387,7 @@ mod tests {
 
     /// Bounds rather than values, because the delay is jittered. The lower bound
     /// is what proves the growth: by the fourth failure even the unluckiest draw
-    /// exceeds the flat 3 seconds this used to wait.
+    /// exceeds three seconds, which no flat policy at this base would ever do.
     #[test]
     fn exponential_backoff_grows_and_stays_under_the_cap() {
         let cfg = RetryConfig::default();
