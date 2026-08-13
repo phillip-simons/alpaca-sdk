@@ -29,3 +29,14 @@ updates:
     commit-message:
       prefix: ci
       include: scope
+    ignore:
+      # `dtolnay/rust-toolchain@1.88.0` is not a dependency behind on its
+      # updates — that version *is* the MSRV, and the whole purpose of the job
+      # pinning it is to build against the oldest Rust this crate claims to
+      # support. Dependabot cannot tell the difference and opened a pull request
+      # to "bump" it to 1.100.0, which would have left the MSRV unverified while
+      # the job carried on reporting green.
+      #
+      # The MSRV moves when `rust-version` in Cargo.toml moves, by hand, as a
+      # deliberate and breaking-ish decision. Never automatically.
+      - dependency-name: dtolnay/rust-toolchain
