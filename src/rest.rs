@@ -147,6 +147,31 @@ impl RestClient {
         &self.config
     }
 
+    /// The same client, targeting a different API version segment.
+    ///
+    /// Alpaca versions routes individually rather than per API, and it is not
+    /// unusual for a client's own version to be wrong for a given route: the
+    /// trading API is `v2` but its locate routes are `v1` and its per-market
+    /// calendar is `v3`; the broker API is `v1` but funding wallets are
+    /// `v1beta` and logos `v1beta1`.
+    ///
+    /// Writing that at the call site is deliberate. A version buried in a
+    /// client constructor is the mistake that shipped three event streams
+    /// pointing at routes Alpaca had retired — see ROADMAP.md — and this way
+    /// the version sits next to the path it belongs to.
+    ///
+    /// Cheap: the underlying HTTP client is shared, not rebuilt.
+    #[must_use]
+    pub fn at_version(&self, api_version: &str) -> Self {
+        Self {
+            http: self.http.clone(),
+            config: RestConfig {
+                api_version: api_version.to_owned(),
+                ..self.config.clone()
+            },
+        }
+    }
+
     /// Issues a `GET`, sending `query` as URL parameters.
     ///
     /// # Errors
@@ -228,6 +253,30 @@ impl RestClient {
             self.send(Method::PATCH, path, None::<&Empty>, Some(body))
                 .await?,
         )
+    }
+
+    /// Issues a request with both a query string and a body.
+    ///
+    /// The six methods above cover routes that take one or the other, which is
+    /// nearly all of them. A handful take both — `PUT /v2/watchlists:by_name`
+    /// names the watchlist in the query and carries the update in the body —
+    /// and folding the query into the path string would skip its encoding.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn request<T, Q, B>(
+        &self,
+        method: Method,
+        path: &str,
+        query: Option<&Q>,
+        body: Option<&B>,
+    ) -> Result<T>
+    where
+        T: DeserializeOwned,
+        Q: Serialize + ?Sized,
+        B: Serialize + ?Sized,
+    {
+        self.decode(path, self.send(method, path, query, body).await?)
     }
 
     /// Issues a `GET` and returns the response body as bytes.

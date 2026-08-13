@@ -9,6 +9,13 @@ use crate::auth::Credentials;
 use crate::config::BaseUrl;
 use crate::error::Result;
 use crate::rest::{Empty, RestClient, RestConfig};
+use crate::sse::EventStreamRequest;
+use crate::trading::enums::ActivityType;
+use crate::trading::locates::{
+    CreateLocateRequest, GetLocateQuotesRequest, GetLocatesRequest, Locate, LocateQuotes,
+    LocatesPage,
+};
+use crate::trading::markets::{GetMarketCalendarRequest, Market, MarketCalendar};
 use crate::trading::models::{
     AccountConfiguration, Activity, Asset, Calendar, Clock, ClosePositionResponse,
     CorporateActionAnnouncement, OptionContract, OptionContractsResponse, Order, PortfolioHistory,
@@ -19,6 +26,13 @@ use crate::trading::requests::{
     GetCorporateAnnouncementsRequest, GetOptionContractsRequest, GetOrderByIdRequest,
     GetOrdersRequest, GetPortfolioHistoryRequest, OrderRequest, ReplaceOrderRequest,
     UpdateWatchlistRequest,
+};
+use crate::trading::tokenization::{
+    ByClientRequestId, GetTokenizationRequestsRequest, MintTokenRequest, TokenizationRequest,
+};
+use crate::trading::wallets::{
+    CreateWhitelistedAddressRequest, CryptoTransfer, CryptoWallet, GetCryptoWalletsRequest,
+    TransferFeeEstimate, TransferFeeEstimateRequest, WhitelistedAddress,
 };
 use crate::types::AssetIdent;
 
@@ -38,6 +52,9 @@ use crate::types::AssetIdent;
 #[derive(Debug, Clone)]
 pub struct TradingClient {
     rest: RestClient,
+    /// A second HTTP client, for the activity event stream: its response body
+    /// is read incrementally rather than decoded whole.
+    raw: reqwest::Client,
 }
 
 impl TradingClient {
@@ -57,6 +74,7 @@ impl TradingClient {
     /// underlying HTTP client fails to build.
     pub fn with_config(credentials: &Credentials, config: RestConfig) -> Result<Self> {
         Ok(Self {
+            raw: crate::sse::streaming_client(credentials, &config)?,
             rest: RestClient::new(credentials, config)?,
         })
     }
@@ -479,5 +497,335 @@ impl TradingClient {
         self.rest
             .get(&format!("/options/contracts/{contract}"), &Empty)
             .await
+    }
+
+    /// Declines to exercise an in-the-money option position at expiry.
+    ///
+    /// Answers `204 No Content`, so there is nothing to return. Not in
+    /// alpaca-py.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn exercise_do_not_exercise(&self, contract: &AssetIdent) -> Result<()> {
+        let path = format!("/positions/{contract}/do-not-exercise");
+        self.rest.post(&path, &Empty).await
+    }
+
+    // ------------------------------------------------ activities by type
+
+    /// Account activities of one type.
+    ///
+    /// The narrowed counterpart to
+    /// [`get_account_activities`](Self::get_account_activities): the type moves
+    /// from the query string into the path, which is the only way to ask for
+    /// exactly one kind.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_account_activities_by_type(
+        &self,
+        activity_type: &ActivityType,
+        query: &[(&str, String)],
+    ) -> Result<Vec<Activity>> {
+        let path = format!("/account/activities/{activity_type}");
+        self.rest.get(&path, query).await
+    }
+
+    // ---------------------------------------------------- watchlists by name
+
+    /// Fetches one watchlist by name.
+    ///
+    /// The name goes in the query string, not the path: the route is literally
+    /// `/v2/watchlists:by_name`, colon and all.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_watchlist_by_name(&self, name: &str) -> Result<Watchlist> {
+        self.rest
+            .get("/watchlists:by_name", &[("name", name)])
+            .await
+    }
+
+    /// Updates a watchlist by name.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if the update changes nothing.
+    pub async fn update_watchlist_by_name(
+        &self,
+        name: &str,
+        update: &UpdateWatchlistRequest,
+    ) -> Result<Watchlist> {
+        update.validate()?;
+        self.rest
+            .request(
+                Method::PUT,
+                "/watchlists:by_name",
+                Some(&[("name", name)]),
+                Some(update),
+            )
+            .await
+    }
+
+    /// Adds one asset to a watchlist by name.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn add_asset_to_watchlist_by_name(
+        &self,
+        name: &str,
+        symbol: &str,
+    ) -> Result<Watchlist> {
+        self.rest
+            .request(
+                Method::POST,
+                "/watchlists:by_name",
+                Some(&[("name", name)]),
+                Some(&serde_json::json!({ "symbol": symbol })),
+            )
+            .await
+    }
+
+    /// Deletes a watchlist by name.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn delete_watchlist_by_name(&self, name: &str) -> Result<()> {
+        self.rest
+            .delete("/watchlists:by_name", &[("name", name)])
+            .await
+    }
+
+    // ---------------------------------------------------------- calendar
+
+    /// A named market's calendar.
+    ///
+    /// **A `v3` route**, where [`get_calendar`](Self::get_calendar) is `v2` and
+    /// the broker's equivalent is `v2` again. It answers with pre-market, core,
+    /// lunch and post-market windows as absolute instants rather than with the
+    /// naive eastern-time open and close [`Calendar`] carries.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_market_calendar(
+        &self,
+        market: &Market,
+        filter: Option<&GetMarketCalendarRequest>,
+    ) -> Result<MarketCalendar> {
+        let path = format!("/calendar/{market}");
+        match filter {
+            Some(filter) => self.rest.at_version("v3").get(&path, filter).await,
+            None => self.rest.at_version("v3").get(&path, &Empty).await,
+        }
+    }
+
+    // ----------------------------------------------------------- locates
+
+    /// Lists locates, optionally filtered.
+    ///
+    /// **A `v1` route**, unlike the rest of this client.
+    ///
+    /// Returns one page. The response carries a `next_page_token`; pass it back
+    /// in [`GetLocatesRequest::page_token`] for the next.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_locates(&self, filter: Option<&GetLocatesRequest>) -> Result<LocatesPage> {
+        match filter {
+            Some(filter) => self.rest.at_version("v1").get("/locates", filter).await,
+            None => self.rest.at_version("v1").get("/locates", &Empty).await,
+        }
+    }
+
+    /// Fetches one locate.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_locate_by_id(&self, locate_id: Uuid) -> Result<Locate> {
+        self.rest
+            .at_version("v1")
+            .get(&format!("/locates/{locate_id}"), &Empty)
+            .await
+    }
+
+    /// What the named symbols currently cost to borrow.
+    ///
+    /// Partial success is normal: a symbol that is easy to borrow needs no
+    /// locate and comes back under
+    /// [`errors`](crate::trading::LocateQuotes::errors) rather than as a failed request.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_locate_quotes(
+        &self,
+        request: &GetLocateQuotesRequest,
+    ) -> Result<LocateQuotes> {
+        self.rest
+            .at_version("v1")
+            .get("/locates/quotes", request)
+            .await
+    }
+
+    /// Requests a locate.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if the request contradicts
+    /// itself; see [`CreateLocateRequest::validate`].
+    pub async fn create_locate(&self, request: &CreateLocateRequest) -> Result<Locate> {
+        request.validate()?;
+        self.rest.at_version("v1").post("/locates", request).await
+    }
+
+    // ------------------------------------------------------ tokenization
+
+    /// Mints a tokenized asset from a position.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if `qty` is not positive.
+    pub async fn mint_token(&self, request: &MintTokenRequest) -> Result<TokenizationRequest> {
+        request.validate()?;
+        self.rest.post("/tokenization/mint", request).await
+    }
+
+    /// Lists tokenization requests.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_tokenization_requests(
+        &self,
+        filter: Option<&GetTokenizationRequestsRequest>,
+    ) -> Result<Vec<TokenizationRequest>> {
+        match filter {
+            Some(filter) => self.rest.get("/tokenization/requests", filter).await,
+            None => self.rest.get("/tokenization/requests", &Empty).await,
+        }
+    }
+
+    /// Fetches one tokenization request.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_tokenization_request(&self, request_id: Uuid) -> Result<TokenizationRequest> {
+        self.rest
+            .get(&format!("/tokenization/requests/{request_id}"), &Empty)
+            .await
+    }
+
+    /// Fetches one tokenization request by the caller's own id.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_tokenization_request_by_client_id(
+        &self,
+        request: &ByClientRequestId,
+    ) -> Result<TokenizationRequest> {
+        self.rest
+            .get("/tokenization/requests:by_client_request_id", request)
+            .await
+    }
+
+    // ----------------------------------------------------- crypto funding
+
+    /// The account's crypto deposit wallets.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_crypto_wallets(
+        &self,
+        filter: Option<&GetCryptoWalletsRequest>,
+    ) -> Result<CryptoWallet> {
+        match filter {
+            Some(filter) => self.rest.get("/wallets", filter).await,
+            None => self.rest.get("/wallets", &Empty).await,
+        }
+    }
+
+    /// The account's on-chain transfers.
+    ///
+    /// The withdrawal route that would create one is deliberately absent: it is
+    /// deprecated with a sunset of 2026-10-09 and the reference's replacement
+    /// is the Alpaca web application, not another endpoint. See
+    /// [`crate::trading::wallets`].
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_crypto_transfers(&self) -> Result<CryptoTransfer> {
+        self.rest.get("/wallets/transfers", &Empty).await
+    }
+
+    /// Fetches one on-chain transfer.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_crypto_transfer(&self, transfer_id: &str) -> Result<CryptoTransfer> {
+        self.rest
+            .get(&format!("/wallets/transfers/{transfer_id}"), &Empty)
+            .await
+    }
+
+    /// The addresses withdrawals may be sent to.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_whitelisted_addresses(&self) -> Result<WhitelistedAddress> {
+        self.rest.get("/wallets/whitelists", &Empty).await
+    }
+
+    /// Allowlists a withdrawal address.
+    ///
+    /// New entries land [`Pending`](crate::trading::WhitelistStatus::Pending) and become usable
+    /// after Alpaca's cooling-off period.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn create_whitelisted_address(
+        &self,
+        request: &CreateWhitelistedAddressRequest,
+    ) -> Result<WhitelistedAddress> {
+        self.rest.post("/wallets/whitelists", request).await
+    }
+
+    /// Removes an allowlisted withdrawal address.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn delete_whitelisted_address(&self, address_id: &str) -> Result<()> {
+        self.rest
+            .delete(&format!("/wallets/whitelists/{address_id}"), &Empty)
+            .await
+    }
+
+    /// What a proposed transfer would cost in gas.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn estimate_transfer_fee(
+        &self,
+        request: &TransferFeeEstimateRequest,
+    ) -> Result<TransferFeeEstimate> {
+        self.rest.get("/wallets/fees/estimate", request).await
+    }
+
+    // ------------------------------------------------------------- events
+
+    /// Streams account activity events as they happen.
+    ///
+    /// A `v2beta1` route, and the push counterpart to
+    /// [`get_account_activities`](Self::get_account_activities). The broker API
+    /// carries the same stream; this is the one a trading-only build can reach.
+    ///
+    /// # Errors
+    /// Propagates transport failures and any non-success status the server
+    /// answers the subscription with.
+    pub async fn get_activity_events(
+        &self,
+        filter: Option<&EventStreamRequest>,
+    ) -> Result<impl futures_util::Stream<Item = Result<crate::sse::Event>> + use<>> {
+        let path = "/events/activities";
+        let url = format!(
+            "{}/v2beta1{path}",
+            self.rest.config().base_url.trim_end_matches('/')
+        );
+        let query = filter.map(EventStreamRequest::query).unwrap_or_default();
+        crate::sse::subscribe(&self.raw, &url, path, &query).await
     }
 }

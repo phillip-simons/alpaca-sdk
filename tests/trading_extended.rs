@@ -1,0 +1,335 @@
+//! The trading routes alpaca-py does not implement: locates, tokenization,
+//! crypto funding, watchlists by name, the per-market calendar, activities of
+//! one type, and do-not-exercise.
+//!
+//! None of these has a captured payload in any SDK, so the bodies here are the
+//! published reference's own examples. That is weaker evidence than
+//! `fixtures/`, and the tests say so rather than implying otherwise. What they
+//! *do* pin down with certainty is the request this crate sends — the method,
+//! the path, and above all the **version segment**, which is what the port got
+//! wrong on three event streams and is the thing `just coverage` cannot check.
+
+#![cfg(feature = "trading")]
+
+use alpaca_sdk::trading::{
+    CreateLocateRequest, CreateWhitelistedAddressRequest, CryptoChain, GetLocateQuotesRequest,
+    GetLocatesRequest, LocateStatus, Market, MintTokenRequest, TokenizationIssuer,
+    TokenizationNetwork, TokenizationStatus, TradingClient, UpdateWatchlistRequest,
+    WhitelistStatus,
+};
+use alpaca_sdk::types::AssetIdent;
+use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
+use rust_decimal::Decimal;
+use serde_json::json;
+use wiremock::matchers::{body_json, method, path, query_param};
+use wiremock::{Mock, MockServer, ResponseTemplate};
+
+fn client(server: &MockServer) -> TradingClient {
+    TradingClient::with_config(
+        &Credentials::new("key", "secret").unwrap(),
+        RestConfig::new(server.uri()).retry(RetryConfig::none()),
+    )
+    .unwrap()
+}
+
+// --------------------------------------------------------------- locates
+
+#[tokio::test]
+async fn locates_are_a_v1_route_on_a_v2_client() {
+    // The whole point of `at_version`. The trading client is v2; these are not,
+    // and a v2 path here would 404 while `just coverage` still showed a tick.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/locates"))
+        .and(query_param("status", "active"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "locates": [{
+                "all_or_none": false,
+                "created_at": "2026-01-02T15:04:05Z",
+                "expires_at": "2026-01-03T01:00:00Z",
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "limit_price": "0.05",
+                "located_price": "0.05",
+                "located_qty": 100,
+                "requested_qty": 100,
+                "status": "active",
+                "symbol": "TSLA",
+                "total_fee": "5.00",
+            }],
+            "next_page_token": null,
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let filter = GetLocatesRequest::new().status(LocateStatus::Active);
+    let page = client(&server).get_locates(Some(&filter)).await.unwrap();
+
+    assert_eq!(page.locates.len(), 1);
+    assert_eq!(page.locates[0].symbol, "TSLA");
+    // Fees cross the wire as strings, so they are Decimal.
+    assert_eq!(page.locates[0].total_fee, Some(Decimal::new(500, 2)));
+    assert_eq!(page.next_page_token, None);
+}
+
+#[tokio::test]
+async fn a_locate_quote_reports_per_symbol_failures_beside_the_quotes() {
+    // Asking about an easy-to-borrow symbol is not an error; it comes back
+    // under `errors` with the rest of the request still served.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/locates/quotes"))
+        .and(query_param("symbols", "TSLA,AAPL"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "quotes": [{
+                "available_qty": 5000,
+                "price": "0.05",
+                "quoted_at": "2026-01-02T15:04:05Z",
+                "symbol": "TSLA",
+            }],
+            "errors": [{
+                "code": "easy_to_borrow",
+                "message": "AAPL is easy to borrow and does not require a locate",
+                "symbol": "AAPL",
+            }],
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let request = GetLocateQuotesRequest::new(vec!["TSLA".to_owned(), "AAPL".to_owned()]);
+    let quotes = client(&server).get_locate_quotes(&request).await.unwrap();
+
+    assert_eq!(quotes.quotes.len(), 1);
+    assert_eq!(quotes.errors.len(), 1);
+    assert_eq!(quotes.errors[0].symbol, "AAPL");
+}
+
+#[tokio::test]
+async fn a_degenerate_locate_never_reaches_the_server() {
+    let server = MockServer::start().await;
+    // No mock mounted: any request at all would fail the test.
+    let error = client(&server)
+        .create_locate(&CreateLocateRequest::new("TSLA", 0))
+        .await
+        .unwrap_err();
+
+    assert!(matches!(error, alpaca_sdk::Error::InvalidRequest(_)));
+}
+
+// ---------------------------------------------------------------- calendar
+
+#[tokio::test]
+async fn the_per_market_calendar_is_a_v3_route() {
+    // Three versions of the same idea are live at once: /v2/calendar here,
+    // /v3/calendar/{market} for this one, and /v2/calendar/{market} on the
+    // broker API.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/calendar/XLON"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "market": {
+                "acronym": "LSE",
+                "name": "London Stock Exchange",
+                "timezone": "Europe/London",
+                "mic": "XLON",
+            },
+            "calendar": [{
+                "date": "2026-01-02",
+                "core_start": "2026-01-02T08:00:00Z",
+                "core_end": "2026-01-02T16:30:00Z",
+            }],
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let calendar = client(&server)
+        .get_market_calendar(&Market::Xlon, None)
+        .await
+        .unwrap();
+
+    assert_eq!(calendar.market.mic.as_deref(), Some("XLON"));
+    assert_eq!(calendar.calendar.len(), 1);
+    assert_eq!(calendar.calendar[0].lunch_start, None);
+}
+
+// ------------------------------------------------------ watchlists by name
+
+#[tokio::test]
+async fn a_watchlist_by_name_puts_the_name_in_the_query_not_the_path() {
+    // The route is literally `/v2/watchlists:by_name`, colon and all, and the
+    // name is a parameter. Folding it into the path would skip its encoding.
+    let server = MockServer::start().await;
+    Mock::given(method("PUT"))
+        .and(path("/v2/watchlists:by_name"))
+        .and(query_param("name", "my list"))
+        .and(body_json(json!({"name": "renamed"})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "account_id": "550e8400-e29b-41d4-a716-446655440000",
+            "id": "550e8400-e29b-41d4-a716-446655440001",
+            "name": "renamed",
+            "created_at": "2026-01-02T15:04:05Z",
+            "updated_at": "2026-01-02T15:04:05Z",
+            "assets": [],
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let update = UpdateWatchlistRequest::new().name("renamed");
+    let watchlist = client(&server)
+        .update_watchlist_by_name("my list", &update)
+        .await
+        .unwrap();
+
+    assert_eq!(watchlist.name, "renamed");
+}
+
+#[tokio::test]
+async fn deleting_a_watchlist_by_name_sends_the_name_and_expects_no_body() {
+    let server = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path("/v2/watchlists:by_name"))
+        .and(query_param("name", "gone"))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    client(&server)
+        .delete_watchlist_by_name("gone")
+        .await
+        .unwrap();
+}
+
+// -------------------------------------------------------------- activities
+
+#[tokio::test]
+async fn activities_of_one_type_move_the_type_into_the_path() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v2/account/activities/FILL"))
+        // The narrowed route returns the same element type as the unfiltered
+        // one, so this is the shape `fixtures/` already verifies rather than
+        // the looser one the spec draws.
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([{
+            "activity_type": "FILL",
+            "id": "20260102000000000::1",
+            "account_id": "550e8400-e29b-41d4-a716-446655440000",
+            "symbol": "AAPL",
+            "qty": "10",
+            "price": "185.00",
+            "side": "buy",
+            "type": "fill",
+            "leaves_qty": "0",
+            "cum_qty": "10",
+            "order_id": "550e8400-e29b-41d4-a716-446655440002",
+            "order_status": "filled",
+            "transaction_time": "2026-01-02T15:04:05Z",
+        }])))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let activities = client(&server)
+        .get_account_activities_by_type(&alpaca_sdk::trading::ActivityType::Fill, &[])
+        .await
+        .unwrap();
+
+    assert_eq!(activities.len(), 1);
+}
+
+// -------------------------------------------------------------------- dne
+
+#[tokio::test]
+async fn do_not_exercise_answers_with_no_content() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v2/positions/AAPL260116C00150000/do-not-exercise"))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let contract: AssetIdent = "AAPL260116C00150000".into();
+    client(&server)
+        .exercise_do_not_exercise(&contract)
+        .await
+        .unwrap();
+}
+
+// ----------------------------------------------------------- tokenization
+
+#[tokio::test]
+async fn minting_a_token_sends_the_reference_body() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v2/tokenization/mint"))
+        .and(body_json(json!({
+            "underlying_symbol": "AAPL",
+            "qty": "1.5",
+            "issuer": "xstocks",
+            "network": "solana",
+            "wallet_address": "9xQeWvG816bUx9EPa2",
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "created_at": "2026-01-02T15:04:05Z",
+            "issuer": "xstocks",
+            "network": "solana",
+            "qty": "1.5",
+            "status": "pending",
+            "token_symbol": "AAPLx",
+            "tokenization_request_id": "abc",
+            "underlying_symbol": "AAPL",
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let request = MintTokenRequest::new(
+        "AAPL",
+        Decimal::new(15, 1),
+        TokenizationIssuer::Xstocks,
+        TokenizationNetwork::Solana,
+        "9xQeWvG816bUx9EPa2",
+    );
+    let minted = client(&server).mint_token(&request).await.unwrap();
+
+    assert_eq!(minted.status, TokenizationStatus::Pending);
+    assert_eq!(minted.token_symbol, "AAPLx");
+}
+
+// --------------------------------------------------------- crypto funding
+
+#[tokio::test]
+async fn a_new_whitelisted_address_starts_pending() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v2/wallets/whitelists"))
+        .and(body_json(json!({
+            "address": "0xabc",
+            "asset": "ETH",
+            "chain": "ETH",
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "address": "0xabc",
+            "asset": "ETH",
+            "chain": "ETH",
+            "created_at": "2026-01-02T15:04:05Z",
+            "id": "1",
+            "status": "PENDING",
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let request = CreateWhitelistedAddressRequest::new("0xabc", "ETH", CryptoChain::Eth);
+    let entry = client(&server)
+        .create_whitelisted_address(&request)
+        .await
+        .unwrap();
+
+    // Upper case on the wire, unlike the fiat transfer statuses.
+    assert_eq!(entry.status, Some(WhitelistStatus::Pending));
+}

@@ -12,49 +12,11 @@ see ROADMAP.md.
 decision, recorded with its reason in `SKIP` in the script — a route we
 have chosen against must not keep reading as a gap.
 
-## trading — 34/57 (59%), 1 deliberately skipped
+## trading — 56/57 (98%), 1 deliberately skipped
 
 ### Not implemented
 
-**/locates**
-- `GET   ` `/v1/locates`
-- `POST  ` `/v1/locates`
-
-**/wallets**
-- `GET   ` `/v2/wallets`
-
-**/watchlists:by_name**
-- `DELETE` `/v2/watchlists:by_name`
-- `GET   ` `/v2/watchlists:by_name`
-- `POST  ` `/v2/watchlists:by_name`
-- `PUT   ` `/v2/watchlists:by_name`
-
-**account**
-- `GET   ` `/v2/account/activities/{activity_type}`
-
-**calendar**
-- `GET   ` `/v3/calendar/{market}`
-
-**locates**
-- `GET   ` `/v1/locates/quotes`
-- `GET   ` `/v1/locates/{locate_id}`
-
-**positions**
-- `POST  ` `/v2/positions/{symbol_or_contract_id}/do-not-exercise`
-
-**tokenization**
-- `POST  ` `/v2/tokenization/mint`
-- `GET   ` `/v2/tokenization/requests`
-- `GET   ` `/v2/tokenization/requests/{tokenization_request_id}`
-- `GET   ` `/v2/tokenization/requests:by_client_request_id`
-
-**wallets**
-- `GET   ` `/v2/wallets/fees/estimate`
-- `GET   ` `/v2/wallets/transfers`
-- `GET   ` `/v2/wallets/transfers/{transfer_id}`
-- `GET   ` `/v2/wallets/whitelists`
-- `POST  ` `/v2/wallets/whitelists`
-- `DELETE` `/v2/wallets/whitelists/{whitelisted_address_id}`
+Nothing.
 
 ## data — 42/42 (100%)
 
@@ -62,7 +24,7 @@ have chosen against must not keep reading as a gap.
 
 Nothing.
 
-## broker — 83/154 (53%), 1 deliberately skipped
+## broker — 85/154 (55%), 1 deliberately skipped
 
 ### Not implemented
 
@@ -114,9 +76,6 @@ Nothing.
 - `GET   ` `/v1/assets/fixed_income/us_corporates`
 - `GET   ` `/v1/assets/fixed_income/us_treasuries`
 
-**calendar**
-- `GET   ` `/v2/calendar/{market}`
-
 **cash_interest**
 - `GET   ` `/v1/cash_interest/apr_tiers`
 
@@ -166,9 +125,6 @@ Nothing.
 - `GET   ` `/v1/transfers/jit/limits`
 - `GET   ` `/v1/transfers/jit/reports`
 - `GET   ` `/v1/transfers/jit/{ledger_id}/balances`
-
-**wallets**
-- `GET   ` `/v1/wallets/fees/estimate`
 
 ## Deliberately skipped
 

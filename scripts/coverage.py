@@ -125,14 +125,20 @@ def spec_operations(spec: pathlib.Path) -> tuple[list[tuple[str, str]], set[tupl
 BINDING = re.compile(r"let path = (?:format!\s*\(\s*)?\"([^\"]+)\"")
 # `self.rest.get("/x", ..)`, `self.rest.post(&format!("/x/{y}"), ..)`,
 # `self.rest.patch(&path, ..)`, and the same split across lines by rustfmt.
+#
+# `.at_version("v1")` may sit between the two: Alpaca versions routes
+# individually, so a client's own version is not always the route's.
 REST_CALL = re.compile(
-    r"\.rest\s*\.\s*(get|post|put|patch|delete)\s*\(\s*"
+    r"\.rest\s*\.\s*(?:at_version\s*\(\s*\"[^\"]+\"\s*\)\s*\.\s*)?"
+    r"(get|post|put|patch|delete)\s*\(\s*"
     r"(?:&?\s*(?:format!\s*\(\s*)?\"(?P<literal>[^\"]+)\"|&?(?P<binding>path)\b)",
     re.S,
 )
-# `send_void(Method::DELETE, &format!("/x"), ..)`, and the same with a binding.
+# `send_void(Method::DELETE, &format!("/x"), ..)` and
+# `self.rest.request(Method::PUT, "/x", ..)`, which take the method as a value
+# rather than as the name of the call.
 VOID_CALL = re.compile(
-    r"send_void\s*\(\s*Method::(GET|POST|PUT|PATCH|DELETE)\s*,\s*"
+    r"(?:send_void|\.rest\s*\.\s*request)\s*\(\s*Method::(GET|POST|PUT|PATCH|DELETE)\s*,\s*"
     r"(?:&?\s*(?:format!\s*\(\s*)?\"(?P<literal>[^\"]+)\"|&?(?P<binding>path)\b)",
     re.S,
 )
