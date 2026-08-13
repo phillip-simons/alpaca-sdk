@@ -550,22 +550,21 @@ async fn a_timeout_longer_than_the_poll_interval_still_fires_eventually() {
     );
 }
 
-/// A connection that came up is not a failure, so it must not advance the
-/// backoff curve.
+/// A session that did its job clears the failure count.
 ///
-/// The old loop incremented the retry counter immediately after a *successful*
-/// connect and only reset it on a market data message. A session that connected,
-/// handshook and then ended — a server-side recycle, which is routine — pushed
-/// the curve out every time: 1s, 2s, 4s, 8s, 16s, then the 30s ceiling, after
-/// six healthy sessions. Overnight on a quiet stream that meant sitting at the
-/// maximum by the opening bell and missing the first half-minute of it.
+/// The backoff curve is indexed by consecutive *failures*, and the original loop
+/// incremented it immediately after a **successful** connect — so a server-side
+/// recycle, which is routine, pushed the delay out every time and left a quiet
+/// overnight stream sitting at the 30s ceiling by the opening bell.
 ///
-/// The default backoff is 1s jittered to [0.5s, 1s), so a curve that stays put
-/// reconnects at least a dozen times in twelve seconds, while one that doubles
-/// gets through about five.
+/// `SendThenDrop` delivers a trade and then drops, which is what a healthy
+/// session that ends looks like. The default backoff is 1s jittered to
+/// [0.5s, 1s), so a curve that stays put reconnects at least a dozen times in
+/// twelve seconds.
 #[tokio::test]
-async fn a_successful_connection_does_not_advance_the_backoff_curve() {
-    let (endpoint, _, connections) = serve(Script::DropAfterHandshake).await;
+async fn a_session_that_delivered_data_does_not_advance_the_backoff_curve() {
+    let (endpoint, _, connections) =
+        serve(Script::SendThenDrop(vec![json!([trade("AAPL", 1.0)])])).await;
 
     let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
     stream.subscribe_trades(["AAPL"]);
@@ -579,7 +578,36 @@ async fn a_successful_connection_does_not_advance_the_backoff_curve() {
     let seen = *connections.lock().await;
     assert!(
         seen >= 8,
-        "backoff grew across successful connections: only {seen} reconnects in 12s, \
-         expected the curve to stay at its minimum"
+        "backoff grew across sessions that delivered data: only {seen} reconnects \
+         in 12s, expected the curve to stay at its minimum"
+    );
+}
+
+/// And the other direction, which resetting on *connect* alone would have got
+/// wrong: a server that completes the handshake and immediately hangs up has
+/// not done its job, however far it got. Treating that as success pinned the
+/// delay at ~1s forever — roughly one connection a second at an endpoint that
+/// allows one per account.
+///
+/// A growing curve waits 0.5–1s, then 1–2s, 2–4s, 4–8s: about five connections
+/// in twelve seconds, against a dozen or more if it were pinned at the minimum.
+#[tokio::test]
+async fn a_session_that_dropped_immediately_does_advance_the_backoff_curve() {
+    let (endpoint, _, connections) = serve(Script::DropAfterHandshake).await;
+
+    let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
+    stream.subscribe_trades(["AAPL"]);
+
+    let mut messages = Box::pin(stream.run());
+    let _ = tokio::time::timeout(Duration::from_secs(12), async {
+        while messages.next().await.is_some() {}
+    })
+    .await;
+
+    let seen = *connections.lock().await;
+    assert!(
+        seen <= 7,
+        "a connect-then-drop server should be backed off from, but saw {seen} \
+         connections in 12s — the curve is not growing"
     );
 }

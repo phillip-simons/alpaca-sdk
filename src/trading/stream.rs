@@ -32,6 +32,15 @@ const TRADE_UPDATES: &str = "trade_updates";
 /// How long to wait for a frame before re-checking the staleness clock.
 const RECEIVE_POLL: Duration = Duration::from_secs(5);
 
+/// How long a session must last before it counts as healthy.
+///
+/// Defined here as well as on the market data stream rather than shared: the two
+/// live behind different feature flags, and a constant is cheaper to state twice
+/// than a module is to introduce for it. See the market data stream for the
+/// reasoning — a connection that came up and immediately dropped is a failure
+/// however far it got through the handshake, so it must not clear the curve.
+const STABLE_SESSION: Duration = Duration::from_secs(30);
+
 /// A frame from the trade update stream.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -148,18 +157,20 @@ impl TradingStream {
                     }
                 };
 
-                // The connection came up, so the consecutive-failure count the
-                // backoff curve reads is zero. This matters more here than on
-                // the data stream: a silent account is this stream's documented
-                // normal state, so the old reset — only on a trade update —
-                // never ran, and a few server-side recycles left every
+                // When this session began, for the health check at the bottom
+                // of the loop. The old reset fired only on a trade update, and a
+                // silent account is this stream's documented normal state — so
+                // it never ran, and a few server-side recycles left every
                 // reconnect waiting the maximum. There is no replay on this
-                // socket, so a fill in that window is gone.
-                retries = 0;
+                // socket, so a fill in that window is gone. Resetting on
+                // connect alone would swing too far the other way — see
+                // `STABLE_SESSION`.
+                let session_start = Instant::now();
 
                 // Reset by trade updates, so `data_timeout` measures elapsed
                 // time since the last one rather than the length of one read.
                 let mut last_update = Instant::now();
+                let mut delivered_update = false;
 
                 loop {
                     let poll = match self.data_timeout {
@@ -201,6 +212,7 @@ impl TradingStream {
                         Ok(Some(message)) => {
                             if message.is_trade_update() {
                                 last_update = Instant::now();
+                                delivered_update = true;
                             }
                             yield Ok(message);
                         }
@@ -212,7 +224,12 @@ impl TradingStream {
                 }
 
                 let _ = socket.close(None).await;
-                retries = retries.max(1);
+                // A session that did its job clears the failure count; one that
+                // came up and fell straight over does not.
+                if delivered_update || session_start.elapsed() >= STABLE_SESSION {
+                    retries = 0;
+                }
+                retries = retries.saturating_add(1);
                 let delay = reconnect_delay(retries, self.min_backoff, self.max_backoff);
                 tracing::debug!(?delay, retries, "backing off before reconnect");
                 tokio::time::sleep(delay).await;

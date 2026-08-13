@@ -44,6 +44,20 @@ const MAX_FRAME_SIZE: usize = 32_768;
 /// `data_timeout` mean a hardcoded five seconds whatever the caller set.
 const RECEIVE_POLL: Duration = Duration::from_secs(5);
 
+/// How long a session must last before it counts as healthy.
+///
+/// The backoff curve is indexed by consecutive *failures*, and a connection that
+/// came up and immediately dropped is a failure however far it got through the
+/// handshake. Resetting the counter on connect alone pinned the delay at its
+/// minimum forever against a server that accepts and hangs up — roughly one
+/// connection a second, at an endpoint that allows one per account.
+///
+/// So a session resets the curve when it either delivered data or stayed up this
+/// long. That covers the case the reset exists for — a quiet overnight stream
+/// whose server recycles it hourly — without rewarding a server that is only
+/// pretending to work.
+const STABLE_SESSION: Duration = Duration::from_secs(30);
+
 /// Configuration for a market data stream.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -362,17 +376,15 @@ impl DataStream {
                     }
                 };
 
-                // A connection that came up is not a failure, and the backoff
-                // curve is indexed by consecutive *failures*. Incrementing here
-                // made every successful session push the next reconnect further
-                // out, so a stream that reconnected cleanly a few times ended up
-                // waiting the maximum before trying again.
-                retries = 0;
+                // When this session began, for the health check at the bottom
+                // of the loop.
+                let session_start = Instant::now();
 
                 // The staleness clock. Starts at connect and is pushed forward
                 // by market data, so `data_timeout` measures what it says:
                 // elapsed time since the last market data message.
                 let mut last_data = Instant::now();
+                let mut delivered_data = false;
 
                 let outcome = 'session: loop {
                     let poll = match self.config.data_timeout {
@@ -425,6 +437,7 @@ impl DataStream {
                                 }
                                 if message.is_market_data() {
                                     last_data = Instant::now();
+                                    delivered_data = true;
                                 }
                                 yield Ok(message);
                             }
@@ -438,7 +451,12 @@ impl DataStream {
                 match outcome {
                     Outcome::Fatal => return,
                     Outcome::Reconnect => {
-                        retries = retries.max(1);
+                        // A session that did its job clears the failure count;
+                        // one that came up and fell straight over does not.
+                        if delivered_data || session_start.elapsed() >= STABLE_SESSION {
+                            retries = 0;
+                        }
+                        retries = retries.saturating_add(1);
                         sleep_backoff(&self.config, retries).await;
                     }
                 }

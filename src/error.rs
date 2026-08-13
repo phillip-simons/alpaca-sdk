@@ -221,8 +221,14 @@ impl fmt::Display for TransportError {
 }
 
 impl std::error::Error for TransportError {
+    /// The inner error's *cause*, not the inner error itself.
+    ///
+    /// `Display` already delegates to `reqwest::Error`, so returning it here as
+    /// well would print the same sentence twice in any formatter that walks the
+    /// chain — which is most of them. Skipping a link that carries no new text
+    /// keeps the chain informative.
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.0)
+        std::error::Error::source(&self.0)
     }
 }
 

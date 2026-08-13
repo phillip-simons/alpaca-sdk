@@ -38,6 +38,27 @@ use tokio::runtime::{Builder, Runtime};
 
 use crate::error::{Error, Result};
 
+/// Whether a caught panic is tokio's "runtime inside a runtime" complaint.
+///
+/// Matched on the message rather than a type, because that is all tokio gives:
+/// it panics with a `&str`/`String` payload beginning
+/// `Cannot start a runtime from within a runtime`. Matching on a substring is
+/// fragile against a tokio reword, and the failure mode of a reword is that a
+/// misuse resurfaces as the original panic — loud and accurate — rather than as
+/// a wrong error. That is the right direction to fail in.
+///
+/// Takes `&(dyn Any + Send)` and must be called as `&*panic`, not `&panic`:
+/// `Box<dyn Any + Send>` itself implements `Any`, so passing the box by
+/// reference downcasts *the box* and never matches.
+fn is_nested_runtime_panic(panic: &(dyn std::any::Any + Send)) -> bool {
+    let message = panic
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| panic.downcast_ref::<String>().map(String::as_str));
+
+    message.is_some_and(|message| message.contains("runtime from within a runtime"))
+}
+
 /// Runs an async client's calls to completion on a runtime it owns.
 ///
 /// See the [module documentation](self) for why this is one wrapper rather than
@@ -140,17 +161,25 @@ impl<C> Blocking<C> {
         // `catch_unwind` asks the question that actually matters by letting
         // tokio answer it. Note that the panic hook still runs first, so an
         // async-context misuse prints tokio's message before this returns.
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        //
+        // Only *that* panic is converted. Any other one — a bug in this crate,
+        // or in the caller's own future — is re-raised untouched, because
+        // reporting it as "you called this from an async context" would be a
+        // lie that hides a real defect. This also means the behaviour under
+        // `panic = "abort"` is the same as without the wrapper: nothing is
+        // caught, and the process aborts on a genuine panic either way.
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             runtime.block_on(call(&self.client))
-        }))
-        .unwrap_or_else(|_| {
-            Err(Error::InvalidRequest(
+        })) {
+            Ok(result) => result,
+            Err(panic) if is_nested_runtime_panic(&*panic) => Err(Error::InvalidRequest(
                 "a blocking call cannot be made from inside an async runtime; \
                  use the async client directly here, or move the call onto \
                  `tokio::task::spawn_blocking`"
                     .to_owned(),
-            ))
-        })
+            )),
+            Err(panic) => std::panic::resume_unwind(panic),
+        }
     }
 
     /// The wrapped client, for anything this façade does not cover — including

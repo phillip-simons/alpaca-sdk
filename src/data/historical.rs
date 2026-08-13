@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 
+use serde::Deserialize as _;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -61,8 +62,12 @@ where
         if is_absent(&value) {
             continue;
         }
+        // `&Value` is itself a `Deserializer`, so the payload is borrowed
+        // rather than cloned. Cloning it here — purely so a failure could report
+        // a body — doubled peak allocation on every *successful* multi-symbol
+        // response, which is the common path.
         let mut records: Vec<T> =
-            serde_json::from_value(value.clone()).map_err(|source| Error::Decode {
+            Vec::<T>::deserialize(&value).map_err(|source| Error::Decode {
                 path: merged.path.clone(),
                 body: decode_body(&symbol, &value),
                 source,
@@ -101,12 +106,11 @@ where
     if is_absent(&records) {
         return Ok(Vec::new());
     }
-    let mut records: Vec<T> =
-        serde_json::from_value(records.clone()).map_err(|source| Error::Decode {
-            path: merged.path.clone(),
-            body: decode_body(key, &records),
-            source,
-        })?;
+    let mut records: Vec<T> = Vec::<T>::deserialize(&records).map_err(|source| Error::Decode {
+        path: merged.path.clone(),
+        body: decode_body(key, &records),
+        source,
+    })?;
     for record in &mut records {
         record.set_symbol(symbol);
     }
@@ -124,12 +128,11 @@ where
         if is_absent(&value) {
             continue;
         }
-        let mut record: T =
-            serde_json::from_value(value.clone()).map_err(|source| Error::Decode {
-                path: merged.path.clone(),
-                body: decode_body(&symbol, &value),
-                source,
-            })?;
+        let mut record: T = T::deserialize(&value).map_err(|source| Error::Decode {
+            path: merged.path.clone(),
+            body: decode_body(&symbol, &value),
+            source,
+        })?;
         record.set_symbol(&symbol);
         latest.insert(symbol, record);
     }
@@ -442,7 +445,7 @@ impl StockHistoricalDataClient {
 
         let body = Value::Object(merged.data);
         let mut snapshot: Snapshot =
-            serde_json::from_value(body.clone()).map_err(|source| Error::Decode {
+            Snapshot::deserialize(&body).map_err(|source| Error::Decode {
                 path: merged.path,
                 body: crate::rest::truncate(&body.to_string()),
                 source,
@@ -480,9 +483,9 @@ impl StockHistoricalDataClient {
                 format_args!("the response carried no `{key}`"),
             ));
         };
-        let mut record: T = serde_json::from_value(record).map_err(|source| Error::Decode {
+        let mut record: T = T::deserialize(&record).map_err(|source| Error::Decode {
             path: path.to_owned(),
-            body: String::new(),
+            body: decode_body(key, &record),
             source,
         })?;
         record.set_symbol(symbol);
@@ -802,7 +805,10 @@ impl OptionHistoricalDataClient {
         &self,
         request: &OptionChainRequest,
     ) -> Result<HashMap<String, OptionsSnapshot>> {
-        let path = format!("/options/snapshots/{}", request.underlying_symbol);
+        let path = format!(
+            "/options/snapshots/{}",
+            segment(&request.underlying_symbol)?
+        );
         let merged = get_marketdata(
             &self.rest,
             &MarketDataRequest::paged_with_limit(&path, 1000),
@@ -1007,18 +1013,14 @@ impl NewsClient {
         )
         .await?;
 
-        let articles: Vec<News> = merged
-            .data
-            .get("news")
-            .cloned()
-            .map(serde_json::from_value)
-            .transpose()
-            .map_err(|source| Error::Decode {
-                path: "/news".to_owned(),
-                body: String::new(),
+        let articles: Vec<News> = match merged.data.get("news") {
+            Some(value) => Vec::<News>::deserialize(value).map_err(|source| Error::Decode {
+                path: merged.path.clone(),
+                body: decode_body("news", value),
                 source,
-            })?
-            .unwrap_or_default();
+            })?,
+            None => Vec::new(),
+        };
 
         Ok(NewsSet {
             news: articles,
@@ -1080,7 +1082,7 @@ impl ScreenerClient {
     /// Propagates transport, API, and decoding failures.
     pub async fn get_market_movers(&self, request: &MarketMoversRequest) -> Result<Movers> {
         // The market type selects the path rather than filtering the query.
-        let path = format!("/screener/{}/movers", request.market_type.as_str());
+        let path = format!("/screener/{}/movers", segment(&request.market_type)?);
         self.rest.get(&path, request).await
     }
 }
@@ -1143,7 +1145,7 @@ impl CorporateActionsClient {
         .await?;
 
         let body = Value::Object(merged.data);
-        serde_json::from_value(body.clone()).map_err(|source| Error::Decode {
+        CorporateActions::deserialize(&body).map_err(|source| Error::Decode {
             path: merged.path,
             body: crate::rest::truncate(&body.to_string()),
             source,

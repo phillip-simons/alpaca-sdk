@@ -776,3 +776,78 @@ async fn corporate_actions_walk_past_the_first_full_page_by_default() {
         "the second page was not fetched: {actions:?}"
     );
 }
+
+// ------------------------------------------------- locally-refused requests
+
+/// An empty symbol list is a request to ask the API about nothing, and it is
+/// refused before any HTTP happens.
+///
+/// The first version of this guard tested `params["symbols"].as_str() == ""`,
+/// which could never fire: `Symbols` is `#[serde(transparent)]` over
+/// `Vec<String>`, so it reaches the guard as a `Value::Array` and is only joined
+/// into a string later. It shipped as dead code because nothing exercised it.
+#[tokio::test]
+async fn an_empty_symbol_list_never_reaches_the_network() {
+    let server = MockServer::start().await;
+    // No mock is mounted: reaching the server at all is the failure.
+
+    let request = StockBarsRequest::new(Vec::<String>::new(), TimeFrame::day());
+    let err = stock_client(&server)
+        .get_stock_bars(&request)
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, alpaca_sdk::Error::InvalidRequest(_)),
+        "expected InvalidRequest, got {err:?}"
+    );
+    assert!(
+        server.received_requests().await.unwrap().is_empty(),
+        "an empty symbol list must not reach the network"
+    );
+}
+
+/// The two path routes whose symbol is interpolated from a request *field*
+/// rather than a bare argument — which is why the first encoding sweep, driven
+/// by a pattern over `format!("…{name}")`, missed both.
+#[tokio::test]
+async fn a_slashed_underlying_symbol_stays_one_path_segment() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1beta1/options/snapshots/BRK%2FA"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"snapshots": {}})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client =
+        OptionHistoricalDataClient::with_config(&credentials(), config(&server, "v1beta1"))
+            .unwrap();
+    client
+        .get_option_chain(&OptionChainRequest::new("BRK/A"))
+        .await
+        .unwrap();
+}
+
+/// `MarketType` is a `wire_enum!`, so `Unknown(String)` is publicly
+/// constructible and its `as_str()` hands back the caller's own text — which
+/// went straight into the screener path.
+#[tokio::test]
+async fn an_unknown_market_type_cannot_escape_its_path_segment() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(404).set_body_json(json!({})))
+        .mount(&server)
+        .await;
+
+    let client = ScreenerClient::with_config(&credentials(), config(&server, "v1beta1")).unwrap();
+    let request = MarketMoversRequest::new(10, MarketType::from("../../v2/account"));
+    let _ = client.get_market_movers(&request).await;
+
+    let received = &server.received_requests().await.unwrap()[0];
+    assert_eq!(
+        received.url.path(),
+        "/v1beta1/screener/..%2F..%2Fv2%2Faccount/movers",
+        "the market type must stay inside its own segment"
+    );
+}
