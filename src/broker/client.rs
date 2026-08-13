@@ -126,13 +126,12 @@ pub struct BrokerClient {
     /// and they carry **no timeout**: a total deadline on a `text/event-stream`
     /// caps the life of the subscription rather than bounding a slow call.
     events: reqwest::Client,
-    /// The client for request/response routes that `RestClient` cannot serve:
-    /// the two document downloads, and the activity-event lookup that sits on
-    /// its own version segment.
+    /// The client the two document downloads use.
     ///
-    /// Separate from `events` because these are ordinary calls with a body that
-    /// ends, and therefore *do* honour [`RestConfig::timeout`]. Folding the two
-    /// together silently dropped the caller's deadline from all three.
+    /// Separate from `events` because a download is an ordinary call with a body
+    /// that ends, so a total deadline is the right shape for it — where an event
+    /// stream's body never finishes and a deadline would cap the life of the
+    /// subscription. One client cannot be both, which is why there are two.
     ///
     /// It follows redirects — the download answers `301` to a presigned storage
     /// URL — and what keeps broker credentials off that storage provider is not

@@ -609,3 +609,76 @@ async fn updating_an_accounts_trade_configuration_patches_the_right_route() {
         .await
         .unwrap();
 }
+
+/// The broker order walk had no test at all, where its trading twin has two.
+/// The path, the `limit`/`direction` overrides and the `before_order_id` cursor
+/// are all things a wrong edit ships green without this.
+#[tokio::test]
+async fn get_all_orders_for_account_follows_the_id_cursor() {
+    fn order(id: &str) -> serde_json::Value {
+        let mut value = fixture(
+            "broker/test_trading_routes__test_close_position_for_account_with_qty__01.json",
+        );
+        value["id"] = json!(id);
+        value
+    }
+
+    // A full page is what signals "there may be more".
+    let first_page: Vec<serde_json::Value> = (0..500)
+        .map(|i| order(&Uuid::from_u128(i).to_string()))
+        .collect();
+    let last_id = Uuid::from_u128(499).to_string();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/trading/accounts/{ACCOUNT}/orders")))
+        .and(query_param("before_order_id", last_id.as_str()))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!([order("aaaaaaaa-0000-0000-0000-000000000001")])),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/trading/accounts/{ACCOUNT}/orders")))
+        .and(query_param("limit", "500"))
+        .and(query_param("direction", "desc"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(first_page))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let orders = client(&server)
+        .get_all_orders_for_account(ACCOUNT, None, None)
+        .await
+        .unwrap();
+
+    assert_eq!(orders.len(), 501, "the second page was not fetched");
+}
+
+/// `firm_accounts` is a boolean on the wire, not the comma-separated id list it
+/// was modelled as — Alpaca parses a list as a boolean and the report comes back
+/// silently missing the firm inventory.
+#[tokio::test]
+async fn aggregate_positions_send_firm_accounts_as_a_boolean() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/reporting/eod/aggregate_positions"))
+        .and(query_param("firm_accounts", "false"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let request =
+        alpaca_sdk::broker::GetAggregatePositionsRequest::new("2026-01-02".parse().unwrap())
+            .firm_accounts(false);
+
+    client(&server)
+        .get_aggregate_positions(&request)
+        .await
+        .unwrap();
+}

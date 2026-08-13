@@ -44,7 +44,9 @@ behaviour changes are worth reading before the first release rather than after.
 - **`RestConfig::timeout` is no longer applied to event streams.** It is a total
   deadline on a whole request, and an event stream's body never finishes, so
   setting it gave every subscription a fixed lifespan: events until the deadline,
-  then a timeout, forever.
+  then a timeout, forever. The broker keeps a second client for the document
+  download, which *is* an ordinary request/response call and still honours the
+  deadline — the two were one client before, and only one of them wanted it.
 - **`data_timeout` is measured, not guessed.** Both websocket loops treated one
   elapsed 5-second socket read as the staleness signal, so any `data_timeout`
   above five seconds behaved as exactly five — an overnight stock stream
@@ -102,9 +104,6 @@ behaviour changes are worth reading before the first release rather than after.
 - **The blocking façade re-raises panics it did not cause.** `catch_unwind`
   reported *every* escaping panic as "you called this from an async context",
   which would have hidden a genuine bug in the caller's own future.
-- **The broker document download honours `RestConfig::timeout` again.** It shared
-  a client with the event streams, which deliberately have no total deadline, and
-  silently lost the caller's.
 - **`get_option_chain` and `get_market_movers` encode their path segments.** Both
   interpolate a request *field* rather than a bare argument, so the first
   encoding sweep missed them.
@@ -200,8 +199,10 @@ Decisions that become expensive after the first release, settled now.
 - **`Disclosures::employment_status` is `EmploymentStatus`**, and the market-data
   exchange fields are `data::Exchange`. Both enums existed, were exported, and
   were referenced by nothing.
-- **`trading::AllAccountsPositions` is removed** — a byte-for-byte duplicate of
-  the broker type, which is the one any route returns.
+- **`trading::AllAccountsPositions` is removed.** It duplicated the broker type,
+  which is the one any route actually returns — and the broker's is the more
+  tolerant of the two, carrying `#[serde(default)]` on `positions` where the
+  trading copy did not.
 - **`StreamConfig`'s knobs are all private,** set through `StreamConfig::backoff`
   and `StreamConfig::data_timeout`, which reject a zero value; read back through
   `min_backoff()`, `max_backoff()`, `data_timeout_after()` and
@@ -231,6 +232,16 @@ Decisions that become expensive after the first release, settled now.
   holds for what Alpaca *quotes*.
 - The fixture corpus is 227 files and 232KiB, not the 135 recorded in three
   places. `RELEASING.md` names `all checks` rather than "the 9 required checks".
+
+### Dependencies
+
+- **`percent-encoding` added**, for the path segment encoder.
+- **polars gains its `fmt_no_tty` feature** on the optional `polars` feature,
+  which pulls in `comfy-table` and `unicode-width`. Without it a `DataFrame`
+  printed its shape and then "to see more, compile with the 'fmt' or
+  'fmt_no_tty' feature" — every value suppressed, including in this crate's own
+  `ToFrame` example. `DataFrame`'s `Display` output therefore changes for anyone
+  using the `polars` feature.
 
 ### Known gaps
 

@@ -871,6 +871,39 @@ pub struct RebalancingCondition {
     pub day: Option<String>,
 }
 
+impl RebalancingCondition {
+    /// Rebalance when an asset drifts `percent` away from its target weight.
+    ///
+    /// Two constructors rather than a struct literal, for the same reason
+    /// [`Weight`] has two: the type is `#[non_exhaustive]`, and the pairing of
+    /// `condition_type` with `sub_type` is not free — a drift band with a
+    /// calendar sub type is a request Alpaca rejects. Naming the two shapes
+    /// makes the invalid pairing unspellable.
+    #[must_use]
+    pub fn drift_band(sub_type: DriftBandSubType, percent: Decimal) -> Self {
+        Self {
+            condition_type: RebalancingConditionsType::DriftBand,
+            sub_type: RebalancingSubType::DriftBand(sub_type),
+            percent: Some(percent),
+            day: None,
+        }
+    }
+
+    /// Rebalance on a schedule.
+    ///
+    /// `day` is the day the condition fires on, where the cadence needs one —
+    /// `"monday"` for a weekly condition, `"1"` for a monthly one.
+    #[must_use]
+    pub fn calendar(sub_type: CalendarSubType, day: Option<String>) -> Self {
+        Self {
+            condition_type: RebalancingConditionsType::Calendar,
+            sub_type: RebalancingSubType::Calendar(sub_type),
+            percent: None,
+            day,
+        }
+    }
+}
+
 /// A target allocation that accounts can subscribe to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -1320,6 +1353,35 @@ pub struct CIPInfo {
     /// The watchlist checks.
     #[serde(default)]
     pub watchlist: Option<Box<CIPWatchlist>>,
+}
+
+impl CIPInfo {
+    /// A record identified by `id` for `account_id`, with every check unset.
+    ///
+    /// This type is both a response and the body of
+    /// [`upload_cip_data_for_account_by_id`](crate::broker::BrokerClient::upload_cip_data_for_account_by_id), and it
+    /// is `#[non_exhaustive]` — so an uploading caller needs a way in that a
+    /// struct literal no longer provides. Set the check fields that apply on the
+    /// result; Alpaca fills the rest.
+    ///
+    /// `created_at` and `updated_at` are Alpaca's to assign and are set to
+    /// `now` here, which is what the route ignores them as.
+    #[must_use]
+    pub fn new(id: Uuid, account_id: Uuid) -> Self {
+        let now = Utc::now();
+        Self {
+            id,
+            account_id,
+            provider_name: Vec::new(),
+            created_at: now,
+            updated_at: now,
+            kyc: None,
+            document: None,
+            photo: None,
+            identity: None,
+            watchlist: None,
+        }
+    }
 }
 
 /// Positions held across every account, as of the last market close.

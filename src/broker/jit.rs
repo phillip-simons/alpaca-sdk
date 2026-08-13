@@ -224,6 +224,10 @@ impl<'de> Deserialize<'de> for JitReport {
 /// One field per [`JitReportType`], and exactly one of them is populated: the
 /// one matching the report that was asked for.
 ///
+/// **Adding a field here means editing the hand-written `Deserialize` below.**
+/// It mirrors the fields into a private `Raw`, so a new one is silently dropped
+/// on the way in, and the round-trip test cannot see it.
+///
 /// `Deserialize` is hand-written rather than derived because every field is
 /// optional. A derived one accepts *any* JSON object — including one carrying a
 /// key none of these names — and produces an all-`None` value. Sitting inside an

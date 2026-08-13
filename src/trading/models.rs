@@ -412,6 +412,11 @@ pub struct Clock {
 /// The two session fields and `settlement_date` appear in real responses and are
 /// optional here, because older responses — and the captured fixtures — do not
 /// carry them.
+///
+/// **Adding a field here means editing the hand-written `Serialize` below.** It
+/// enumerates the fields by name, so a new one is silently dropped on the way
+/// out, and the round-trip test cannot see it — round-tripping an existing value
+/// leaves a new field absent on both sides.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Calendar {
