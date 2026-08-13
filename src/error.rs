@@ -96,6 +96,10 @@ impl Error {
     ///
     /// `serde_json` never saw these, because they are found after a successful
     /// parse, so the source is synthesized to carry the reason.
+    ///
+    /// Gated on `data`: the market data payloads are the only shapes checked
+    /// this way, and an ungated helper is dead code in a `trading`-only build.
+    #[cfg(feature = "data")]
     pub(crate) fn decode_shape(path: &str, body: &str, reason: impl fmt::Display) -> Self {
         use serde::de::Error as _;
         Self::Decode {

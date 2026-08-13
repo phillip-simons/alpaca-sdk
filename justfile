@@ -1,6 +1,15 @@
 # alpaca-sdk task runner. `just check` is the gate — run it before every commit.
 # `just ci` additionally runs the slower jobs GitHub Actions does.
 
+# Set for every recipe, matching the workflow-level `RUSTFLAGS` in ci.yml.
+#
+# Without it the gate was weaker than the CI it stands in for, and in exactly
+# the place that matters: a helper used only behind one feature is a *warning*
+# in a build without that feature, not an error. `just check` passed, and CI
+# failed on `dead_code` in `--features trading` alone. A gate that misses what
+# CI catches is not a gate.
+export RUSTFLAGS := "-D warnings"
+
 # Where the alpaca-py checkout lives. Only the fixture extractor reads it:
 # its test suite is a source of captured API responses, and nothing else here
 # depends on that project. Override with ALPACA_PY=/path/to/alpaca-py.
