@@ -1,0 +1,33 @@
+{
+  "news": [
+    {
+      "author": "Henry Khederian",
+      "created_at": "2021-04-03T12:31:15Z",
+      "headline": "Is Now The Time To Buy Stock In Tesla, Netflix, Alibaba, Ford Or Facebook?",
+      "id": 20471562,
+      "images": [
+        {
+          "size": "large",
+          "url": "https://cdn.benzinga.com/files/imagecache/2048x1536xUP/images/story/2012/freestocks-11sgh7u6tmi-unsplash_3_0_0.jpg"
+        },
+        {
+          "size": "small",
+          "url": "https://cdn.benzinga.com/files/imagecache/1024x768xUP/images/story/2012/freestocks-11sgh7u6tmi-unsplash_3_0_0.jpg"
+        },
+        {
+          "size": "thumb",
+          "url": "https://cdn.benzinga.com/files/imagecache/250x187xUP/images/story/2012/freestocks-11sgh7u6tmi-unsplash_3_0_0.jpg"
+        }
+      ],
+      "summary": "One of the most common questions traders have about stocks is \u201cWhy Is It Moving?\u201d\n\nThat\u2019s why Benzinga created the Why Is It Moving, or WIIM, feature in Benzinga Pro. WIIMs are a one-sentence description as to why that stock is moving.",
+      "symbols": [
+        "BABA",
+        "NFLX",
+        "TSLA"
+      ],
+      "updated_at": "2021-04-03T12:31:16Z",
+      "url": "https://www.benzinga.com/analyst-ratings/analyst-color/21/04/20471562/is-now-the-time-to-buy-stock-in-tesla-netflix-alibaba-ford-or-facebook"
+    }
+  ],
+  "next_page_token": null
+}

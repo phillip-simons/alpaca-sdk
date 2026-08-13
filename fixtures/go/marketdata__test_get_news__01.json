@@ -1,0 +1,69 @@
+{
+  "news": [
+    {
+      "author": "Bibhu Pattnaik",
+      "created_at": "2021-04-03T15:35:21Z",
+      "headline": "CEO John Krafcik Leaves Waymo",
+      "id": 20472678,
+      "images": [
+        {
+          "size": "large",
+          "url": "https://cdn.benzinga.com/files/imagecache/2048x1536xUP/images/story/2012/waymo_2.jpeg"
+        },
+        {
+          "size": "small",
+          "url": "https://cdn.benzinga.com/files/imagecache/1024x768xUP/images/story/2012/waymo_2.jpeg"
+        },
+        {
+          "size": "thumb",
+          "url": "https://cdn.benzinga.com/files/imagecache/250x187xUP/images/story/2012/waymo_2.jpeg"
+        }
+      ],
+      "summary": "Waymo&#39;s chief technology officer and its chief operating officer will serve as co-CEOs.",
+      "symbols": [
+        "GOOG",
+        "GOOGL",
+        "TSLA"
+      ],
+      "updated_at": "2021-04-03T15:35:21Z",
+      "url": "https://www.benzinga.com/news/21/04/20472678/ceo-john-krafcik-leaves-waymo"
+    },
+    {
+      "author": "Nelson Hem",
+      "created_at": "2021-04-03T15:20:12Z",
+      "headline": "Benzinga's Bulls And Bears Of The Week: Apple, GM, JetBlue, Lululemon, Tesla And More",
+      "id": 20472512,
+      "images": [
+        {
+          "size": "large",
+          "url": "https://cdn.benzinga.com/files/imagecache/2048x1536xUP/images/story/2012/pexels-burst-373912_0.jpg"
+        },
+        {
+          "size": "small",
+          "url": "https://cdn.benzinga.com/files/imagecache/1024x768xUP/images/story/2012/pexels-burst-373912_0.jpg"
+        },
+        {
+          "size": "thumb",
+          "url": "https://cdn.benzinga.com/files/imagecache/250x187xUP/images/story/2012/pexels-burst-373912_0.jpg"
+        }
+      ],
+      "summary": "\n\tBenzinga has examined the prospects for many investor favorite stocks over the past week. \n\tThe past week&#39;s bullish calls included airlines, Chinese EV makers and a consumer electronics giant.\n",
+      "symbols": [
+        "AAPL",
+        "ARKX",
+        "BMY",
+        "CS",
+        "GM",
+        "JBLU",
+        "JCI",
+        "LULU",
+        "NIO",
+        "TSLA",
+        "XPEV"
+      ],
+      "updated_at": "2021-04-03T15:20:12Z",
+      "url": "https://www.benzinga.com/trading-ideas/long-ideas/21/04/20472512/benzingas-bulls-and-bears-of-the-week-apple-gm-jetblue-lululemon-tesla-and-more"
+    }
+  ],
+  "next_page_token": "MTYxNzQ2MzIxMjAwMDAwMDAwMHwyMDQ3MjUxMg=="
+}

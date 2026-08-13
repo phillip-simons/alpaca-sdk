@@ -1,0 +1,28 @@
+{
+  "next_page_token": "QlRDL1VTRHwyMDIxLTA5LTA4VDA1OjA0OjAzLjI2OTAwMDAwMFp8MDkyMjMzNzIwMzY4NzUwMTgyNDA=",
+  "trades": {
+    "BTC/USD": [
+      {
+        "i": 20242430,
+        "p": 46386.98,
+        "s": 0.035083,
+        "t": "2021-09-08T05:04:03.269Z",
+        "tks": "S"
+      },
+      {
+        "i": 20242431,
+        "p": 46382.43,
+        "s": 0.129349,
+        "t": "2021-09-08T05:04:03.269Z",
+        "tks": "S"
+      },
+      {
+        "i": 20242432,
+        "p": 46379.8,
+        "s": 0.005868,
+        "t": "2021-09-08T05:04:03.269Z",
+        "tks": "S"
+      }
+    ]
+  }
+}

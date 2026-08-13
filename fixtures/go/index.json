@@ -1,0 +1,583 @@
+{
+  "source": {
+    "repository": "https://github.com/alpacahq/alpaca-trade-api-go",
+    "revision": "edf556427828b8e037426b3178525bcbc1912bdd",
+    "license": "Apache-2.0"
+  },
+  "note": "Response payloads lifted from the Go SDK's tests, where they are raw JSON pasted into backtick literals. Routes come from the req.URL.Path assertion in the same test function.",
+  "fixtures": {
+    "alpaca__test_cancel_all_positions__01.json": {
+      "route": "/v2/positions",
+      "query": {
+        "cancel_orders": "true"
+      },
+      "source": "alpaca/rest_test.go:TestCancelAllPositions",
+      "page": 1
+    },
+    "alpaca__test_cancel_all_positions__02.json": {
+      "route": "/v2/positions",
+      "query": {
+        "cancel_orders": "true"
+      },
+      "source": "alpaca/rest_test.go:TestCancelAllPositions",
+      "page": 2
+    },
+    "alpaca__test_get_asset_from_json__01.json": {
+      "sdk_method": [
+        "GetAsset"
+      ],
+      "source": "alpaca/rest_test.go:TestGetAssetFromJSON"
+    },
+    "alpaca__test_get_us_corporates__01.json": {
+      "route": "/v2/assets/fixed_income/us_corporates",
+      "query": {
+        "bond_status": "",
+        "tickers": "",
+        "cusips": "06051GJH9",
+        "isins": "US06051GJH92"
+      },
+      "source": "alpaca/rest_test.go:TestGetUSCorporates",
+      "page": 1
+    },
+    "alpaca__test_get_us_corporates__02.json": {
+      "route": "/v2/assets/fixed_income/us_corporates",
+      "query": {
+        "bond_status": "",
+        "tickers": "",
+        "cusips": "06051GJH9",
+        "isins": "US06051GJH92"
+      },
+      "source": "alpaca/rest_test.go:TestGetUSCorporates",
+      "page": 2
+    },
+    "alpaca__test_get_us_treasuries__01.json": {
+      "route": "/v2/assets/fixed_income/us_treasuries",
+      "query": {
+        "subtype": "",
+        "bond_status": "",
+        "isins": "",
+        "cusips": ""
+      },
+      "source": "alpaca/rest_test.go:TestGetUSTreasuries",
+      "page": 1
+    },
+    "alpaca__test_get_us_treasuries__02.json": {
+      "route": "/v2/assets/fixed_income/us_treasuries",
+      "query": {
+        "subtype": "",
+        "bond_status": "",
+        "isins": "",
+        "cusips": ""
+      },
+      "source": "alpaca/rest_test.go:TestGetUSTreasuries",
+      "page": 2
+    },
+    "marketdata__test_crypto_quotes__01.json": {
+      "route": "/v1beta3/crypto/us/quotes",
+      "query": {
+        "symbols": "ETH/USD",
+        "start": "2023-08-16T00:00:00Z",
+        "end": "2023-08-16T19:00:00Z",
+        "limit": "2",
+        "sort": "desc"
+      },
+      "source": "marketdata/rest_test.go:TestCryptoQuotes"
+    },
+    "marketdata__test_crypto_snapshot__01.json": {
+      "sdk_method": [
+        "GetCryptoSnapshot"
+      ],
+      "source": "marketdata/rest_test.go:TestCryptoSnapshot"
+    },
+    "marketdata__test_get_auctions__01.json": {
+      "route": "/v2/stocks/auctions",
+      "query": {
+        "symbols": "AAPL",
+        "start": "2022-10-17T00:00:00Z",
+        "end": "2022-10-28T00:00:00Z",
+        "feed": "sip",
+        "limit": "1"
+      },
+      "source": "marketdata/rest_test.go:TestGetAuctions",
+      "page": 1
+    },
+    "marketdata__test_get_auctions__02.json": {
+      "route": "/v2/stocks/auctions",
+      "query": {
+        "symbols": "AAPL",
+        "start": "2022-10-17T00:00:00Z",
+        "end": "2022-10-28T00:00:00Z",
+        "feed": "sip",
+        "limit": "1"
+      },
+      "source": "marketdata/rest_test.go:TestGetAuctions",
+      "page": 2
+    },
+    "marketdata__test_get_auctions__03.json": {
+      "route": "/v2/stocks/auctions",
+      "query": {
+        "symbols": "AAPL",
+        "start": "2022-10-17T00:00:00Z",
+        "end": "2022-10-28T00:00:00Z",
+        "feed": "sip",
+        "limit": "1"
+      },
+      "source": "marketdata/rest_test.go:TestGetAuctions",
+      "page": 3
+    },
+    "marketdata__test_get_bars__01.json": {
+      "sdk_method": [
+        "GetBars"
+      ],
+      "source": "marketdata/rest_test.go:TestGetBars"
+    },
+    "marketdata__test_get_bars_adjustment__01.json": {
+      "sdk_method": [
+        "GetBars"
+      ],
+      "query": {
+        "adjustment": "dividend,spin-off"
+      },
+      "source": "marketdata/rest_test.go:TestGetBars_Adjustment"
+    },
+    "marketdata__test_get_bars_asof__01.json": {
+      "route": "/v2/stocks/bars",
+      "query": {
+        "asof": "2022-06-09"
+      },
+      "source": "marketdata/rest_test.go:TestGetBars_Asof",
+      "page": 1
+    },
+    "marketdata__test_get_bars_asof__02.json": {
+      "route": "/v2/stocks/bars",
+      "query": {
+        "asof": "2022-06-09"
+      },
+      "source": "marketdata/rest_test.go:TestGetBars_Asof",
+      "page": 2
+    },
+    "marketdata__test_get_corporate_actions__01.json": {
+      "route": "/v1/corporate-actions",
+      "query": {
+        "types": "forward_split,name_change,worthless_removal,stock_merger",
+        "start": "2024-03-10",
+        "end": "2024-03-14"
+      },
+      "source": "marketdata/rest_test.go:TestGetCorporateActions"
+    },
+    "marketdata__test_get_crypto_bars__01.json": {
+      "sdk_method": [
+        "GetCryptoBars"
+      ],
+      "source": "marketdata/rest_test.go:TestGetCryptoBars"
+    },
+    "marketdata__test_get_crypto_multi_bars__01.json": {
+      "sdk_method": [
+        "GetCryptoMultiBars"
+      ],
+      "source": "marketdata/rest_test.go:TestGetCryptoMultiBars"
+    },
+    "marketdata__test_get_crypto_multi_trades__01.json": {
+      "route": "/v1beta3/crypto/us/trades",
+      "query": {
+        "symbols": "SUSHI/USD,BAT/USD",
+        "start": "2023-01-01T20:00:00Z",
+        "end": "2023-01-01T21:00:00Z"
+      },
+      "source": "marketdata/rest_test.go:TestGetCryptoMultiTrades",
+      "page": 1
+    },
+    "marketdata__test_get_crypto_multi_trades__02.json": {
+      "route": "/v1beta3/crypto/us/trades",
+      "query": {
+        "symbols": "SUSHI/USD,BAT/USD",
+        "start": "2023-01-01T20:00:00Z",
+        "end": "2023-01-01T21:00:00Z"
+      },
+      "source": "marketdata/rest_test.go:TestGetCryptoMultiTrades",
+      "page": 2
+    },
+    "marketdata__test_get_crypto_multi_trades__03.json": {
+      "route": "/v1beta3/crypto/us/trades",
+      "query": {
+        "symbols": "SUSHI/USD,BAT/USD",
+        "start": "2023-01-01T20:00:00Z",
+        "end": "2023-01-01T21:00:00Z"
+      },
+      "source": "marketdata/rest_test.go:TestGetCryptoMultiTrades",
+      "page": 3
+    },
+    "marketdata__test_get_crypto_multi_trades__04.json": {
+      "route": "/v1beta3/crypto/us/trades",
+      "query": {
+        "symbols": "SUSHI/USD,BAT/USD",
+        "start": "2023-01-01T20:00:00Z",
+        "end": "2023-01-01T21:00:00Z"
+      },
+      "source": "marketdata/rest_test.go:TestGetCryptoMultiTrades",
+      "page": 4
+    },
+    "marketdata__test_get_crypto_trades__01.json": {
+      "route": "/v1beta3/crypto/us/trades",
+      "query": {
+        "symbols": "BTC/USD",
+        "start": "2021-09-08T05:04:03Z"
+      },
+      "source": "marketdata/rest_test.go:TestGetCryptoTrades"
+    },
+    "marketdata__test_get_fixed_income_latest_price__01.json": {
+      "route": "/v1beta1/fixed_income/latest/prices",
+      "query": {
+        "isins": "US912797KJ59"
+      },
+      "source": "marketdata/rest_test.go:TestGetFixedIncomeLatestPrice",
+      "page": 1
+    },
+    "marketdata__test_get_fixed_income_latest_price__02.json": {
+      "route": "/v1beta1/fixed_income/latest/prices",
+      "query": {
+        "isins": "US912797KJ59"
+      },
+      "source": "marketdata/rest_test.go:TestGetFixedIncomeLatestPrice",
+      "page": 2
+    },
+    "marketdata__test_get_fixed_income_latest_prices__01.json": {
+      "route": "/v1beta1/fixed_income/latest/prices",
+      "query": {
+        "isins": "US912797KJ59,US91282CJL54"
+      },
+      "source": "marketdata/rest_test.go:TestGetFixedIncomeLatestPrices"
+    },
+    "marketdata__test_get_latest_crypto_perp_pricing__01.json": {
+      "sdk_method": [
+        "GetLatestCryptoPerpPricing"
+      ],
+      "source": "marketdata/rest_test.go:TestGetLatestCryptoPerpPricing"
+    },
+    "marketdata__test_get_latest_option_quote__01.json": {
+      "sdk_method": [
+        "GetLatestOptionQuote"
+      ],
+      "source": "marketdata/options_test.go:TestGetLatestOptionQuote"
+    },
+    "marketdata__test_get_latest_option_trade__01.json": {
+      "sdk_method": [
+        "GetLatestOptionTrade"
+      ],
+      "source": "marketdata/options_test.go:TestGetLatestOptionTrade",
+      "page": 1
+    },
+    "marketdata__test_get_latest_option_trade__02.json": {
+      "sdk_method": [
+        "GetLatestOptionTrade"
+      ],
+      "source": "marketdata/options_test.go:TestGetLatestOptionTrade",
+      "page": 2
+    },
+    "marketdata__test_get_multi_auctions__01.json": {
+      "route": "/v2/stocks/auctions",
+      "query": {
+        "limit": "2",
+        "symbols": "AAPL,IBM,TSLA"
+      },
+      "source": "marketdata/rest_test.go:TestGetMultiAuctions"
+    },
+    "marketdata__test_get_multi_bars__01.json": {
+      "sdk_method": [
+        "GetMultiBars"
+      ],
+      "source": "marketdata/rest_test.go:TestGetMultiBars"
+    },
+    "marketdata__test_get_multi_quotes__01.json": {
+      "route": "/v2/stocks/quotes",
+      "query": {
+        "limit": "6",
+        "symbols": "BA,DIS"
+      },
+      "source": "marketdata/rest_test.go:TestGetMultiQuotes"
+    },
+    "marketdata__test_get_multi_trades__01.json": {
+      "route": "/v2/stocks/trades",
+      "query": {
+        "start": "2018-06-04T19:18:17Z",
+        "end": "2018-06-04T19:18:19Z",
+        "symbols": "F,GE"
+      },
+      "source": "marketdata/rest_test.go:TestGetMultiTrades"
+    },
+    "marketdata__test_get_news__01.json": {
+      "route": "/v1beta1/news",
+      "query": {
+        "start": "2021-04-03T00:00:00Z",
+        "end": "2021-04-04T05:00:00Z",
+        "limit": "2"
+      },
+      "source": "marketdata/rest_test.go:TestGetNews",
+      "page": 1
+    },
+    "marketdata__test_get_news__02.json": {
+      "route": "/v1beta1/news",
+      "query": {
+        "start": "2021-04-03T00:00:00Z",
+        "end": "2021-04-04T05:00:00Z",
+        "limit": "2"
+      },
+      "source": "marketdata/rest_test.go:TestGetNews",
+      "page": 2
+    },
+    "marketdata__test_get_option_bars__01.json": {
+      "route": "/v1beta1/options/bars",
+      "query": {
+        "symbols": "AAPL240308C00172500",
+        "start": "2024-03-05T00:00:00Z",
+        "end": "2024-03-06T00:00:00Z"
+      },
+      "source": "marketdata/options_test.go:TestGetOptionBars"
+    },
+    "marketdata__test_get_option_chain_with_filters__01.json": {
+      "route": "/v1beta1/options/snapshots/AAPL",
+      "source": "marketdata/options_test.go:TestGetOptionChainWithFilters",
+      "page": 1
+    },
+    "marketdata__test_get_option_chain_with_filters__02.json": {
+      "route": "/v1beta1/options/snapshots/AAPL",
+      "source": "marketdata/options_test.go:TestGetOptionChainWithFilters",
+      "page": 2
+    },
+    "marketdata__test_get_option_snapshot__01.json": {
+      "sdk_method": [
+        "GetOptionSnapshot"
+      ],
+      "source": "marketdata/options_test.go:TestGetOptionSnapshot"
+    },
+    "marketdata__test_get_option_trades__01.json": {
+      "sdk_method": [
+        "GetOptionTrades"
+      ],
+      "source": "marketdata/options_test.go:TestGetOptionTrades"
+    },
+    "marketdata__test_get_quotes__01.json": {
+      "route": "/v2/stocks/quotes",
+      "query": {
+        "symbols": "IBM",
+        "start": "2021-10-04T18:00:14Z",
+        "end": "2021-10-04T18:00:15Z",
+        "limit": "10"
+      },
+      "source": "marketdata/rest_test.go:TestGetQuotes",
+      "page": 1
+    },
+    "marketdata__test_get_quotes__02.json": {
+      "route": "/v2/stocks/quotes",
+      "query": {
+        "symbols": "IBM",
+        "start": "2021-10-04T18:00:14Z",
+        "end": "2021-10-04T18:00:15Z",
+        "limit": "10"
+      },
+      "source": "marketdata/rest_test.go:TestGetQuotes",
+      "page": 2
+    },
+    "marketdata__test_get_quotes_sort_desc__01.json": {
+      "sdk_method": [
+        "GetQuotes"
+      ],
+      "query": {
+        "sort": "desc"
+      },
+      "source": "marketdata/rest_test.go:TestGetQuotes_SortDesc"
+    },
+    "marketdata__test_get_trades__01.json": {
+      "sdk_method": [
+        "GetTrades"
+      ],
+      "source": "marketdata/rest_test.go:TestGetTrades"
+    },
+    "marketdata__test_get_trades_currency__01.json": {
+      "sdk_method": [
+        "GetTrades"
+      ],
+      "query": {
+        "feed": "delayed_sip",
+        "currency": "MXN"
+      },
+      "source": "marketdata/rest_test.go:TestGetTrades_Currency",
+      "page": 1
+    },
+    "marketdata__test_get_trades_currency__02.json": {
+      "sdk_method": [
+        "GetTrades"
+      ],
+      "query": {
+        "feed": "delayed_sip",
+        "currency": "MXN"
+      },
+      "source": "marketdata/rest_test.go:TestGetTrades_Currency",
+      "page": 2
+    },
+    "marketdata__test_get_trades_update__01.json": {
+      "sdk_method": [
+        "GetTrades"
+      ],
+      "source": "marketdata/rest_test.go:TestGetTrades_Update"
+    },
+    "marketdata__test_latest_bar__01.json": {
+      "sdk_method": [
+        "GetLatestBar"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestBar"
+    },
+    "marketdata__test_latest_bar_currency__01.json": {
+      "sdk_method": [
+        "GetLatestBar"
+      ],
+      "query": {
+        "currency": "JPY"
+      },
+      "source": "marketdata/rest_test.go:TestLatestBar_Currency",
+      "page": 1
+    },
+    "marketdata__test_latest_bar_currency__02.json": {
+      "sdk_method": [
+        "GetLatestBar"
+      ],
+      "query": {
+        "currency": "JPY"
+      },
+      "source": "marketdata/rest_test.go:TestLatestBar_Currency",
+      "page": 2
+    },
+    "marketdata__test_latest_bar_feed__01.json": {
+      "sdk_method": [
+        "GetLatestBar"
+      ],
+      "query": {
+        "feed": "sip"
+      },
+      "source": "marketdata/rest_test.go:TestLatestBar_Feed",
+      "page": 1
+    },
+    "marketdata__test_latest_bar_feed__02.json": {
+      "sdk_method": [
+        "GetLatestBar"
+      ],
+      "query": {
+        "feed": "sip"
+      },
+      "source": "marketdata/rest_test.go:TestLatestBar_Feed",
+      "page": 2
+    },
+    "marketdata__test_latest_bars__01.json": {
+      "sdk_method": [
+        "GetLatestBars"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestBars"
+    },
+    "marketdata__test_latest_crypto_bar__01.json": {
+      "route": "/v1beta3/crypto/us/latest/bars",
+      "source": "marketdata/rest_test.go:TestLatestCryptoBar"
+    },
+    "marketdata__test_latest_crypto_bars__01.json": {
+      "sdk_method": [
+        "GetLatestCryptoBars"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestCryptoBars"
+    },
+    "marketdata__test_latest_crypto_perp_bar__01.json": {
+      "sdk_method": [
+        "GetLatestCryptoPerpBar"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestCryptoPerpBar"
+    },
+    "marketdata__test_latest_crypto_perp_quote__01.json": {
+      "sdk_method": [
+        "GetLatestCryptoPerpQuote"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestCryptoPerpQuote"
+    },
+    "marketdata__test_latest_crypto_perp_quotes__01.json": {
+      "sdk_method": [
+        "GetLatestCryptoPerpQuotes"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestCryptoPerpQuotes"
+    },
+    "marketdata__test_latest_crypto_perp_trade__01.json": {
+      "sdk_method": [
+        "GetLatestCryptoPerpTrade"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestCryptoPerpTrade"
+    },
+    "marketdata__test_latest_crypto_perp_trades__01.json": {
+      "sdk_method": [
+        "GetLatestCryptoPerpTrades"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestCryptoPerpTrades"
+    },
+    "marketdata__test_latest_crypto_quote__01.json": {
+      "sdk_method": [
+        "GetLatestCryptoQuote"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestCryptoQuote"
+    },
+    "marketdata__test_latest_crypto_quotes__01.json": {
+      "sdk_method": [
+        "GetLatestCryptoQuotes"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestCryptoQuotes"
+    },
+    "marketdata__test_latest_crypto_snapshots__01.json": {
+      "sdk_method": [
+        "GetCryptoSnapshots"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestCryptoSnapshots"
+    },
+    "marketdata__test_latest_crypto_trade__01.json": {
+      "sdk_method": [
+        "GetLatestCryptoTrade"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestCryptoTrade"
+    },
+    "marketdata__test_latest_crypto_trades__01.json": {
+      "sdk_method": [
+        "GetLatestCryptoTrades"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestCryptoTrades"
+    },
+    "marketdata__test_latest_quote__01.json": {
+      "sdk_method": [
+        "GetLatestQuote"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestQuote"
+    },
+    "marketdata__test_latest_quotes__01.json": {
+      "sdk_method": [
+        "GetLatestQuotes"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestQuotes"
+    },
+    "marketdata__test_latest_trade__01.json": {
+      "sdk_method": [
+        "GetLatestTrade"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestTrade"
+    },
+    "marketdata__test_latest_trades__01.json": {
+      "sdk_method": [
+        "GetLatestTrades"
+      ],
+      "source": "marketdata/rest_test.go:TestLatestTrades"
+    },
+    "marketdata__test_snapshot__01.json": {
+      "sdk_method": [
+        "GetSnapshot"
+      ],
+      "source": "marketdata/rest_test.go:TestSnapshot"
+    },
+    "marketdata__test_snapshots__01.json": {
+      "sdk_method": [
+        "GetSnapshots"
+      ],
+      "source": "marketdata/rest_test.go:TestSnapshots"
+    }
+  }
+}

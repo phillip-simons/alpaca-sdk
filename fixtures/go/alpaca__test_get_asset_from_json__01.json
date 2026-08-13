@@ -1,0 +1,12 @@
+{
+  "class": "us_equity",
+  "easy_to_borrow": true,
+  "exchange": "NASDAQ",
+  "fractionable": true,
+  "id": "904837e3-3b76-47ec-b432-046db621571b",
+  "marginable": true,
+  "shortable": true,
+  "status": "active",
+  "symbol": "APCA",
+  "tradable": true
+}

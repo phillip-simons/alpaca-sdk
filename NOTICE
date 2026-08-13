@@ -14,6 +14,10 @@ goal: this crate targets the Alpaca API, and diverges from alpaca-py where
 alpaca-py is incomplete or out of date. Comments cite the Python source where
 the derivation is the point, and cite Alpaca's own documentation otherwise.
 
+The response payloads under fixtures/go/ are derived from alpaca-trade-api-go
+(https://github.com/alpacahq/alpaca-trade-api-go), Copyright 2021 Alpaca,
+licensed under the Apache License, Version 2.0. They are used as test data.
+
 This is an unofficial, community-maintained port. It is not affiliated with,
 authorized by, endorsed by, or sponsored by Alpaca Securities LLC or any of
 its affiliates. "Alpaca" is a trademark of its respective owner and is used

@@ -108,6 +108,20 @@ gen-enums source=alpaca_py:
 fixtures source=alpaca_py:
     python3 scripts/extract_fixtures.py {{ source }}
 
+# Harvest response payloads from the Go SDK's tests into fixtures/go.
+#
+# The Go suite is the only one of the other four worth reading: it pastes raw
+# JSON into backtick literals, so wire quirks survive. C# and TypeScript build
+# their payloads through their own types, which normalizes those quirks away.
+harvest go="../alpaca-trade-api-go":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -d "{{ go }}" ]; then
+        echo "clone it first: git clone --depth 1 https://github.com/alpacahq/alpaca-trade-api-go {{ go }}"
+        exit 1
+    fi
+    python3 scripts/harvest_go_fixtures.py "{{ go }}"
+
 # Regenerate everything, then verify nothing broke.
 regen source=alpaca_py: (gen-enums source) (fixtures source)
     just check

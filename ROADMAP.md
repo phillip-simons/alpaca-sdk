@@ -327,7 +327,41 @@ Not a blanket replacement. Three kinds of reference, three rules:
 The lib.rs framing ("a port of the official Python SDK") needs rewriting too:
 the crate targets the Alpaca API and alpaca-py is now one source among four.
 
-### Harvest fixtures from the other SDKs
+### Harvest fixtures from the other SDKs — done, and narrower than expected
+
+`just harvest` pulls **73 payloads** out of `alpaca-trade-api-go`'s tests into
+`fixtures/go/`, with `fixtures/go/index.json` recording the source test and the
+route it asserted for each.
+
+**Only one of the four SDKs was worth reading, and the reason is not the one this
+section assumed.** The distinction is not captured-versus-constructed — the
+alpaca-py fixtures are test-authored too, and they still found three real bugs.
+It is that Go pastes **raw JSON strings** into backtick literals, so the wire's
+quirks survive: numbers as strings, nulls, empty strings, misspelled fields. C#
+builds payloads with `JObject` and TypeScript with `JSON.stringify(object)` —
+both go *through the SDK's own types*, which normalizes away exactly the quirks
+a fixture exists to catch. A payload that has been through a model is evidence
+about the model, not about the API.
+
+What the harvest covers, against the gap list below: **auctions, fixed income
+latest prices, us_treasuries, us_corporates, option bars/trades/quotes/snapshots
+/chain, and crypto perpetuals** — the last being a gap this file recorded as
+"not in the spec, verify against the live API", now with six real payloads
+showing the shape.
+
+**What no SDK's tests can supply:** forex, logos, `meta/exchanges`,
+`meta/conditions`, indices. Nobody tests them. Those need live capture, and the
+tool already exists — `just live` with paper keys, and they are all cheap
+GET-only market-data routes.
+
+Half the harvest is routes already implemented, so `tests/harvested_go.rs`
+deserializes those through the real `Bar`, `Trade` and `Quote` models: a second
+SDK's authors, writing down the same API independently, and the models read
+their payloads. The rest are placed and parsed but await their models. Nothing
+lands unread — the account-list fixture that sat unparsed for months is the
+reason that rule exists.
+
+### The original plan for harvesting
 
 `fixtures/` holds 135 real API responses lifted out of alpaca-py's test suite by
 `scripts/extract_fixtures.py`, and they have caught more bugs than any schema.

@@ -1,0 +1,19 @@
+{
+  "next_page_token": "QUFQTHwyMDIxLTEwLTEzVDA4OjAwOjAwLjA4OTYwNzY4MFp8UHwwOTIyMzM3MjAzNjg1NDc3NTgwOQ==",
+  "trades": {
+    "AAPL": [
+      {
+        "c": [
+          "@",
+          "T"
+        ],
+        "i": 1,
+        "p": 140.2,
+        "s": 595,
+        "t": "2021-10-13T08:00:00.08960768Z",
+        "x": "P",
+        "z": "C"
+      }
+    ]
+  }
+}

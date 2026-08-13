@@ -1,2 +1,8 @@
 Captured API responses extracted from alpaca-py @ cc4cb3b
 by scripts/extract_fixtures.py. Do not edit by hand.
+
+fixtures/go/ holds response payloads harvested from alpaca-trade-api-go's test
+suite by scripts/harvest_go_fixtures.py. Provenance for each one — source file,
+test function, and the route the test asserted — is in fixtures/go/index.json.
+Both directories ship in the published crate, because tests/ ships and reads
+them at runtime.

@@ -1,0 +1,21 @@
+{
+  "next_page_token": "RVRIL1VTRHw3NTMxMTU5NjM3MzM4MDk0NzAyfDE4MjAuOHw0LjM5OTQwNnwxODIyLjU1NDU3OHw0LjMyOTk5MDI=",
+  "quotes": {
+    "ETH/USD": [
+      {
+        "ap": 1822.352602,
+        "as": 8.76015633,
+        "bp": 1820.8,
+        "bs": 4.399406,
+        "t": "2023-08-16T18:59:58.662421578Z"
+      },
+      {
+        "ap": 1822.554578,
+        "as": 4.3299902,
+        "bp": 1820.8,
+        "bs": 4.399406,
+        "t": "2023-08-16T18:59:58.661905298Z"
+      }
+    ]
+  }
+}

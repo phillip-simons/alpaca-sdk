@@ -1,0 +1,33 @@
+{
+  "next_page_token": "VFNMQXw3NTMxMTU5NjM2OTY0OTE0ODc5fFV8MjI4LjMzfDF8UHwyMjguMzV8NXxS",
+  "quotes": {
+    "TSLA": [
+      {
+        "ap": 228.35,
+        "as": 5,
+        "ax": "P",
+        "bp": 228.34,
+        "bs": 2,
+        "bx": "Q",
+        "c": [
+          "R"
+        ],
+        "t": "2023-08-16T18:59:59.185551091Z",
+        "z": "C"
+      },
+      {
+        "ap": 228.35,
+        "as": 5,
+        "ax": "P",
+        "bp": 228.33,
+        "bs": 1,
+        "bx": "U",
+        "c": [
+          "R"
+        ],
+        "t": "2023-08-16T18:59:59.035085121Z",
+        "z": "C"
+      }
+    ]
+  }
+}

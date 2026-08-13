@@ -1,0 +1,39 @@
+{
+  "us_treasuries": [
+    {
+      "bond_status": "outstanding",
+      "close_price": 99.6459,
+      "close_price_date": "2026-04-29",
+      "close_yield_to_maturity": 4.249,
+      "close_yield_to_worst": 4.249,
+      "coupon": 0,
+      "coupon_frequency": "zero",
+      "coupon_type": "zero",
+      "cusip": "912797KJ5",
+      "description": "test bill",
+      "description_short": "tb",
+      "isin": "US912797KJ59",
+      "issue_date": "2026-04-03",
+      "maturity_date": "2026-07-03",
+      "subtype": "bill",
+      "tradable": true
+    },
+    {
+      "bond_status": "outstanding",
+      "coupon": 0,
+      "coupon_frequency": "zero",
+      "coupon_type": "zero",
+      "cusip": "912797KJ6",
+      "description": "test bill 2",
+      "description_short": "tb2",
+      "first_coupon_date": "2026-11-01",
+      "isin": "US912797KJ60",
+      "issue_date": "2026-05-01",
+      "last_coupon_date": "2026-05-01",
+      "maturity_date": "2026-08-01",
+      "next_coupon_date": "2026-11-01",
+      "subtype": "bill",
+      "tradable": true
+    }
+  ]
+}

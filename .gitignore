@@ -14,3 +14,6 @@ secrets.env
 
 # Downloaded by `just specs` for the coverage check; not ours to vendor.
 specs/
+
+# Python bytecode from the scripts/ helpers.
+__pycache__/

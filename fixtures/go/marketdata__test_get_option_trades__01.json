@@ -1,0 +1,21 @@
+{
+  "next_page_token": "QUFQTDI0MDMwOEMwMDE3MjUwMHwxNzA5NjU3OTk5MTA5MzE5NDI0fFU=",
+  "trades": {
+    "AAPL240308C00172500": [
+      {
+        "c": "g",
+        "p": 0.98,
+        "s": 4,
+        "t": "2024-03-05T16:59:59.816906752Z",
+        "x": "C"
+      },
+      {
+        "c": "I",
+        "p": 0.99,
+        "s": 1,
+        "t": "2024-03-05T16:59:59.109319424Z",
+        "x": "U"
+      }
+    ]
+  }
+}
