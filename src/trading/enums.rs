@@ -15,79 +15,103 @@ wire_enum! {
     /// Please see <https://alpaca.markets/docs/api-references/broker-api/accounts/account-activities/#enumactivitytype>
     /// for descriptions of each of the types
     pub enum ActivityType {
-        /// `FILL`
+        /// Order fills (both partial and full fills)
         Fill => "FILL",
-        /// `ACATC`
+        /// ACATS IN/OUT (Cash)
         Acatc => "ACATC",
-        /// `ACATS`
+        /// ACATS IN/OUT (Securities)
         Acats => "ACATS",
-        /// `CFEE`
+        /// Crypto fee
         Cfee => "CFEE",
-        /// `CIL`
+        /// Capital gain distribution
+        Cgd => "CGD",
+        /// Cash in lieu of stock
         Cil => "CIL",
-        /// `CSD`
+        /// Cash deposit(+)
         Csd => "CSD",
-        /// `CSW`
+        /// Cash withdrawal(-)
         Csw => "CSW",
-        /// `DIV`
+        /// Dividends
         Div => "DIV",
-        /// `DIVCGL`
+        /// Dividend (capital gain long term)
         Divcgl => "DIVCGL",
-        /// `DIVCGS`
+        /// Dividend (capital gain short term)
         Divcgs => "DIVCGS",
-        /// `DIVNRA`
+        /// Dividend fee
+        Divfee => "DIVFEE",
+        /// Dividend adjusted (Foreign Tax Withheld)
+        Divft => "DIVFT",
+        /// Dividend adjusted (NRA Withheld)
         Divnra => "DIVNRA",
-        /// `DIVROC`
+        /// Dividend return of capital
         Divroc => "DIVROC",
-        /// `DIVTXEX`
+        /// Dividend adjusted (Tefra Withheld)
+        Divtw => "DIVTW",
+        /// Dividend (tax exempt)
         Divtxex => "DIVTXEX",
-        /// `DIVWH`
+        /// `DIVWH`. The specs do not describe this value.
         Divwh => "DIVWH",
-        /// `EXTRD`
+        /// `EXTRD`. The specs do not describe this value.
         Extrd => "EXTRD",
-        /// `FEE`
+        /// Fee denominated in USD
         Fee => "FEE",
-        /// `FXTRD`
+        /// Free of Payment Transfers
+        Fopt => "FOPT",
+        /// `FXTRD`. The specs do not describe this value.
         Fxtrd => "FXTRD",
-        /// `INT`
+        /// Interest (credit/margin)
         Int => "INT",
-        /// `INTPNL`
+        /// Interest adjusted (NRA Withheld)
+        Intnra => "INTNRA",
+        /// `INTPNL`. The specs do not describe this value.
         Intpnl => "INTPNL",
-        /// `JNLC`
+        /// Interest adjusted (Tefra Withheld)
+        Inttw => "INTTW",
+        /// Journal entry
+        Jnl => "JNL",
+        /// Journal entry (cash)
         Jnlc => "JNLC",
-        /// `JNLS`
+        /// Journal entry (stock)
         Jnls => "JNLS",
-        /// `MA`
+        /// Merger/Acquisition
         Ma => "MA",
-        /// `MEM`
+        /// `MEM`. The specs do not describe this value.
         Mem => "MEM",
-        /// `NC`
+        /// Miscellaneous or rarely used activity types (All types except those in TRANS, DIV, or FILL)
+        Misc => "MISC",
+        /// Name change
         Nc => "NC",
-        /// `OCT`
+        /// On chain transactions (blockchain deposits/withdrawals)
         Oct => "OCT",
-        /// `OPASN`
+        /// Option assignment
         Opasn => "OPASN",
-        /// `OPCSH`
+        /// Option corporate action
+        Opca => "OPCA",
+        /// Option cash deliverable for non-standard contracts
         Opcsh => "OPCSH",
-        /// `OPEXC`
+        /// Option exercise
         Opexc => "OPEXC",
-        /// `OPEXP`
+        /// Option expiration
         Opexp => "OPEXP",
-        /// `OPTRD`
+        /// Option trade
         Optrd => "OPTRD",
-        /// `PTC`
+        /// Pass Thru Charge
         Ptc => "PTC",
-        /// `REORG`
+        /// Pass Thru Rebate
+        Ptr => "PTR",
+        /// Reorg CA
         Reorg => "REORG",
-        /// `SPIN`
+        /// Stock spinoff
         Spin => "SPIN",
-        /// `SPLIT`
+        /// Stock split
         Split => "SPLIT",
-        /// `SWP`
+        /// `SWP`. The specs do not describe this value.
         Swp => "SWP",
-        /// `VOF`
+        /// Cash transactions (both CSD and CSW)
+        Trans => "TRANS",
+        /// `VOF`. The specs do not describe this value.
         Vof => "VOF",
-        /// `WH`
+        /// `WH`. The specs do not describe this value.
         Wh => "WH",
     }
 }
@@ -166,10 +190,24 @@ wire_enum! {
 wire_enum! {
     /// Represents what side this order was executed on.
     pub enum OrderSide {
-        /// `buy`
+        /// Buy.
         Buy => "buy",
-        /// `sell`
+        /// Sell.
         Sell => "sell",
+        /// Buy at or below the last sale price.
+        BuyMinus => "buy_minus",
+        /// Sell at or above the last sale price.
+        SellPlus => "sell_plus",
+        /// Sell short.
+        SellShort => "sell_short",
+        /// Sell short, exempt from the price test.
+        SellShortExempt => "sell_short_exempt",
+        /// Side not disclosed.
+        Undisclosed => "undisclosed",
+        /// A cross, where one broker is on both sides.
+        Cross => "cross",
+        /// A cross where the sell side is short.
+        CrossShort => "cross_short",
     }
 }
 
@@ -223,14 +261,29 @@ wire_enum! {
     /// including "`us_equity`" for U.S. equities, "`us_option`" for U.S. options,
     /// and "crypto" for cryptocurrencies.
     pub enum AssetClass {
-        /// `us_equity`
+        /// A US-listed equity.
         UsEquity => "us_equity",
-        /// `us_option`
+        /// A US-listed option contract.
         UsOption => "us_option",
-        /// `crypto`
+        /// A cryptocurrency pair.
         Crypto => "crypto",
-        /// `crypto_perp`
+        /// A perpetual crypto future.
         CryptoPerp => "crypto_perp",
+        /// The option chain on a US-listed equity.
+        UsEquityChain => "us_equity_chain",
+        /// A US market index.
+        UsIndex => "us_index",
+        /// An equity listed outside the US.
+        GlobalEquity => "global_equity",
+        /// A US treasury instrument.
+        Treasury => "treasury",
+        /// A US corporate bond.
+        Corporate => "corporate",
+        /// An indication of interest in an IPO.
+        ///
+        /// Distinct from the assets API's `attributes: ["ipo"]` flag, which marks
+        /// an ordinary equity as IPO-eligible; this is the asset class itself.
+        Ipo => "ipo",
     }
 }
 
@@ -365,47 +418,53 @@ wire_enum! {
     ///
     /// see <https://alpaca.markets/docs/broker/api-references/accounts/accounts/#account-status>
     pub enum AccountStatus {
-        /// `ACCOUNT_CLOSED`
+        /// The account is closed.
         AccountClosed => "ACCOUNT_CLOSED",
-        /// `ACCOUNT_UPDATED`
+        /// The account close is in progress.
+        ///
+        /// Listed by the trading spec, which describes no other value of this
+        /// name; the reading here is the name's, not the spec's.
+        AccountClosedPending => "ACCOUNT_CLOSED_PENDING",
+        /// The account information is being updated.
         AccountUpdated => "ACCOUNT_UPDATED",
-        /// `ACTION_REQUIRED`
+        /// The application requires manual action.
         ActionRequired => "ACTION_REQUIRED",
-        /// `ACTIVE`
+        /// The account is active for trading.
         Active => "ACTIVE",
-        /// `AML_REVIEW`
+        /// `AML_REVIEW`. The specs do not describe this value.
         AmlReview => "AML_REVIEW",
-        /// `APPROVAL_PENDING`
+        /// The final account approval is pending.
         ApprovalPending => "APPROVAL_PENDING",
-        /// `APPROVED`
+        /// The account application has been approved, and is waiting to become
+        /// active.
         Approved => "APPROVED",
-        /// `DISABLED`
+        /// `DISABLED`. The specs do not describe this value.
         Disabled => "DISABLED",
-        /// `DISABLE_PENDING`
+        /// `DISABLE_PENDING`. The specs do not describe this value.
         DisablePending => "DISABLE_PENDING",
-        /// `EDITED`
+        /// `EDITED`. The specs do not describe this value.
         Edited => "EDITED",
-        /// `INACTIVE`
+        /// The account is not set to trade the asset in question.
         Inactive => "INACTIVE",
-        /// `KYC_SUBMITTED`
+        /// `KYC_SUBMITTED`. The specs do not describe this value.
         KycSubmitted => "KYC_SUBMITTED",
-        /// `LIMITED`
+        /// `LIMITED`. The specs do not describe this value.
         Limited => "LIMITED",
-        /// `ONBOARDING`
+        /// The account is onboarding.
         Onboarding => "ONBOARDING",
-        /// `PAPER_ONLY`
+        /// `PAPER_ONLY`. The specs do not describe this value.
         PaperOnly => "PAPER_ONLY",
-        /// `REAPPROVAL_PENDING`
+        /// `REAPPROVAL_PENDING`. The specs do not describe this value.
         ReapprovalPending => "REAPPROVAL_PENDING",
-        /// `REJECTED`
+        /// The account application has been rejected.
         Rejected => "REJECTED",
-        /// `RESUBMITTED`
+        /// `RESUBMITTED`. The specs do not describe this value.
         Resubmitted => "RESUBMITTED",
-        /// `SIGNED_UP`
+        /// `SIGNED_UP`. The specs do not describe this value.
         SignedUp => "SIGNED_UP",
-        /// `SUBMISSION_FAILED`
+        /// The account application submission failed for some reason.
         SubmissionFailed => "SUBMISSION_FAILED",
-        /// `SUBMITTED`
+        /// The account application has been submitted for review.
         Submitted => "SUBMITTED",
     }
 }

@@ -573,3 +573,74 @@ fn only_a_trade_update_counts_as_stream_activity() {
     };
     assert!(!control.is_trade_update());
 }
+
+// ------------------------------------------------------ the vocabulary itself
+
+/// The point of carrying a value is that a caller can *name* it. Every one of
+/// these was reachable before as `AssetClass::from("us_index")` — an `Unknown`
+/// that serializes correctly and reads at the call site like a bug.
+#[test]
+fn the_filters_can_name_every_documented_value() {
+    use alpaca_sdk::trading::{ActivityType, AssetClass, GetOrdersRequest};
+
+    let filter = GetOrdersRequest {
+        side: Some(OrderSide::SellShort),
+        asset_class: Some(vec![AssetClass::UsIndex, AssetClass::Treasury]),
+        ..Default::default()
+    };
+
+    let sent = serde_json::to_value(&filter).unwrap();
+    assert_eq!(sent["side"], "sell_short");
+    assert_eq!(sent["asset_class"], "us_index,treasury");
+
+    for value in [
+        OrderSide::BuyMinus,
+        OrderSide::SellPlus,
+        OrderSide::SellShortExempt,
+        OrderSide::Undisclosed,
+        OrderSide::Cross,
+        OrderSide::CrossShort,
+    ] {
+        assert!(!value.is_unknown(), "{value}");
+    }
+
+    for value in [
+        ActivityType::Cgd,
+        ActivityType::Divfee,
+        ActivityType::Divft,
+        ActivityType::Divtw,
+        ActivityType::Fopt,
+        ActivityType::Intnra,
+        ActivityType::Inttw,
+        ActivityType::Jnl,
+        ActivityType::Misc,
+        ActivityType::Opca,
+        ActivityType::Ptr,
+        ActivityType::Trans,
+    ] {
+        assert!(!value.is_unknown(), "{value}");
+    }
+}
+
+/// An empty `order_class` decodes as `simple`, which is why there is no variant
+/// for it — the drift report records that as a decision rather than a gap.
+#[test]
+fn an_empty_order_class_decodes_as_simple() {
+    use alpaca_sdk::trading::Order;
+
+    let order: Order = serde_json::from_value(json!({
+        "id": "61e69015-8549-4bfd-b9c3-01e75843f47d",
+        "client_order_id": "x",
+        "created_at": "2021-03-16T18:38:01.942282Z",
+        "updated_at": "2021-03-16T18:38:01.942282Z",
+        "submitted_at": "2021-03-16T18:38:01.937734Z",
+        "order_class": "",
+        "time_in_force": "day",
+        "status": "filled",
+        "extended_hours": false,
+        "symbol": "AAPL"
+    }))
+    .unwrap();
+
+    assert_eq!(order.order_class, OrderClass::Simple);
+}

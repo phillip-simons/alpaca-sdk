@@ -606,6 +606,10 @@ wire_enum! {
         Pending => "pending",
         /// `executed`
         Executed => "executed",
+        /// A non-trade activity has been created for the journal.
+        ///
+        /// Cash journals on the v2 API only.
+        ActivityCreated => "activity_created",
         /// `rejected`
         Rejected => "rejected",
         /// `canceled`

@@ -42,6 +42,18 @@ NOT_DRIFT: dict[str, str] = {
     ),
 }
 
+# Values the specs document and this crate deliberately does not carry, with the
+# reason. Same purpose as `SKIP` in coverage.py: a value decided against must
+# stop reading as a gap, or the report never converges.
+DECIDED: dict[tuple[str, str], str] = {
+    ("OrderClass", ""): (
+        "Alpaca's own schema describes the empty string as a synonym for "
+        "`simple`, and `Order::order_class` already maps both it and an absent "
+        "field to `Simple` on the way in. A variant for it would only let a "
+        "caller send `\"\"` where `simple` says the same thing."
+    ),
+}
+
 # Differences a diff cannot settle, with what would.
 UNRESOLVED: dict[tuple[str, str], str] = {
     ("TaxIdType", "ARG_AR_CUIT"): (
@@ -151,7 +163,7 @@ def main() -> int:
             continue
         ours = set(crate[name])
         theirs = spec[name]
-        gap = sorted(theirs - ours)
+        gap = sorted(value for value in theirs - ours if (name, value) not in DECIDED)
         surplus = sorted(ours - theirs)
         if not gap and not surplus:
             agree.append(name)
@@ -165,6 +177,10 @@ def main() -> int:
     for name, reason in NOT_DRIFT.items():
         if name in shared:
             print(f"\n{name}: not drift — {reason}")
+    for (name, value), reason in DECIDED.items():
+        if name in shared:
+            shown = value if value else '""'
+            print(f"\n{name} {shown}: decided against — {reason}")
 
     if missing:
         print("\nIn the spec, not in the crate — a value no caller can name:\n")

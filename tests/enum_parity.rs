@@ -51,10 +51,11 @@ fn trading_activity_type_wire_values() {
     assert_wire_values!(
         ActivityType,
         [
-            "FILL", "ACATC", "ACATS", "CFEE", "CIL", "CSD", "CSW", "DIV", "DIVCGL", "DIVCGS",
-            "DIVNRA", "DIVROC", "DIVTXEX", "DIVWH", "EXTRD", "FEE", "FXTRD", "INT", "INTPNL",
-            "JNLC", "JNLS", "MA", "MEM", "NC", "OCT", "OPASN", "OPCSH", "OPEXC", "OPEXP", "OPTRD",
-            "PTC", "REORG", "SPIN", "SPLIT", "SWP", "VOF", "WH"
+            "FILL", "ACATC", "ACATS", "CFEE", "CGD", "CIL", "CSD", "CSW", "DIV", "DIVCGL",
+            "DIVCGS", "DIVFEE", "DIVFT", "DIVNRA", "DIVROC", "DIVTW", "DIVTXEX", "DIVWH", "EXTRD",
+            "FEE", "FOPT", "FXTRD", "INT", "INTNRA", "INTPNL", "INTTW", "JNL", "JNLC", "JNLS",
+            "MA", "MEM", "MISC", "NC", "OCT", "OPASN", "OPCA", "OPCSH", "OPEXC", "OPEXP", "OPTRD",
+            "PTC", "PTR", "REORG", "SPIN", "SPLIT", "SWP", "TRANS", "VOF", "WH"
         ]
     );
 }
@@ -84,7 +85,20 @@ fn trading_order_type_wire_values() {
 
 #[test]
 fn trading_order_side_wire_values() {
-    assert_wire_values!(OrderSide, ["buy", "sell"]);
+    assert_wire_values!(
+        OrderSide,
+        [
+            "buy",
+            "sell",
+            "buy_minus",
+            "sell_plus",
+            "sell_short",
+            "sell_short_exempt",
+            "undisclosed",
+            "cross",
+            "cross_short"
+        ]
+    );
 }
 
 #[test]
@@ -118,7 +132,18 @@ fn trading_order_status_wire_values() {
 fn trading_asset_class_wire_values() {
     assert_wire_values!(
         AssetClass,
-        ["us_equity", "us_option", "crypto", "crypto_perp"]
+        [
+            "us_equity",
+            "us_option",
+            "crypto",
+            "crypto_perp",
+            "us_equity_chain",
+            "us_index",
+            "global_equity",
+            "treasury",
+            "corporate",
+            "ipo"
+        ]
     );
 }
 
@@ -180,6 +205,7 @@ fn trading_account_status_wire_values() {
         AccountStatus,
         [
             "ACCOUNT_CLOSED",
+            "ACCOUNT_CLOSED_PENDING",
             "ACCOUNT_UPDATED",
             "ACTION_REQUIRED",
             "ACTIVE",
@@ -663,6 +689,7 @@ fn broker_journal_status_wire_values() {
             "sent_to_clearing",
             "pending",
             "executed",
+            "activity_created",
             "rejected",
             "canceled",
             "refused",

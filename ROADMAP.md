@@ -16,7 +16,7 @@ Written to be picked up cold.
 | 6 — Broker | ✅ | 75 routes, 20 models, 4 pagination schemes, 5 SSE streams |
 | 6.5 — Full API coverage | ✅ | 251/253 spec routes, 2 deliberate skips |
 | 7 — Polish | ✅ | `blocking` and `polars` built, exponential retry, `Error::Stream`, two coverage checks |
-| 8 — Spec-driven | ✅ | Codegen harness removed, 252 alpaca-py references cut, 663 tests at 89% coverage |
+| 8 — Spec-driven | ✅ | Codegen harness removed, 252 alpaca-py references cut, 21 enum values named, 665 tests at 89% coverage |
 
 **Nothing is generated from another SDK any more.** The enum generator and the
 recipes that read a Python checkout are gone; `just fixtures` still extracts
@@ -892,10 +892,35 @@ and reading does not survive contact with 251 routes.
 
   Two entries are decisions rather than findings, and both live in the script so
   the report converges. `Exchange` is not drift: the spec's same-named schema is
-  venue names and alpaca-py's is the tape codes the data API actually sends —
+  venue names and this crate's is the tape codes the data API actually sends —
   different vocabularies, same word. `TaxIdType::ARG_AR_CUIT` against the spec's
   `ARG_AG_CUIT` is a typo in one of the two, and no diff can say which; the
   report prints the pair with what would settle it.
+
+  **The gap half is closed** — 7 of 19 agreeing exactly became 11 of 19, and the
+  only value the specs document and this crate lacks is now the `TaxIdType`
+  typo pair. Twenty-one values were added across five enums: `ActivityType`
+  twelve, `OrderSide` seven, `AssetClass` six, plus `ACCOUNT_CLOSED_PENDING` and
+  `JournalStatus::activity_created`.
+
+  Every one was reachable before — `AssetClass::from("us_index")` yields
+  `Unknown("us_index")` and serializes verbatim — so this is about *naming*
+  rather than capability. For a response field `Unknown` is graceful
+  degradation; for a request filter it is a documented value that reads at the
+  call site like a bug. `asset_class`, `side` and `activity_types` are all
+  filters.
+
+  `OrderClass`'s empty string is the one value not added, and the script has a
+  `DECIDED` map for it now, next to `SKIP` in `coverage.py` in both purpose and
+  spirit: Alpaca's schema calls it a synonym for `simple`, `Order::order_class`
+  already maps it there on the way in, and a variant would only let a caller
+  send `""` where `simple` says the same thing.
+
+  The descriptions came out of the specs by script rather than by hand, which
+  found its own bug: matching a bullet list by regex picked up three neighbours'
+  text. Every one of the 49 `ActivityType` variants and 22 `AccountStatus`
+  variants was read back afterwards. The eighteen the specs list without
+  describing say so.
 
 ### What 1.0 itself needs
 
