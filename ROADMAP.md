@@ -15,7 +15,7 @@ Written to be picked up cold.
 | 5 — Trade updates | ✅ | JSON websocket, single channel |
 | 6 — Broker | ✅ | 75 routes, 20 models, 4 pagination schemes, 5 SSE streams |
 | 6.5 — Exceed alpaca-py | ✅ | 251/253 spec routes, 2 deliberate skips |
-| 7 — Polish | ⬜ | Two features that do not exist, the retry default, docs, 1.0 |
+| 7 — Polish | ✅ | `blocking` and `polars` built, exponential retry, `Error::Stream`, two coverage checks, the migration guide |
 
 Ported against alpaca-py `cc4cb3b`. `just pinned` reports drift against a local
 alpaca-py checkout — though alpaca-py is no longer the target; see below.
@@ -535,8 +535,11 @@ Not a blanket replacement. Three kinds of reference, three rules:
    `alpaca/trading/enums.py` at revision `cc4cb3b`" is a build-reproducibility
    fact, and `just pinned` parses that revision string. Do not touch.
 
-The lib.rs framing ("a port of the official Python SDK") needs rewriting too:
-the crate targets the Alpaca API and alpaca-py is now one source among four.
+~~The lib.rs framing ("a port of the official Python SDK") needs rewriting
+too.~~ This contradicted the top of this section, which already said the framing
+was fixed. It was: `lib.rs` opens with what the crate targets, and the port
+history is a qualified section below it. Phase 7 confirmed rather than repeated
+the work.
 
 ### Harvest fixtures from the other SDKs — done, and narrower than expected
 
@@ -786,20 +789,31 @@ as `InvalidRequest` — "the response carried no `bars`". That is a decode
 failure, and `Error::Decode` already exists for it. Also additive, also not a
 1.0 deadline.
 
-### Documentation
+### Documentation — done
 
-- **The migration guide.** Phase 6.5's doc audit deliberately kept the comments
-  that help someone arriving from alpaca-py — "the typed replacement for
-  `raw_data=True`" — and marked them as migration guidance rather than deleting
-  them. This is where they get collected.
-- **The `lib.rs` framing still opens "a port of the official Python SDK".** The
-  crate targets the API and treats alpaca-py as one stale source among five. The
-  header contradicts the rest of the file.
-- **The remainder of the doc-rule audit.** The comments that attribute an
-  enforced *rule* to alpaca-py were checked in 6.5. The ones that merely describe
-  its *defaults* — page sizes, sort directions — were not. They are not
-  load-bearing for correctness, which is why they were left last, and why this is
-  the lowest-value item in this section.
+- **The migration guide exists**, as a table in the `lib.rs` "Coming from
+  alpaca-py" section rather than a `MIGRATING.md`. Someone arriving from the
+  Python SDK finds this on docs.rs, not in the repository tree.
+
+  Collecting the marked comments was not enough on its own: most of what a
+  migrating caller needs to know was created by the rest of this phase and
+  existed in no comment. The retry default now diverges from alpaca-py's, `.df`
+  became a trait that needs a `use`, synchronous use became a wrapper type, and
+  a broken stream stopped being an `InvalidRequest`. Four of the thirteen rows
+  are things that were true for a matter of hours before the table was written.
+- **The `lib.rs` framing was already fixed**, in phase 6.5. This item described
+  a file that no longer existed: `lib.rs` opens "targets the Alpaca API itself"
+  and the port history is a qualified section below it. Phase 6.5's own section
+  said the framing was fixed and then ended by asking for it again; that
+  contradiction is resolved rather than acted on.
+- **The remainder of the doc-rule audit is checked.** Seven comments describe an
+  alpaca-py *default* rather than an enforced rule: the broker page size of 100,
+  the data page limit of 10,000, most-actives' top 10 by volume, corporate
+  actions' 1,000 ascending, option contracts defaulting to active, and the two
+  stream staleness timeouts being off. All seven were verified against the
+  pinned checkout at `cc4cb3b` and all seven are accurate, so nothing changed.
+  That is the result, not an absence of one — the point of the audit was that
+  nobody had looked.
 
 ### Two checks, because hand-checking does not scale
 
@@ -878,9 +892,34 @@ it, and `RELEASING.md` has the procedure. `just publish-dry` runs the whole
 thing including `cargo semver-checks`. So 1.0 is not a mechanics problem.
 
 It is a promise problem. Publishing 1.0 says the public surface is one worth
-keeping, and the surface currently includes two features that do nothing and a
-retry default that contradicts the vendor's advice. Fix those two and the
-version number stops being a claim the crate cannot back.
+keeping, and it was a surface with two features that did nothing and a retry
+default contradicting the vendor's own advice. Both are fixed, so the version
+number is no longer a claim the crate cannot back.
+
+What is left before tagging it is a release, not a decision:
+
+- **The release notes carry real behaviour changes**, none of which a compiler
+  will point at. Retries wait 1 second and double rather than a flat 3;
+  `Error::InvalidRequest` no longer means a dead stream; `RetryConfig` can no
+  longer be built with a struct literal. That last one is the only compile
+  error, and it is the intended kind.
+- **`0.2.0` before `1.0`.** The breaking change is already made, so it should go
+  out under a version that is allowed to make it and be lived with for a while.
+  `1.0` is then a promise about a surface that has been used, rather than one
+  published the same day it changed.
+- **Twelve missing parameters and the enum gaps are now on a list** rather than
+  in someone's memory. None of them break a caller — an absent parameter is one
+  a caller cannot set, and an unknown enum value degrades to `Unknown(String)` —
+  so they are 1.x work, not 1.0 blockers.
+
+**`just semver` cannot help yet, and it is worth knowing why before relying on
+it.** Run against this phase's changes it reports "no semver update required"
+having skipped all 254 checks: within `0.x` every version bump is a major
+change, and a major change permits anything, so `cargo semver-checks` has
+nothing to assert. It was silent about `RetryConfig` becoming non-exhaustive for
+exactly that reason. The tool starts earning its place in `just publish-dry` at
+`1.0` — until then the release notes are the only mechanism, which is an
+argument for writing them as the change is made rather than at tag time.
 
 ## Also open
 
