@@ -12,8 +12,7 @@ use crate::types::wire::wire_enum;
 wire_enum! {
     /// Represents what kind of Activity an instance of `TradeActivity` or `NonTradeActivity` is.
     ///
-    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/account-activities/#enumactivitytype>
-    /// for descriptions of each of the types
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/account-activities/#enumactivitytype>.
     pub enum ActivityType {
         /// Order fills (both partial and full fills)
         Fill => "FILL",
@@ -119,7 +118,7 @@ wire_enum! {
 wire_enum! {
     /// Represents the type of `TradeActivity`.
     ///
-    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/account-activities/#attributes>
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/account-activities/#attributes>.
     pub enum TradeActivityType {
         /// `partial_fill`
         PartialFill => "partial_fill",
@@ -131,8 +130,7 @@ wire_enum! {
 wire_enum! {
     /// Represents the status of a `NonTradeActivity`.
     ///
-    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/account-activities/#enumaccountactivity>
-    /// for more info.
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/account-activities/#enumaccountactivity>.
     pub enum NonTradeActivityStatus {
         /// `executed`
         Executed => "executed",
@@ -222,7 +220,7 @@ wire_enum! {
 wire_enum! {
     /// Represents the various states an Order can be in.
     ///
-    /// please see <https://docs.alpaca.markets/docs/api-references/broker-api/trading/orders/#order-status> for more info
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/trading/orders/#order-status>.
     pub enum OrderStatus {
         /// `new`
         New => "new",
@@ -382,7 +380,7 @@ wire_enum! {
 wire_enum! {
     /// The general types of corporate action events.
     ///
-    /// Learn more here: <https://docs.alpaca.markets/docs/corporate-actions>
+    /// See <https://docs.alpaca.markets/docs/corporate-actions>.
     pub enum CorporateActionType {
         /// `dividend`
         Dividend => "dividend",
@@ -398,7 +396,7 @@ wire_enum! {
 wire_enum! {
     /// The specific types of corporate actions. Each subtype is related to `CorporateActionType`.
     ///
-    /// Learn more here: <https://docs.alpaca.markets/docs/corporate-actions>
+    /// See <https://docs.alpaca.markets/docs/corporate-actions>.
     pub enum CorporateActionSubType {
         /// `cash`
         Cash => "cash",
@@ -424,7 +422,7 @@ wire_enum! {
 wire_enum! {
     /// The various statuses each brokerage account can take during its lifetime
     ///
-    /// see <https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#account-status>
+    /// See <https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#account-status>.
     pub enum AccountStatus {
         /// The account is closed.
         AccountClosed => "ACCOUNT_CLOSED",
@@ -538,8 +536,7 @@ wire_enum! {
     ///
     /// NOTE: These values are currently the same as `PDTCheck` however they are not guaranteed to be in sync the future
     ///
-    /// please see <https://docs.alpaca.markets/docs/api-references/broker-api/trading/trading-configurations/#attributes>
-    /// for more info.
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/trading/trading-configurations/#attributes>.
     pub enum DTBPCheck {
         /// `both`
         Both => "both",
@@ -555,8 +552,7 @@ wire_enum! {
     ///
     /// NOTE: These values are currently the same as `DTBPCheck` however they are not guaranteed to be in sync the future
     ///
-    /// please see <https://docs.alpaca.markets/docs/api-references/broker-api/trading/trading-configurations/#attributes>
-    /// for more info.
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/trading/trading-configurations/#attributes>.
     pub enum PDTCheck {
         /// `both`
         Both => "both",
@@ -570,8 +566,7 @@ wire_enum! {
 wire_enum! {
     /// Used for controlling when an Account will receive a trade confirmation email.
     ///
-    /// please see <https://docs.alpaca.markets/reference/getaccountconfig>
-    /// for more info.
+    /// See <https://docs.alpaca.markets/reference/getaccountconfig>.
     pub enum TradeConfirmationEmail {
         /// `all`
         All => "all",
