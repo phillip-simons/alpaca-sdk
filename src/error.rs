@@ -113,6 +113,10 @@ impl From<reqwest::Error> for Error {
 }
 
 /// A non-success HTTP response from Alpaca.
+///
+/// Every field is public to read. Building one goes through
+/// [`from_body`](Self::from_body), which is also how the transport builds the
+/// ones a caller receives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ApiError {
@@ -129,15 +133,55 @@ pub struct ApiError {
 }
 
 impl ApiError {
-    /// Builds an `ApiError` from a status and raw body, extracting `code` and
-    /// `message` when the body is the JSON error object Alpaca normally returns.
-    pub(crate) fn from_body(status: u16, path: impl Into<String>, body: String) -> Self {
+    /// Builds an `ApiError` from a status, a path, and the raw response body.
+    ///
+    /// This is the only way to construct one, here and in a caller's own code:
+    /// the struct is `#[non_exhaustive]`, so a field-by-field literal is not
+    /// available outside the crate. That is deliberate rather than an oversight
+    /// — [`code`](Self::code) and [`message`](Self::message) are *read out of*
+    /// [`body`](Self::body), and a constructor taking all three separately would
+    /// let a caller build an error whose fields contradict each other, which is
+    /// a state no response can produce.
+    ///
+    /// It is public so a caller can build one to test their own error handling
+    /// against, and what they get behaves exactly like a real failure — the same
+    /// parse, including the degradation below:
+    ///
+    /// ```
+    /// use alpaca_sdk::ApiError;
+    ///
+    /// let error = ApiError::from_body(
+    ///     403,
+    ///     "/v2/orders",
+    ///     r#"{"code":40310000,"message":"insufficient buying power"}"#,
+    /// );
+    ///
+    /// assert_eq!(error.code, Some(40_310_000));
+    /// assert_eq!(error.message, "insufficient buying power");
+    /// assert!(!error.is_retryable());
+    /// ```
+    ///
+    /// A body that is not the JSON object Alpaca normally sends — a gateway's
+    /// HTML, say — leaves `code` as `None` and becomes the message verbatim,
+    /// rather than failing. An error type that errors while reporting an error
+    /// is the worst place to be strict.
+    ///
+    /// ```
+    /// # use alpaca_sdk::ApiError;
+    /// let error = ApiError::from_body(502, "/v2/account", "<html>bad gateway</html>");
+    ///
+    /// assert_eq!(error.code, None);
+    /// assert_eq!(error.message, "<html>bad gateway</html>");
+    /// ```
+    #[must_use]
+    pub fn from_body(status: u16, path: impl Into<String>, body: impl Into<String>) -> Self {
         #[derive(serde::Deserialize)]
         struct Payload {
             code: Option<i64>,
             message: Option<String>,
         }
 
+        let body = body.into();
         let parsed = serde_json::from_str::<Payload>(&body).ok();
         let (code, message) = match parsed {
             Some(p) => (p.code, p.message),

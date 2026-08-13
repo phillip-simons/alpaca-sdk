@@ -1017,11 +1017,16 @@ Three things worth keeping from writing them:
 - **One of them was wrong on the first run**, and the crate was right: the
   single account-activity event is `v2beta1`, not the client's `v1`. That is the
   test doing its job on the day it was written.
-- **`ApiError` cannot be constructed by a caller.** It is `#[non_exhaustive]`
-  with no public constructor, so the only way to get one — here or in a caller's
-  own error-handling tests — is to make a real request fail. Worth revisiting
-  before 1.0: a constructor or a `Default` would cost nothing and it is
-  additive.
+- **`ApiError` could not be constructed by a caller** — fixed. It is
+  `#[non_exhaustive]` and `from_body` was `pub(crate)`, so the only way to get
+  one was to make a real request fail, which is a poor thing to require of
+  someone testing their own 429 handling. `from_body` is public now.
+
+  It is the *same* constructor the transport uses rather than a new one taking
+  each field, and that is the point: `code` and `message` are read out of `body`,
+  so a five-argument constructor would let a caller build an error whose fields
+  contradict each other — a state no response can produce. The test asserts a
+  built error equals a received one, field for field.
 
 The field-level serde helpers are re-exported from `types` now, so an attribute
 reads `alpaca_sdk::types::empty_string_as_none` rather than reaching two modules

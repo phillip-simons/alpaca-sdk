@@ -7,7 +7,7 @@
 
 use std::error::Error as _;
 
-use alpaca_sdk::{Error, RestClient, RestConfig, RetryConfig};
+use alpaca_sdk::{ApiError, Error, RestClient, RestConfig, RetryConfig};
 use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -61,8 +61,6 @@ async fn an_api_error_reads_as_a_sentence() {
     assert!(text.contains("insufficient buying power"), "{text}");
 }
 
-/// `ApiError` is `#[non_exhaustive]` and has no public constructor, so the only
-/// way to get one — here or in a caller's own tests — is to make a request fail.
 #[tokio::test]
 async fn an_api_error_without_a_code_omits_the_parenthetical() {
     let server = failing(500, json!({"message": "boom"})).await;
@@ -78,6 +76,49 @@ async fn an_api_error_without_a_code_omits_the_parenthetical() {
         Error::Api(api) => assert_eq!(api.code, None),
         other => panic!("expected Api, got {other:?}"),
     }
+}
+
+/// A caller testing their own error handling needs to build one of these
+/// without standing up a server. The struct is `#[non_exhaustive]`, so the
+/// constructor is the only route in — and it is the same one the transport
+/// uses, so a synthetic error cannot behave differently from a real one.
+#[tokio::test]
+async fn a_caller_can_build_the_same_error_the_transport_would() {
+    let server = failing(
+        403,
+        json!({"code": 40_310_000, "message": "insufficient buying power"}),
+    )
+    .await;
+
+    let received = match error_from(&server).await {
+        Error::Api(api) => api,
+        other => panic!("expected Api, got {other:?}"),
+    };
+
+    let built = ApiError::from_body(
+        403,
+        "/thing",
+        r#"{"code":40310000,"message":"insufficient buying power"}"#,
+    );
+
+    assert_eq!(built, received);
+    assert_eq!(built.to_string(), received.to_string());
+    assert_eq!(built.is_retryable(), received.is_retryable());
+
+    // And it drops into `Error` where a caller's own code expects one.
+    assert_eq!(Error::Api(built).status(), Some(403));
+}
+
+/// The degradation matters as much as the happy path: a caller writing a test
+/// for their 502 handling should be able to reproduce a gateway's HTML.
+#[test]
+fn a_built_error_degrades_on_a_non_json_body_too() {
+    let error = ApiError::from_body(502, "/v2/account", "<html>bad gateway</html>");
+
+    assert_eq!(error.code, None);
+    assert_eq!(error.message, "<html>bad gateway</html>");
+    assert_eq!(error.body, "<html>bad gateway</html>");
+    assert!(!error.is_retryable());
 }
 
 // ------------------------------------------------------------- classifiers
