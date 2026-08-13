@@ -114,34 +114,58 @@ def spec_operations(spec: pathlib.Path) -> tuple[list[tuple[str, str]], set[tupl
     return operations, deprecated
 
 
-# `self.rest.get("/x", ..)`, `self.rest.post(&format!("/x/{y}"), ..)`, and the
-# same split across lines by rustfmt.
+# A route is written one of two ways: with the path inline, or bound to a local
+# named `path` first, because it interpolates an id or is reused by two calls.
+#
+# The binding form is why this scans in source order rather than running each
+# pattern over the whole file. `let path = format!("/orders/{id}")` followed by
+# `self.rest.patch(&path, ..)` is a PATCH, and reading the binding on its own
+# reports it as a GET — which is exactly what this script used to do, hiding
+# four implemented routes behind a phantom GET of the same path.
+BINDING = re.compile(r"let path = (?:format!\s*\(\s*)?\"([^\"]+)\"")
+# `self.rest.get("/x", ..)`, `self.rest.post(&format!("/x/{y}"), ..)`,
+# `self.rest.patch(&path, ..)`, and the same split across lines by rustfmt.
 REST_CALL = re.compile(
-    r"\.rest\s*\.\s*(get|post|put|patch|delete)\s*\(\s*&?\s*(?:format!\s*\(\s*)?\"([^\"]+)\"",
+    r"\.rest\s*\.\s*(get|post|put|patch|delete)\s*\(\s*"
+    r"(?:&?\s*(?:format!\s*\(\s*)?\"(?P<literal>[^\"]+)\"|&?(?P<binding>path)\b)",
     re.S,
 )
-# `send_void(Method::DELETE, &format!("/x"), ..)` and the events helper.
+# `send_void(Method::DELETE, &format!("/x"), ..)`, and the same with a binding.
 VOID_CALL = re.compile(
-    r"send_void\s*\(\s*Method::(GET|POST|PUT|PATCH|DELETE)\s*,\s*&?\s*(?:format!\s*\(\s*)?\"([^\"]+)\"",
+    r"send_void\s*\(\s*Method::(GET|POST|PUT|PATCH|DELETE)\s*,\s*"
+    r"(?:&?\s*(?:format!\s*\(\s*)?\"(?P<literal>[^\"]+)\"|&?(?P<binding>path)\b)",
     re.S,
 )
 # `self.events(EventVersion::V2, "/events/trades", ..)` and its timestamp-
 # windowed sibling `self.event_stream(EventVersion::V2Beta1, "/events/…", ..)`.
 EVENT_CALL = re.compile(
-    r"\.event(?:s|_stream)\s*\(\s*EventVersion::(\w+)\s*,\s*\"([^\"]+)\"",
+    r"\.event(?:s|_stream)\s*\(\s*EventVersion::\w+\s*,\s*\"(?P<literal>[^\"]+)\"",
     re.S,
 )
-# The routes that build their own URL: the document download, the logo bytes,
-# the market data paths that interpolate a feed or a symbol, and the streams
-# whose version segment is not the client's. All are GETs, and all name the
-# relative path `path` so this can find it.
-RAW_GET = re.compile(r"let path = (?:format!\s*\(\s*)?\"([^\"]+)\"", re.S)
 # Market data goes through the pagination helper rather than calling the
-# transport directly: `MarketDataRequest::paged("/stocks/bars")`. All are GETs.
+# transport directly. All are GETs.
 MARKET_DATA = re.compile(
-    r"MarketDataRequest::(?:paged|paged_with_limit|latest)\s*\(\s*\"([^\"]+)\"",
+    r"MarketDataRequest::(?:paged|paged_with_limit|latest)\s*\(\s*"
+    r"(?:\"(?P<literal>[^\"]+)\"|&(?P<binding>path)\b)",
     re.S,
 )
+# The routes that do not go through `RestClient` at all: the logo bytes, the
+# document download, and the streams whose version segment is not the client's.
+# Each reads the `path` binding rather than a literal, and each is a GET.
+RAW_GET = re.compile(
+    r"(?P<binding>get_bytes\s*\(\s*&path\b"
+    r"|crate::sse::subscribe\s*\("
+    r"|self\.raw\s*\.\s*get\s*\()"
+)
+
+# (pattern, fixed method) — None means the match's first group carries it.
+CALL_PATTERNS = [
+    (REST_CALL, None),
+    (VOID_CALL, None),
+    (EVENT_CALL, "get"),
+    (MARKET_DATA, "get"),
+    (RAW_GET, "get"),
+]
 
 
 def crate_routes(src: pathlib.Path) -> dict[tuple[str, str], list[str]]:
@@ -152,19 +176,47 @@ def crate_routes(src: pathlib.Path) -> dict[tuple[str, str], list[str]]:
         text = rs.read_text()
         where = str(rs.relative_to(src.parent))
 
-        # (pattern, method) where a method of None means "the first group is it".
-        for pattern, fixed_method in (
-            (REST_CALL, None),
-            (VOID_CALL, None),
-            (EVENT_CALL, "get"),
-            (RAW_GET, "get"),
-            (MARKET_DATA, "get"),
-        ):
-            for match in pattern.finditer(text):
-                groups = match.groups()
-                path = groups[-1]
-                method = fixed_method or groups[0].lower()
-                routes[(method, normalize(path))].append(where)
+        # Everything of interest, in source order, so a `path` binding is known
+        # by the time the call that uses it is read.
+        events: list[tuple[int, str, re.Match[str]]] = [
+            (m.start(), "binding", m) for m in BINDING.finditer(text)
+        ]
+        for index, (pattern, _) in enumerate(CALL_PATTERNS):
+            events += [(m.start(), f"call{index}", m) for m in pattern.finditer(text)]
+        events.sort(key=lambda item: item[0])
+
+        bound: str | None = None
+        bindings: list[str] = []
+        seen_here: set[str] = set()
+        for _, kind, match in events:
+            if kind == "binding":
+                bound = match.group(1)
+                bindings.append(bound)
+                continue
+
+            _, fixed_method = CALL_PATTERNS[int(kind.removeprefix("call"))]
+            groups = match.groupdict()
+            if groups.get("literal"):
+                path = groups["literal"]
+            elif groups.get("binding"):
+                if bound is None:
+                    continue  # a `path` that came from somewhere this cannot see
+                path = bound
+            else:
+                continue
+            method = fixed_method or match.group(1).lower()
+            routes[(method, normalize(path))].append(where)
+            seen_here.add(normalize(path))
+
+        # A `path` binding no call above accounted for was handed to a private
+        # helper — `latest_for_symbol`, say — which this cannot follow. Every
+        # such helper in this crate issues a GET, and leaving the path out
+        # entirely would report an implemented route as a gap. Recording it is
+        # the safer of the two errors, and a wrong one shows up under "called by
+        # the crate but not in any spec".
+        for path in bindings:
+            if normalize(path) not in seen_here:
+                routes[("get", normalize(path))].append(where)
 
     return routes
 

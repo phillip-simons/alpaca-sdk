@@ -12,7 +12,7 @@ see ROADMAP.md.
 decision, recorded with its reason in `SKIP` in the script — a route we
 have chosen against must not keep reading as a gap.
 
-## trading — 32/57 (56%), 1 deliberately skipped
+## trading — 34/57 (59%), 1 deliberately skipped
 
 ### Not implemented
 
@@ -39,11 +39,7 @@ have chosen against must not keep reading as a gap.
 - `GET   ` `/v1/locates/quotes`
 - `GET   ` `/v1/locates/{locate_id}`
 
-**orders**
-- `PATCH ` `/v2/orders/{order_id}`
-
 **positions**
-- `DELETE` `/v2/positions/{symbol_or_asset_id}`
 - `POST  ` `/v2/positions/{symbol_or_contract_id}/do-not-exercise`
 
 **tokenization**
@@ -66,7 +62,7 @@ have chosen against must not keep reading as a gap.
 
 Nothing.
 
-## broker — 80/154 (51%), 1 deliberately skipped
+## broker — 83/154 (53%), 1 deliberately skipped
 
 ### Not implemented
 
@@ -163,9 +159,6 @@ Nothing.
 **trading**
 - `GET   ` `/v1/trading/accounts/{account_id}/limits`
 - `POST  ` `/v1/trading/accounts/{account_id}/orders/estimation`
-- `PATCH ` `/v1/trading/accounts/{account_id}/orders/{order_id}`
-- `DELETE` `/v1/trading/accounts/{account_id}/positions`
-- `DELETE` `/v1/trading/accounts/{account_id}/positions/{symbol_or_asset_id}`
 - `POST  ` `/v1/trading/accounts/{account_id}/positions/{symbol_or_contract_id}/do-not-exercise`
 
 **transfers**
