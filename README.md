@@ -37,6 +37,8 @@ per-product entitlements. Those models follow the published reference and the
 vendored specs. Treat a decode failure on a first real payload there as expected
 work rather than a regression.
 
+Release notes are in [CHANGELOG.md](CHANGELOG.md).
+
 ## What the types look like
 
 - **Money is `rust_decimal::Decimal`.** Alpaca sends order quantities and prices

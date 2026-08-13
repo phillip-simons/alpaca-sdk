@@ -42,20 +42,29 @@ the failure appears at publish time rather than at rename time.
 ## Releasing a version
 
 ```sh
-# 1. Set the version. There is one place.
+# 1. Set the version. Two places, and only the first is checked by the
+#    pipeline — the tag is compared against Cargo.toml, and nothing compares
+#    either against CHANGELOG.md.
 $EDITOR Cargo.toml
+$EDITOR CHANGELOG.md   # promote the heading to `## [0.1.0] — 2026-08-13`
 
 # 2. Prove it locally first. This is what CI will run again.
 just publish-dry
 
 # 3. Commit, tag, push. The tag must match Cargo.toml or the job fails
 #    before publishing anything.
-git add Cargo.toml Cargo.lock
+git add Cargo.toml Cargo.lock CHANGELOG.md
 git commit -m "release 0.1.0"
 git push origin main
 git tag v0.1.0
 git push origin v0.1.0
 ```
+
+**Write the notes as the change is made, not at tag time.** Inside `0.x`,
+`cargo-semver-checks` has nothing to assert — every bump is permitted to break —
+so CHANGELOG.md is the only mechanism that communicates a breaking change, and
+the ones without a compile error attached are exactly the ones nobody remembers
+a week later.
 
 Then approve the deployment when GitHub asks. Watch the `verify` job first —
 its **What would be uploaded** step prints the exact file list, so the contents
