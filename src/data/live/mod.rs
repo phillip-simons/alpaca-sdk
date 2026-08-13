@@ -48,9 +48,11 @@ pub use crate::config::DEFAULT_STABLE_SESSION;
 
 /// Configuration for a market data stream.
 ///
-/// Deliberately *not* `#[non_exhaustive]`: every field is private and reached
-/// through a validating builder, so a struct literal is already impossible and
-/// the attribute would buy nothing on a type the caller has to construct.
+/// Deliberately *not* `#[non_exhaustive]`: every validated field is private and
+/// reached through a builder that checks it, so a struct literal is already
+/// impossible and the attribute would buy nothing on a type the caller has to
+/// construct. Only `endpoint` stays public, because there is nothing to validate
+/// about it.
 #[derive(Debug, Clone)]
 pub struct StreamConfig {
     /// The websocket endpoint.

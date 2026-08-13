@@ -114,16 +114,13 @@ behaviour changes are worth reading before the first release rather than after.
 - **`JitReport` reports the real decode error too.** It was the other untagged
   enum on an unobserved route, and it was discarding the carefully worded error
   its own inline arm produces.
-- **`Error::is_transient` is consistent across its two halves.** It reported a
-  504 as transient and a timeout as not, though both leave the same question
-  open — whether the server acted before the connection failed. Both are
-  transient now, and the docs say plainly that transient is not the same as safe
-  to replay.
 - **The broker document download retries like every other route.** Its
   hand-rolled loop ignored `Retry-After` and waited a flat interval instead of
   the backoff curve.
-- **`get_latest_*_for_symbol` treats a `null` payload as absent**, like the three
-  sibling helpers already did.
+- **`get_latest_*_for_symbol` reports a `null` payload as an absent record**
+  rather than a decode mismatch. It returns one record, so it cannot skip the way
+  the three sibling helpers do — but the error now says the response carried
+  nothing for that symbol instead of blaming the shape.
 
 ### Added
 
@@ -145,10 +142,10 @@ Decisions that become expensive after the first release, settled now.
 - **Response models are `#[non_exhaustive]`,** across every module rather than
   the three model files — 80 further types, including all fourteen corporate
   action shapes and the funding, JIT, reporting, IPO, OAuth and locate responses.
-  Clients, request bodies and caller-constructed value types (`OrderAmount`,
-  `Trail`, `StopLimit`, `SettlementTransfer`, `W8BenDocument`) are deliberately
-  left exhaustive: the attribute costs a caller something and buys nothing on a
-  type they have to build. `CHANGELOG` stated the policy as a guarantee; `trading/models.rs`, `broker/models.rs` and `data/models.rs` had it
+  Request structs carry it too, as CONTRIBUTING states — the exemptions are
+  clients, and the handful of caller-constructed value types where the attribute
+  costs something and buys nothing: `OrderAmount`, `Trail`, `StopLimit`,
+  `SettlementTransfer`, `W8BenDocument` and `StreamConfig`. `CHANGELOG` stated the policy as a guarantee; `trading/models.rs`, `broker/models.rs` and `data/models.rs` had it
   on nothing. Alpaca adds fields without a version bump, and without the
   attribute the crate cannot follow an *additive* upstream change without a major
   release of its own. Several request-body components gain constructors as a
@@ -175,11 +172,14 @@ Decisions that become expensive after the first release, settled now.
   `0.13 → 0.14` bump a breaking change here, for a dependency unrelated to
   Alpaca. `is_timeout`, `is_connect`, `is_body`, `is_decode`, `status`, `url` and
   `source` are forwarded.
-- **`Error::is_retryable` is now `Error::is_transient`,** and no longer reports a
-  timeout as worth retrying: a timed-out `POST` is indistinguishable from one the
-  server accepted. `ApiError::is_retryable` is now
-  `ApiError::is_retried_by_default`, which is what it measured — the default
-  status set, not the policy the client was built with.
+- **`Error::is_retryable` is now `Error::is_transient`.** The classification is
+  unchanged; the name was the problem. "Retryable" reads as "safe to send again",
+  which no error value can answer — a timed-out `POST` and a 504 on one are both
+  transient and both indistinguishable from a request the server accepted. The
+  safety question belongs to the method, and the docs now say so.
+  `ApiError::is_retryable` is now `ApiError::is_retried_by_default`, which is
+  what it measured — the default status set, not the policy the client was built
+  with.
 - **`EventStreamRequest::after_id` is now `from_id`**, and
   `GetEventsRequest::after_ulid` is now `from_ulid`. "After" asserted an
   exclusivity only some of these streams have: Alpaca documents `since_id` as

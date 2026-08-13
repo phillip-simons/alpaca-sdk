@@ -662,28 +662,11 @@ impl BrokerClient {
             "/accounts/{account_id}/events/activities/{}",
             segment(event_id)?
         );
-        // Its own version segment, like the stream it pairs with, so it cannot
-        // go through the client's `v1`-configured transport.
-        let url = format!(
-            "{}/v2beta1{path}",
-            self.rest.config().base_url.trim_end_matches('/'),
-        );
-        let response = self
-            .plain
-            .get(&url)
-            .send()
-            .await
-            .map_err(crate::Error::from)?;
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        if !status.is_success() {
-            return Err(crate::Error::Api(crate::error::ApiError::from_body(
-                status.as_u16(),
-                &path,
-                body,
-            )));
-        }
-        serde_json::from_str(&body).map_err(|source| crate::Error::Decode { path, body, source })
+        // Its own version segment, like the stream it pairs with — which is what
+        // `at_version` is for. It went through the raw client once, and that cost
+        // it the retry loop, the caller's timeout and the redirect refusal that
+        // every other route here gets.
+        self.rest.at_version("v2beta1").get(&path, &Empty).await
     }
 
     /// Opens one of the broker's event streams.

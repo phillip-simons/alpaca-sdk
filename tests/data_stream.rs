@@ -602,6 +602,12 @@ async fn a_quiet_session_that_stayed_up_clears_the_failure_count() {
     stream
         .stable_session(Duration::from_millis(150))
         .expect("a positive duration");
+    // A small `min_backoff` so the growing curve has room to double many times
+    // inside the window. With the default 1s base the third gap already overlaps
+    // three times the first, and the test passed against the bug on ~40% of runs.
+    stream
+        .backoff(Duration::from_millis(50), Duration::from_secs(30))
+        .expect("a valid window");
 
     let mut messages = Box::pin(stream.run());
     let _ = tokio::time::timeout(Duration::from_secs(10), async {
@@ -616,9 +622,9 @@ async fn a_quiet_session_that_stayed_up_clears_the_failure_count() {
         times.len()
     );
     // Compared against the *first* gap rather than a fixed threshold: under a
-    // reset every gap is one `min_backoff` draw, so the ratio is ~1; under a
-    // growing curve the last gap is several doublings larger. A ratio is
-    // immune to how fast the runner is, where an absolute bound is not.
+    // reset every gap is one `min_backoff` draw, so the ratio stays ~1; under a
+    // growing curve the last gap is many doublings larger. A ratio is immune to
+    // how fast the runner is, where an absolute bound is not.
     let gap = last_gap(&times).expect("at least two connections");
     let first = times[1].duration_since(times[0]);
     assert!(

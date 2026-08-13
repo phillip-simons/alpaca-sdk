@@ -166,13 +166,30 @@ pub struct JitTradingLimits {
 ///
 /// The route answers with one of two shapes depending on `response_type`: a body
 /// of report strings, or a link to download one.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum JitReport {
     /// A presigned URL to fetch the report from.
     Download(JitReportDownload),
     /// The report itself.
     Inline(Box<JitReportInline>),
+}
+
+impl Serialize for JitReport {
+    /// Emits the inner value, not an externally-tagged wrapper.
+    ///
+    /// The derived form would write `{"Download": {…}}`, which the
+    /// [`Deserialize`] below — and Alpaca — do not accept. Dropping
+    /// `#[serde(untagged)]` for a hand-written deserializer means the serializer
+    /// has to be hand-written too, or the type stops round-tripping through its
+    /// own codec; that is the same defect the `Calendar` serializer exists to
+    /// avoid.
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Download(download) => download.serialize(serializer),
+            Self::Inline(inline) => inline.serialize(serializer),
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for JitReport {
@@ -223,28 +240,28 @@ impl<'de> Deserialize<'de> for JitReport {
 #[non_exhaustive]
 pub struct JitReportInline {
     /// The detail report.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     /// The net summary.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub net_summary: Option<String>,
     /// The net payment.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub net_payment: Option<String>,
     /// The final net payment.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub net_payment_final: Option<String>,
     /// The gross summary.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gross_summary: Option<String>,
     /// The gross payment.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gross_payment: Option<String>,
     /// The final gross payment.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gross_payment_final: Option<String>,
     /// The obligation report.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub obligation: Option<String>,
 }
 
@@ -526,5 +543,38 @@ mod tests {
             SupportedCurrencies::Usd,
         );
         assert!(request.validate().is_err());
+    }
+
+    /// Dropping `#[serde(untagged)]` for a hand-written `Deserialize` broke this
+    /// once: the derived `Serialize` emitted `{"Download": {…}}`, which the
+    /// deserializer then refused. Both shapes have to survive their own codec.
+    #[test]
+    fn a_jit_report_round_trips_in_both_shapes() {
+        let download = serde_json::json!({
+            "url": "https://example.test/report.csv",
+            "filename": "report.csv",
+            "expires_at": "2026-01-02T00:00:00Z"
+        });
+        let inline = serde_json::json!({"net_summary": "account,amount\n1,2\n"});
+
+        for wire in [download, inline] {
+            let report: JitReport = serde_json::from_value(wire.clone()).unwrap();
+            let encoded = serde_json::to_value(&report).unwrap();
+            assert_eq!(encoded, wire, "the encoded form must be what Alpaca sends");
+
+            let decoded: JitReport = serde_json::from_value(encoded).unwrap();
+            assert_eq!(decoded, report);
+        }
+    }
+
+    /// And the check that made the decoder able to fail at all: a body carrying
+    /// none of the known report keys is a shape this crate does not model, not
+    /// an empty report.
+    #[test]
+    fn a_body_with_no_known_report_key_is_an_error() {
+        let error = serde_json::from_value::<JitReport>(serde_json::json!({"surprise": "x"}))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("no known JIT report key"), "{error}");
     }
 }
