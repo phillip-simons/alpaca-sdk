@@ -24,13 +24,14 @@ use crate::data::models::{
 use crate::data::pagination::{MarketDataRequest, get_marketdata};
 use crate::data::requests::{
     CorporateActionsRequest, CryptoBarsRequest, CryptoLatestRequest, CryptoSnapshotRequest,
-    ForexLatestRatesRequest, ForexRatesRequest, LogoRequest, MarketMoversRequest,
-    MostActivesRequest, NewsRequest, OptionBarsRequest, OptionChainRequest, OptionLatestRequest,
-    OptionSnapshotRequest, SingleSymbolRequest, StockAuctionsRequest, StockBarsRequest,
-    StockLatestRequest, StockSnapshotRequest, StockTimeseriesRequest, TimeseriesRequest,
+    ForexLatestRatesRequest, ForexRatesRequest, MarketMoversRequest, MostActivesRequest,
+    NewsRequest, OptionBarsRequest, OptionChainRequest, OptionLatestRequest, OptionSnapshotRequest,
+    SingleSymbolRequest, StockAuctionsRequest, StockBarsRequest, StockLatestRequest,
+    StockSnapshotRequest, StockTimeseriesRequest, TimeseriesRequest,
 };
 use crate::error::{Error, Result};
 use crate::rest::{Empty, RestClient, RestConfig};
+use crate::types::LogoRequest;
 
 /// Deserializes a merged payload into a map of symbol to a list of records,
 /// filling in the symbol each list was keyed by.

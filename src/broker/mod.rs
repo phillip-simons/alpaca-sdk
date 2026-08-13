@@ -2,15 +2,50 @@
 //!
 //! Authenticates with HTTP basic auth rather than the `APCA-*` headers every
 //! other client uses, and most routes act on behalf of a specific account.
+//!
+//! # What is verified, and what is not
+//!
+//! The routes ported in phase 6 came from alpaca-py and are checked against
+//! captured payloads. The routes added in phase 6.5 — instant funding, JIT,
+//! FPSL, funding wallets, IPOs, reporting, OAuth, tokenization and the crypto
+//! wallets — came from the published reference and the vendored specs, and have
+//! never met a real response. This account has no broker sandbox key; see
+//! `ROADMAP.md`.
+//!
+//! That is not a reason to distrust them so much as a reason to expect the first
+//! live payload to correct something. Treat a decode failure on one of these as
+//! expected work rather than a regression, exactly as the `CIP*` models are
+//! treated. The one family with real payloads behind it is
+//! [`fixed_income`], harvested from the Go SDK's tests.
 
 mod client;
 mod enums;
 mod events;
+pub mod fixed_income;
+pub mod fpsl;
+pub mod funding_wallet;
+pub mod instant_funding;
+pub mod ipos;
+pub mod jit;
 mod models;
+pub mod oauth;
+pub mod onboarding;
+pub mod reporting;
 mod requests;
+pub mod settlements;
 
 pub use client::{BrokerClient, DOCUMENT_UPLOAD_LIMIT};
 pub use enums::*;
 pub use events::{BrokerEvent, GetEventsRequest};
+pub use fixed_income::*;
+pub use fpsl::*;
+pub use funding_wallet::*;
+pub use instant_funding::*;
+pub use ipos::*;
+pub use jit::*;
 pub use models::*;
+pub use oauth::*;
+pub use onboarding::*;
+pub use reporting::*;
 pub use requests::*;
+pub use settlements::*;

@@ -24,107 +24,11 @@ Nothing.
 
 Nothing.
 
-## broker — 85/154 (55%), 1 deliberately skipped
+## broker — 153/154 (99%), 1 deliberately skipped
 
 ### Not implemented
 
-**/country-info**
-- `GET   ` `/v1/country-info`
-
-**/instant_funding**
-- `GET   ` `/v1/instant_funding`
-- `POST  ` `/v1/instant_funding`
-
-**/ipos**
-- `GET   ` `/v1/ipos`
-
-**accounts**
-- `GET   ` `/v1/accounts/activities/{activity_type}`
-- `GET   ` `/v1/accounts/ira_excess_contributions`
-- `GET   ` `/v1/accounts/options/approvals`
-- `GET   ` `/v1/accounts/{account_id}/documents/w8ben/{document_id}/download`
-- `PATCH ` `/v1/accounts/{account_id}/onfido/sdk`
-- `GET   ` `/v1/accounts/{account_id}/onfido/sdk/tokens`
-- `POST  ` `/v1/accounts/{account_id}/options/approval`
-- `POST  ` `/v1/accounts/{account_id}/tokenization/callback/mint`
-- `POST  ` `/v1/accounts/{account_id}/tokenization/callback/redeem`
-- `POST  ` `/v1/accounts/{account_id}/tokenization/mint`
-- `GET   ` `/v1/accounts/{account_id}/tokenization/requests`
-- `GET   ` `/v1/accounts/{account_id}/tokenization/requests/{tokenization_request_id}`
-- `GET   ` `/v1/accounts/{account_id}/tokenization/requests:by_client_request_id`
-- `GET   ` `/v1/accounts/{account_id}/tokenization/requests:by_issuer_request_id`
-- `GET   ` `/v1/accounts/{account_id}/wallets`
-- `GET   ` `/v1/accounts/{account_id}/wallets/transfers`
-- `POST  ` `/v1/accounts/{account_id}/wallets/transfers`
-- `GET   ` `/v1/accounts/{account_id}/wallets/transfers/{transfer_id}`
-- `GET   ` `/v1/accounts/{account_id}/wallets/whitelists`
-- `POST  ` `/v1/accounts/{account_id}/wallets/whitelists`
-- `DELETE` `/v1/accounts/{account_id}/wallets/whitelists/{whitelisted_address_id}`
-- `POST  ` `/v1beta/accounts/funding_wallet`
-- `GET   ` `/v1beta/accounts/{account_id}/funding_wallet`
-- `POST  ` `/v1beta/accounts/{account_id}/funding_wallet`
-- `GET   ` `/v1beta/accounts/{account_id}/funding_wallet/funding_details`
-- `DELETE` `/v1beta/accounts/{account_id}/funding_wallet/recipient_bank`
-- `GET   ` `/v1beta/accounts/{account_id}/funding_wallet/recipient_bank`
-- `POST  ` `/v1beta/accounts/{account_id}/funding_wallet/recipient_bank`
-- `GET   ` `/v1beta/accounts/{account_id}/funding_wallet/transfers`
-- `GET   ` `/v1beta/accounts/{account_id}/funding_wallet/transfers/{transfer_id}`
-- `POST  ` `/v1beta/accounts/{account_id}/funding_wallet/withdrawal`
-
-**assets**
-- `GET   ` `/v1/assets/entry-requirements`
-- `GET   ` `/v1/assets/fixed_income/us_corporates`
-- `GET   ` `/v1/assets/fixed_income/us_treasuries`
-
-**cash_interest**
-- `GET   ` `/v1/cash_interest/apr_tiers`
-
-**demo**
-- `POST  ` `/v1beta/demo/banking/funding`
-
-**fpsl**
-- `GET   ` `/v1/fpsl/analytics/{account_id}/loans`
-- `GET   ` `/v1/fpsl/loans`
-- `GET   ` `/v1/fpsl/tiers`
-
-**instant_funding**
-- `GET   ` `/v1/instant_funding/limits`
-- `GET   ` `/v1/instant_funding/limits/accounts`
-- `GET   ` `/v1/instant_funding/reports`
-- `GET   ` `/v1/instant_funding/settlements`
-- `POST  ` `/v1/instant_funding/settlements`
-- `GET   ` `/v1/instant_funding/settlements/{settlement_id}`
-- `DELETE` `/v1/instant_funding/{instant_funding_id}`
-- `GET   ` `/v1/instant_funding/{instant_funding_id}`
-
-**ipos**
-- `GET   ` `/v1/ipos/{offering_reference}`
-
-**jit**
-- `GET   ` `/v1/jit/settlements`
-- `POST  ` `/v1/jit/settlements`
-- `GET   ` `/v1/jit/settlements/{settlement_id}`
-
-**oauth**
-- `POST  ` `/v1/oauth/authorize`
-- `GET   ` `/v1/oauth/clients/{client_id}`
-- `POST  ` `/v1/oauth/token`
-
-**reporting**
-- `GET   ` `/v1/reporting/eod/aggregate_positions`
-- `GET   ` `/v1/reporting/eod/cash_interest`
-- `GET   ` `/v1/reporting/eod/positions`
-
-**trading**
-- `GET   ` `/v1/trading/accounts/{account_id}/limits`
-- `POST  ` `/v1/trading/accounts/{account_id}/orders/estimation`
-- `POST  ` `/v1/trading/accounts/{account_id}/positions/{symbol_or_contract_id}/do-not-exercise`
-
-**transfers**
-- `GET   ` `/v1/transfers/jit/ledgers`
-- `GET   ` `/v1/transfers/jit/limits`
-- `GET   ` `/v1/transfers/jit/reports`
-- `GET   ` `/v1/transfers/jit/{ledger_id}/balances`
+Nothing.
 
 ## Deliberately skipped
 

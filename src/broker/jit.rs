@@ -1,0 +1,389 @@
+//! [Just-in-time funding](https://docs.alpaca.markets/us/reference/get-v1-transfers-jit-ledgers):
+//! ledgers, daily trading limits, reports, and settlements.
+//!
+//! JIT correspondents hold client cash themselves and settle with Alpaca on a
+//! net basis at the end of the day, rather than pre-funding each account. The
+//! ledger is the running record of that obligation.
+//!
+//! **Two path families, one feature.** Ledgers, limits, reports and balances
+//! live under `/v1/transfers/jit/…`; settlements live under `/v1/jit/…`. That is
+//! Alpaca's split, not a mistake here.
+//!
+//! Not in alpaca-py, spec-derived, and unverified against a live response.
+
+use chrono::{DateTime, NaiveDate, Utc};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
+
+use crate::broker::settlements::{SettlementAssetClass, TransmitterInfo};
+use crate::types::wire::wire_enum;
+
+wire_enum! {
+    /// Which JIT report to run.
+    pub enum JitReportType {
+        /// Every transaction.
+        Detail => "detail",
+        /// Net position by account.
+        NetSummary => "net_summary",
+        /// The net payment due.
+        NetPayment => "net_payment",
+        /// The net payment, final.
+        NetPaymentFinal => "net_payment_final",
+        /// Gross position by account.
+        GrossSummary => "gross_summary",
+        /// The gross payment due.
+        GrossPayment => "gross_payment",
+        /// The gross payment, final.
+        GrossPaymentFinal => "gross_payment_final",
+        /// What is owed.
+        Obligation => "obligation",
+    }
+}
+
+wire_enum! {
+    /// Whether a report comes back inline or as a link.
+    pub enum JitResponseType {
+        /// In the response body.
+        Inline => "inline",
+        /// As a presigned URL to fetch.
+        DownloadUrl => "download_url",
+    }
+}
+
+/// A JIT ledger.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JitLedger {
+    /// Alpaca's identifier for the ledger.
+    #[serde(default)]
+    pub id: Option<String>,
+    /// Its name.
+    #[serde(default)]
+    pub ledger_name: Option<String>,
+    /// Whether it is open.
+    #[serde(default)]
+    pub status: Option<String>,
+    /// When it was opened.
+    #[serde(default)]
+    pub created_at: Option<String>,
+}
+
+/// One movement on a ledger.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JitLedgerTransaction {
+    /// The account it belongs to.
+    #[serde(default)]
+    pub account_id: Option<String>,
+    /// That account's number.
+    #[serde(default)]
+    pub account_no: Option<String>,
+    /// That account's name.
+    #[serde(default)]
+    pub account_name: Option<String>,
+    /// The account on the other side.
+    #[serde(default)]
+    pub contra_account_name: Option<String>,
+    /// What kind of entry it is.
+    #[serde(default)]
+    pub entry_type: Option<String>,
+    /// What it is for.
+    #[serde(default)]
+    pub description: Option<String>,
+    /// How much moved.
+    #[serde(default)]
+    pub amount: Option<Decimal>,
+    /// The balance after it.
+    #[serde(default)]
+    pub balance: Option<Decimal>,
+    /// The business day.
+    #[serde(default)]
+    pub system_date: Option<String>,
+}
+
+/// A ledger's balance over a window, and the movements behind it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JitLedgerBalances {
+    /// The ledger.
+    #[serde(default)]
+    pub id: Option<String>,
+    /// Its name.
+    #[serde(default)]
+    pub ledger_name: Option<String>,
+    /// Its number.
+    #[serde(default)]
+    pub ledger_no: Option<String>,
+    /// The balance at the start of the window.
+    #[serde(default)]
+    pub starting_balance: Option<Decimal>,
+    /// The balance at the end of it.
+    #[serde(default)]
+    pub ending_balance: Option<Decimal>,
+    /// The net of everything in between.
+    #[serde(default)]
+    pub activity_amount: Option<Decimal>,
+    /// The movements.
+    #[serde(
+        default,
+        deserialize_with = "crate::types::serde_util::null_as_default"
+    )]
+    pub transactions: Vec<JitLedgerTransaction>,
+}
+
+/// A correspondent's trading limits for the day.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JitTradingLimits {
+    /// Which correspondent.
+    #[serde(default)]
+    pub correspondent: Option<String>,
+    /// The net ceiling for the day.
+    #[serde(default)]
+    pub daily_net_limit: Option<Decimal>,
+    /// How much of it is committed.
+    #[serde(default)]
+    pub in_use_limit: Option<Decimal>,
+    /// Cash on hand.
+    #[serde(default)]
+    pub cash_held: Option<Decimal>,
+    /// Buys already filled.
+    #[serde(default)]
+    pub executed_buys: Option<Decimal>,
+    /// Sells already filled.
+    #[serde(default)]
+    pub executed_sells: Option<Decimal>,
+    /// Buys still working.
+    #[serde(default)]
+    pub open_buys: Option<Decimal>,
+    /// Sells still working.
+    #[serde(default)]
+    pub open_sells: Option<Decimal>,
+}
+
+/// A JIT report, however the caller asked for it.
+///
+/// The route answers with one of two shapes depending on `response_type`, so
+/// this is untagged: a body of report strings, or a link to download one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum JitReport {
+    /// A presigned URL to fetch the report from.
+    Download(JitReportDownload),
+    /// The report itself.
+    Inline(Box<JitReportInline>),
+}
+
+/// A report served in the response body.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JitReportInline {
+    /// The detail report.
+    #[serde(default)]
+    pub detail: Option<String>,
+    /// The net summary.
+    #[serde(default)]
+    pub net_summary: Option<String>,
+    /// The net payment.
+    #[serde(default)]
+    pub net_payment: Option<String>,
+    /// The final net payment.
+    #[serde(default)]
+    pub net_payment_final: Option<String>,
+    /// The obligation report.
+    #[serde(default)]
+    pub obligation: Option<String>,
+}
+
+/// A report served as a link.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JitReportDownload {
+    /// Where to fetch it.
+    pub url: String,
+    /// What it is called.
+    pub filename: String,
+    /// When the link stops working.
+    pub expires_at: DateTime<Utc>,
+}
+
+/// Filters for a JIT report.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GetJitReportRequest {
+    /// Which report to run.
+    pub report_type: JitReportType,
+    /// The business day to report on.
+    pub system_date: NaiveDate,
+    /// Which book to report on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asset_class: Option<SettlementAssetClass>,
+    /// Whether to serve the report or a link to it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_type: Option<JitResponseType>,
+}
+
+impl GetJitReportRequest {
+    /// The `report_type` report for `system_date`.
+    ///
+    /// Both are required by the route, so both are arguments rather than
+    /// builder steps.
+    #[must_use]
+    pub fn new(report_type: JitReportType, system_date: NaiveDate) -> Self {
+        Self {
+            report_type,
+            system_date,
+            asset_class: None,
+            response_type: None,
+        }
+    }
+
+    /// Restricts the report to one book.
+    #[must_use]
+    pub fn asset_class(mut self, asset_class: SettlementAssetClass) -> Self {
+        self.asset_class = Some(asset_class);
+        self
+    }
+
+    /// Asks for a link rather than the report itself.
+    #[must_use]
+    pub fn response_type(mut self, response_type: JitResponseType) -> Self {
+        self.response_type = Some(response_type);
+        self
+    }
+}
+
+/// A window over a ledger's balances.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GetJitBalancesRequest {
+    /// The first day.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_date: Option<NaiveDate>,
+    /// The last day.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_date: Option<NaiveDate>,
+}
+
+impl GetJitBalancesRequest {
+    /// A request with no window.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Restricts the window.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if `end`
+    /// is before `start`.
+    pub fn between(mut self, start: NaiveDate, end: NaiveDate) -> crate::Result<Self> {
+        if end < start {
+            return Err(crate::Error::InvalidRequest(format!(
+                "end_date ({end}) is before start_date ({start})"
+            )));
+        }
+        self.start_date = Some(start);
+        self.end_date = Some(end);
+        Ok(self)
+    }
+}
+
+/// One account's share of a JIT settlement.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JitSettlementAccount {
+    /// The account.
+    pub account_number: String,
+    /// How much it settles.
+    pub amount: Decimal,
+    /// Who sent the money, for travel-rule reporting.
+    pub transmitter_info: TransmitterInfo,
+}
+
+/// A request to settle a day's JIT obligation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreateJitSettlementRequest {
+    /// The accounts to settle.
+    pub accounts: Vec<JitSettlementAccount>,
+    /// Which book.
+    pub asset_class: SettlementAssetClass,
+    /// The currency.
+    pub currency: String,
+    /// Free-form notes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub additional_info: Option<String>,
+}
+
+impl CreateJitSettlementRequest {
+    /// Settles `accounts` in `currency` on the `asset_class` book.
+    pub fn new(
+        accounts: Vec<JitSettlementAccount>,
+        asset_class: SettlementAssetClass,
+        currency: impl Into<String>,
+    ) -> Self {
+        Self {
+            accounts,
+            asset_class,
+            currency: currency.into(),
+            additional_info: None,
+        }
+    }
+
+    /// The coherence checks a settlement cannot pass without contradicting
+    /// itself.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if no
+    /// accounts are named, or one of them settles a non-positive amount.
+    pub fn validate(&self) -> crate::Result<()> {
+        if self.accounts.is_empty() {
+            return Err(crate::Error::InvalidRequest(
+                "a settlement must name at least one account".to_owned(),
+            ));
+        }
+        for account in &self.accounts {
+            if account.amount <= Decimal::ZERO {
+                return Err(crate::Error::InvalidRequest(format!(
+                    "account {} settles {}, which is not a positive amount",
+                    account.account_number, account.amount
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_report_decodes_as_either_shape() {
+        let download: JitReport = serde_json::from_value(serde_json::json!({
+            "url": "https://example.invalid/report.csv",
+            "filename": "report.csv",
+            "expires_at": "2026-01-02T15:04:05Z",
+        }))
+        .unwrap();
+        assert!(matches!(download, JitReport::Download(_)));
+
+        let inline: JitReport = serde_json::from_value(serde_json::json!({
+            "net_summary": "account,amount\n123,1.00\n",
+        }))
+        .unwrap();
+        assert!(matches!(inline, JitReport::Inline(_)));
+    }
+
+    #[test]
+    fn a_settlement_that_settles_nothing_is_refused() {
+        let request =
+            CreateJitSettlementRequest::new(Vec::new(), SettlementAssetClass::UsEquity, "USD");
+        assert!(request.validate().is_err());
+    }
+
+    #[test]
+    fn a_negative_settlement_amount_is_refused() {
+        let request = CreateJitSettlementRequest::new(
+            vec![JitSettlementAccount {
+                account_number: "123".to_owned(),
+                amount: Decimal::new(-1, 0),
+                transmitter_info: TransmitterInfo::default(),
+            }],
+            SettlementAssetClass::Crypto,
+            "USD",
+        );
+        assert!(request.validate().is_err());
+    }
+}

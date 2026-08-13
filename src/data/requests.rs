@@ -695,34 +695,6 @@ impl ForexLatestRatesRequest {
     }
 }
 
-/// A request for a company logo.
-///
-/// See <https://docs.alpaca.markets/us/reference/logos-5>.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LogoRequest {
-    /// Whether to answer with a generated placeholder when no logo exists.
-    ///
-    /// Alpaca defaults this to `true`, so an unset request never 404s — it
-    /// returns an image either way. Set it to `false` to tell the two apart.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub placeholder: Option<bool>,
-}
-
-impl LogoRequest {
-    /// A request taking Alpaca's default: a placeholder when no logo exists.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Whether a placeholder is acceptable.
-    #[must_use]
-    pub fn placeholder(mut self, placeholder: bool) -> Self {
-        self.placeholder = Some(placeholder);
-        self
-    }
-}
-
 /// A request for the most actively traded stocks.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MostActivesRequest {

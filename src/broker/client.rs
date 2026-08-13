@@ -13,10 +13,44 @@ use uuid::Uuid;
 use crate::auth::Credentials;
 use crate::broker::enums::ACHRelationshipStatus;
 use crate::broker::events::{BrokerEvent, EventVersion, GetEventsRequest};
+use crate::broker::fixed_income::{
+    EntryRequirement, GetEntryRequirementsRequest, GetUsCorporatesRequest, GetUsTreasuriesRequest,
+    UsCorporates, UsTreasuries,
+};
+use crate::broker::fpsl::{
+    FpslAnalytics, FpslLoansPage, FpslTier, GetFpslAnalyticsRequest, GetFpslLoansRequest,
+};
+use crate::broker::funding_wallet::{
+    BatchCreateFundingWalletsRequest, CreateRecipientBankRequest, CreateWithdrawalRequest,
+    DemoFundingRequest, FundingWallet, FundingWalletTransfer, FundingWalletTransfers,
+    FundingWallets, GetFundingDetailsRequest, RecipientBank,
+};
+use crate::broker::instant_funding::{
+    AccountInstantFundingLimits, CreateInstantFundingRequest,
+    CreateInstantFundingSettlementRequest, GetAccountLimitsRequest, GetInstantFundingReportRequest,
+    GetInstantFundingRequest, InstantFunding, InstantFundingLimits, InstantFundingReport,
+};
+use crate::broker::ipos::{GetIpoOfferingsRequest, IpoOfferingResponse, IpoOfferingsPage};
+use crate::broker::jit::{
+    CreateJitSettlementRequest, GetJitBalancesRequest, GetJitReportRequest, JitLedger,
+    JitLedgerBalances, JitReport, JitTradingLimits,
+};
 use crate::broker::models::{
     ACHRelationship, Account, AllAccountsPositions, Bank, BatchJournalResponse, CIPInfo, Journal,
     Order, Portfolio, RebalancingRun, RunsPage, Subscription, SubscriptionsPage, TradeAccount,
     TradeDocument, Transfer,
+};
+use crate::broker::oauth::{
+    GetOAuthClientRequest, OAuthClient, OAuthCode, OAuthRequest, OAuthToken,
+};
+use crate::broker::onboarding::{
+    CountryInfo, EstimateOrderRequest, GetOnfidoTokenRequest, GetOptionsApprovalsRequest,
+    IraExcessContribution, OnfidoToken, OptionsApproval, OptionsApprovalsPage,
+    RequestOptionsApprovalRequest, TradingLimits, UpdateOnfidoOutcomeRequest,
+};
+use crate::broker::reporting::{
+    AggregatePosition, AprTiers, CashInterestReport, EodPositions, GetAggregatePositionsRequest,
+    GetCashInterestRequest, GetEodPositionsRequest,
 };
 use crate::broker::requests::{
     CreateACHRelationshipRequest, CreateAccountRequest, CreateBankRequest,
@@ -27,6 +61,7 @@ use crate::broker::requests::{
     GetTradeDocumentsRequest, GetTransfersRequest, ListAccountsRequest, OrderRequest,
     UpdateAccountRequest, UpdatePortfolioRequest, UploadDocument,
 };
+use crate::broker::settlements::{GetSettlementsRequest, Settlement, Settlements};
 use crate::config::BaseUrl;
 use crate::error::Result;
 use crate::rest::{Empty, RestClient, RestConfig};
@@ -852,6 +887,19 @@ impl BrokerClient {
         document_id: Uuid,
     ) -> Result<Vec<u8>> {
         let path = format!("/accounts/{account_id}/documents/{document_id}/download");
+        self.download(&path).await
+    }
+
+    /// Fetches a route that answers `301` to a presigned storage URL.
+    ///
+    /// Two routes do: the trade document download and the W-8BEN download.
+    /// Neither can go through [`RestClient`], which refuses redirects on
+    /// purpose, so both use the second client — which follows them and sheds
+    /// the broker credentials when one crosses to another host.
+    ///
+    /// The retry policy is the client's own, so these behave like every other
+    /// route under a 429 or a 5xx.
+    async fn download(&self, path: &str) -> Result<Vec<u8>> {
         let config = self.rest.config();
         let url = format!(
             "{}/{}{path}",
@@ -880,7 +928,7 @@ impl BrokerClient {
             }
 
             let body = response.text().await.unwrap_or_default();
-            let api_error = crate::error::ApiError::from_body(status, &path, body);
+            let api_error = crate::error::ApiError::from_body(status, path, body);
 
             if !retry.should_retry(status) {
                 return Err(crate::Error::Api(api_error));
@@ -1751,5 +1799,997 @@ impl BrokerClient {
             Some(filter) => self.rest.get("/calendar", filter).await,
             None => self.rest.get("/calendar", &Empty).await,
         }
+    }
+
+    /// A named market's calendar.
+    ///
+    /// **A `v2` route**, where the trading API's equivalent is `v3`. The models
+    /// are shared with [`crate::trading::markets`]; the version is not.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_market_calendar(
+        &self,
+        market: &crate::trading::Market,
+        filter: Option<&crate::trading::GetMarketCalendarRequest>,
+    ) -> Result<crate::trading::MarketCalendar> {
+        let path = format!("/calendar/{market}");
+        match filter {
+            Some(filter) => self.rest.at_version("v2").get(&path, filter).await,
+            None => self.rest.at_version("v2").get(&path, &Empty).await,
+        }
+    }
+
+    /// A company logo, as PNG bytes.
+    ///
+    /// **A `v1beta1` route.** Unverified: a data plan that reaches SIP still
+    /// answers `403 Subscription does not permit querying logos`.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn get_logo(
+        &self,
+        symbol: &str,
+        request: &crate::types::LogoRequest,
+    ) -> Result<Vec<u8>> {
+        let path = format!("/logos/{symbol}");
+        self.rest
+            .at_version("v1beta1")
+            .get_bytes(&path, request)
+            .await
+    }
+
+    // ---------------------------------------------- activities by type
+
+    /// Account activities of one type, across every account.
+    ///
+    /// The narrowed counterpart to
+    /// [`get_account_activities`](Self::get_account_activities): the type moves
+    /// from the query string into the path.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_account_activities_by_type(
+        &self,
+        activity_type: &crate::trading::ActivityType,
+        query: &[(&str, String)],
+    ) -> Result<Vec<Activity>> {
+        let path = format!("/accounts/activities/{activity_type}");
+        self.rest.get(&path, query).await
+    }
+
+    // --------------------------------------------------- fixed income
+
+    /// The US corporate bond master list.
+    ///
+    /// One of the few phase 6.5 broker routes with a real payload behind it:
+    /// see `fixtures/go/`.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_us_corporates(
+        &self,
+        filter: Option<&GetUsCorporatesRequest>,
+    ) -> Result<UsCorporates> {
+        match filter {
+            Some(filter) => {
+                self.rest
+                    .get("/assets/fixed_income/us_corporates", filter)
+                    .await
+            }
+            None => {
+                self.rest
+                    .get("/assets/fixed_income/us_corporates", &Empty)
+                    .await
+            }
+        }
+    }
+
+    /// The US treasury master list.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_us_treasuries(
+        &self,
+        filter: Option<&GetUsTreasuriesRequest>,
+    ) -> Result<UsTreasuries> {
+        match filter {
+            Some(filter) => {
+                self.rest
+                    .get("/assets/fixed_income/us_treasuries", filter)
+                    .await
+            }
+            None => {
+                self.rest
+                    .get("/assets/fixed_income/us_treasuries", &Empty)
+                    .await
+            }
+        }
+    }
+
+    /// What Regulation T requires to hold the named symbols.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_entry_requirements(
+        &self,
+        request: &GetEntryRequirementsRequest,
+    ) -> Result<Vec<EntryRequirement>> {
+        self.rest.get("/assets/entry-requirements", request).await
+    }
+
+    // ------------------------------------------------- instant funding
+
+    /// Lists instant funding advances.
+    ///
+    /// Pages by offset, unlike the token-paginated broker routes.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_instant_funding(
+        &self,
+        filter: Option<&GetInstantFundingRequest>,
+    ) -> Result<Vec<InstantFunding>> {
+        match filter {
+            Some(filter) => self.rest.get("/instant_funding", filter).await,
+            None => self.rest.get("/instant_funding", &Empty).await,
+        }
+    }
+
+    /// Advances cash against a deposit that has not cleared.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if the amount is not positive.
+    pub async fn create_instant_funding(
+        &self,
+        request: &CreateInstantFundingRequest,
+    ) -> Result<InstantFunding> {
+        request.validate()?;
+        self.rest.post("/instant_funding", request).await
+    }
+
+    /// Fetches one advance.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_instant_funding_by_id(&self, funding_id: &str) -> Result<InstantFunding> {
+        self.rest
+            .get(&format!("/instant_funding/{funding_id}"), &Empty)
+            .await
+    }
+
+    /// Cancels an advance.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn cancel_instant_funding(&self, funding_id: &str) -> Result<()> {
+        self.send_void(
+            Method::DELETE,
+            &format!("/instant_funding/{funding_id}"),
+            None::<&Empty>,
+        )
+        .await
+    }
+
+    /// How much instant funding the correspondent may have outstanding.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_instant_funding_limits(&self) -> Result<InstantFundingLimits> {
+        self.rest.get("/instant_funding/limits", &Empty).await
+    }
+
+    /// The named accounts' shares of that limit.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_instant_funding_account_limits(
+        &self,
+        request: &GetAccountLimitsRequest,
+    ) -> Result<Vec<AccountInstantFundingLimits>> {
+        self.rest
+            .get("/instant_funding/limits/accounts", request)
+            .await
+    }
+
+    /// A day's instant funding position, by account.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_instant_funding_reports(
+        &self,
+        filter: Option<&GetInstantFundingReportRequest>,
+    ) -> Result<Vec<InstantFundingReport>> {
+        match filter {
+            Some(filter) => self.rest.get("/instant_funding/reports", filter).await,
+            None => self.rest.get("/instant_funding/reports", &Empty).await,
+        }
+    }
+
+    /// Lists instant funding settlements.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_instant_funding_settlements(
+        &self,
+        filter: Option<&GetSettlementsRequest>,
+    ) -> Result<Settlements> {
+        match filter {
+            Some(filter) => self.rest.get("/instant_funding/settlements", filter).await,
+            None => self.rest.get("/instant_funding/settlements", &Empty).await,
+        }
+    }
+
+    /// Settles one or more advances.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if no transfers are named.
+    pub async fn create_instant_funding_settlement(
+        &self,
+        request: &CreateInstantFundingSettlementRequest,
+    ) -> Result<Settlement> {
+        request.validate()?;
+        self.rest
+            .post("/instant_funding/settlements", request)
+            .await
+    }
+
+    /// Fetches one instant funding settlement.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_instant_funding_settlement(&self, settlement_id: Uuid) -> Result<Settlement> {
+        self.rest
+            .get(
+                &format!("/instant_funding/settlements/{settlement_id}"),
+                &Empty,
+            )
+            .await
+    }
+
+    // --------------------------------------------------------- JIT
+
+    /// The correspondent's JIT ledgers.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_jit_ledgers(&self) -> Result<Vec<JitLedger>> {
+        self.rest.get("/transfers/jit/ledgers", &Empty).await
+    }
+
+    /// One ledger's balances over a window, and the movements behind them.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_jit_ledger_balances(
+        &self,
+        ledger_id: &str,
+        filter: Option<&GetJitBalancesRequest>,
+    ) -> Result<JitLedgerBalances> {
+        let path = format!("/transfers/jit/{ledger_id}/balances");
+        match filter {
+            Some(filter) => self.rest.get(&path, filter).await,
+            None => self.rest.get(&path, &Empty).await,
+        }
+    }
+
+    /// The correspondent's trading limits for the day.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_jit_trading_limits(&self) -> Result<JitTradingLimits> {
+        self.rest.get("/transfers/jit/limits", &Empty).await
+    }
+
+    /// A JIT report, inline or as a link.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_jit_report(&self, request: &GetJitReportRequest) -> Result<JitReport> {
+        self.rest.get("/transfers/jit/reports", request).await
+    }
+
+    /// Lists JIT settlements.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_jit_settlements(
+        &self,
+        filter: Option<&GetSettlementsRequest>,
+    ) -> Result<Settlements> {
+        match filter {
+            Some(filter) => self.rest.get("/jit/settlements", filter).await,
+            None => self.rest.get("/jit/settlements", &Empty).await,
+        }
+    }
+
+    /// Settles a day's JIT obligation.
+    ///
+    /// **Documented by the spec and not by the reference**, which is the same
+    /// footing the two undocumented routes in `ROADMAP.md` stand on. It is
+    /// implemented rather than left out — undocumented is not absent — but a
+    /// live sandbox is what would confirm it.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if the settlement names no
+    /// accounts or a non-positive amount.
+    pub async fn create_jit_settlement(
+        &self,
+        request: &CreateJitSettlementRequest,
+    ) -> Result<Settlement> {
+        request.validate()?;
+        self.rest.post("/jit/settlements", request).await
+    }
+
+    /// Fetches one JIT settlement.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_jit_settlement(&self, settlement_id: Uuid) -> Result<Settlement> {
+        self.rest
+            .get(&format!("/jit/settlements/{settlement_id}"), &Empty)
+            .await
+    }
+
+    // -------------------------------------------------------- FPSL
+
+    /// Lists fully-paid securities lending loans.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_fpsl_loans(
+        &self,
+        filter: Option<&GetFpslLoansRequest>,
+    ) -> Result<FpslLoansPage> {
+        match filter {
+            Some(filter) => self.rest.get("/fpsl/loans", filter).await,
+            None => self.rest.get("/fpsl/loans", &Empty).await,
+        }
+    }
+
+    /// The revenue-split tiers.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_fpsl_tiers(&self) -> Result<Vec<FpslTier>> {
+        self.rest.get("/fpsl/tiers", &Empty).await
+    }
+
+    /// One account's lending activity over a window.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_fpsl_analytics(
+        &self,
+        account_id: Uuid,
+        filter: Option<&GetFpslAnalyticsRequest>,
+    ) -> Result<FpslAnalytics> {
+        let path = format!("/fpsl/analytics/{account_id}/loans");
+        match filter {
+            Some(filter) => self.rest.get(&path, filter).await,
+            None => self.rest.get(&path, &Empty).await,
+        }
+    }
+
+    // -------------------------------------------------------- IPOs
+
+    /// Lists IPO offerings.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_ipo_offerings(
+        &self,
+        filter: Option<&GetIpoOfferingsRequest>,
+    ) -> Result<IpoOfferingsPage> {
+        match filter {
+            Some(filter) => self.rest.get("/ipos", filter).await,
+            None => self.rest.get("/ipos", &Empty).await,
+        }
+    }
+
+    /// Fetches one offering.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_ipo_offering(&self, offering_reference: &str) -> Result<IpoOfferingResponse> {
+        self.rest
+            .get(&format!("/ipos/{offering_reference}"), &Empty)
+            .await
+    }
+
+    // --------------------------------------------------- reporting
+
+    /// Positions across accounts as of one close.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_eod_positions(
+        &self,
+        filter: Option<&GetEodPositionsRequest>,
+    ) -> Result<EodPositions> {
+        match filter {
+            Some(filter) => self.rest.get("/reporting/eod/positions", filter).await,
+            None => self.rest.get("/reporting/eod/positions", &Empty).await,
+        }
+    }
+
+    /// The same positions summed by symbol.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_aggregate_positions(
+        &self,
+        request: &GetAggregatePositionsRequest,
+    ) -> Result<Vec<AggregatePosition>> {
+        self.rest
+            .get("/reporting/eod/aggregate_positions", request)
+            .await
+    }
+
+    /// What each account earned on its idle cash.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_eod_cash_interest(
+        &self,
+        filter: Option<&GetCashInterestRequest>,
+    ) -> Result<CashInterestReport> {
+        match filter {
+            Some(filter) => self.rest.get("/reporting/eod/cash_interest", filter).await,
+            None => self.rest.get("/reporting/eod/cash_interest", &Empty).await,
+        }
+    }
+
+    /// The cash interest rate tiers.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_apr_tiers(&self) -> Result<AprTiers> {
+        self.rest.get("/cash_interest/apr_tiers", &Empty).await
+    }
+
+    // ------------------------------------------------------- OAuth
+
+    /// Looks up a registered third-party application.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_oauth_client(
+        &self,
+        client_id: Uuid,
+        filter: Option<&GetOAuthClientRequest>,
+    ) -> Result<OAuthClient> {
+        let path = format!("/oauth/clients/{client_id}");
+        match filter {
+            Some(filter) => self.rest.get(&path, filter).await,
+            None => self.rest.get(&path, &Empty).await,
+        }
+    }
+
+    /// Authorizes an application against an account.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn authorize_oauth(&self, request: &OAuthRequest) -> Result<OAuthCode> {
+        self.rest.post("/oauth/authorize", request).await
+    }
+
+    /// Issues a bearer token.
+    ///
+    /// Takes a JSON body, not the form encoding OAuth token endpoints
+    /// conventionally use. See [`crate::broker::oauth`].
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn issue_oauth_token(&self, request: &OAuthRequest) -> Result<OAuthToken> {
+        self.rest.post("/oauth/token", request).await
+    }
+
+    // ---------------------------------------------- funding wallets
+
+    /// Opens funding wallets for several accounts at once.
+    ///
+    /// **A `v1beta` route**, like every other funding wallet route.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn batch_create_funding_wallets(
+        &self,
+        request: &BatchCreateFundingWalletsRequest,
+    ) -> Result<FundingWallets> {
+        self.rest
+            .at_version("v1beta")
+            .post("/accounts/funding_wallet", request)
+            .await
+    }
+
+    /// An account's funding wallet.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_funding_wallet(&self, account_id: Uuid) -> Result<FundingWallet> {
+        let path = format!("/accounts/{account_id}/funding_wallet");
+        self.rest.at_version("v1beta").get(&path, &Empty).await
+    }
+
+    /// Opens an account's funding wallet.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn create_funding_wallet(&self, account_id: Uuid) -> Result<FundingWallet> {
+        let path = format!("/accounts/{account_id}/funding_wallet");
+        self.rest.at_version("v1beta").post(&path, &Empty).await
+    }
+
+    /// The banking details money should be sent to.
+    ///
+    /// Returned untyped: the reference documents no response schema for this
+    /// route at all, and inventing one would claim more than is known.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_funding_details(
+        &self,
+        account_id: Uuid,
+        filter: Option<&GetFundingDetailsRequest>,
+    ) -> Result<serde_json::Value> {
+        let path = format!("/accounts/{account_id}/funding_wallet/funding_details");
+        match filter {
+            Some(filter) => self.rest.at_version("v1beta").get(&path, filter).await,
+            None => self.rest.at_version("v1beta").get(&path, &Empty).await,
+        }
+    }
+
+    /// The bank withdrawals are sent to.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_recipient_bank(&self, account_id: Uuid) -> Result<RecipientBank> {
+        let path = format!("/accounts/{account_id}/funding_wallet/recipient_bank");
+        self.rest.at_version("v1beta").get(&path, &Empty).await
+    }
+
+    /// Registers the bank withdrawals are sent to.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn create_recipient_bank(
+        &self,
+        account_id: Uuid,
+        request: &CreateRecipientBankRequest,
+    ) -> Result<RecipientBank> {
+        let path = format!("/accounts/{account_id}/funding_wallet/recipient_bank");
+        self.rest.at_version("v1beta").post(&path, request).await
+    }
+
+    /// Removes the registered bank.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn delete_recipient_bank(&self, account_id: Uuid) -> Result<()> {
+        let path = format!("/accounts/{account_id}/funding_wallet/recipient_bank");
+        self.rest.at_version("v1beta").delete(&path, &Empty).await
+    }
+
+    /// Money in and out of an account's funding wallet.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_funding_wallet_transfers(
+        &self,
+        account_id: Uuid,
+    ) -> Result<FundingWalletTransfers> {
+        let path = format!("/accounts/{account_id}/funding_wallet/transfers");
+        self.rest.at_version("v1beta").get(&path, &Empty).await
+    }
+
+    /// One funding wallet transfer.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_funding_wallet_transfer(
+        &self,
+        account_id: Uuid,
+        transfer_id: Uuid,
+    ) -> Result<FundingWalletTransfer> {
+        let path = format!("/accounts/{account_id}/funding_wallet/transfers/{transfer_id}");
+        self.rest.at_version("v1beta").get(&path, &Empty).await
+    }
+
+    /// Sends money out of an account's funding wallet.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if the amount is not positive.
+    pub async fn create_funding_wallet_withdrawal(
+        &self,
+        account_id: Uuid,
+        request: &CreateWithdrawalRequest,
+    ) -> Result<FundingWalletTransfer> {
+        request.validate()?;
+        let path = format!("/accounts/{account_id}/funding_wallet/withdrawal");
+        self.rest.at_version("v1beta").post(&path, request).await
+    }
+
+    /// Simulates an incoming deposit. Sandbox only.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn create_demo_funding(
+        &self,
+        request: &DemoFundingRequest,
+    ) -> Result<DemoFundingRequest> {
+        self.rest
+            .at_version("v1beta")
+            .post("/demo/banking/funding", request)
+            .await
+    }
+
+    // ------------------------------------------- account onboarding extras
+
+    /// Requests options trading for an account. **BETA.**
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn request_options_approval(
+        &self,
+        account_id: Uuid,
+        request: &RequestOptionsApprovalRequest,
+    ) -> Result<OptionsApproval> {
+        let path = format!("/accounts/{account_id}/options/approval");
+        self.rest.post(&path, request).await
+    }
+
+    /// Lists options approval requests. **BETA.**
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_options_approvals(
+        &self,
+        filter: Option<&GetOptionsApprovalsRequest>,
+    ) -> Result<OptionsApprovalsPage> {
+        match filter {
+            Some(filter) => self.rest.get("/accounts/options/approvals", filter).await,
+            None => self.rest.get("/accounts/options/approvals", &Empty).await,
+        }
+    }
+
+    /// A token for Onfido's client-side identity-verification SDK.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_onfido_token(
+        &self,
+        account_id: Uuid,
+        filter: Option<&GetOnfidoTokenRequest>,
+    ) -> Result<OnfidoToken> {
+        let path = format!("/accounts/{account_id}/onfido/sdk/tokens");
+        match filter {
+            Some(filter) => self.rest.get(&path, filter).await,
+            None => self.rest.get(&path, &Empty).await,
+        }
+    }
+
+    /// Reports what Onfido's SDK concluded.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn update_onfido_outcome(
+        &self,
+        account_id: Uuid,
+        request: &UpdateOnfidoOutcomeRequest,
+    ) -> Result<()> {
+        self.send_void(
+            Method::PATCH,
+            &format!("/accounts/{account_id}/onfido/sdk"),
+            Some(request),
+        )
+        .await
+    }
+
+    /// What Alpaca will serve in each country, keyed by country code.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_country_info(&self) -> Result<std::collections::HashMap<String, CountryInfo>> {
+        self.rest.get("/country-info", &Empty).await
+    }
+
+    /// IRA contributions that exceeded the annual limit.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_ira_excess_contributions(&self) -> Result<Vec<IraExcessContribution>> {
+        self.rest
+            .get("/accounts/ira_excess_contributions", &Empty)
+            .await
+    }
+
+    /// Downloads an account's W-8BEN document.
+    ///
+    /// A different route from the general document download, and the reference
+    /// documents no response schema for it, so this returns the bytes as they
+    /// arrive. Like that download it may answer `301` to a presigned URL, so it
+    /// goes through the redirect-following client rather than [`RestClient`].
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn download_w8ben_document(
+        &self,
+        account_id: Uuid,
+        document_id: Uuid,
+    ) -> Result<Vec<u8>> {
+        let path = format!("/accounts/{account_id}/documents/w8ben/{document_id}/download");
+        self.download(&path).await
+    }
+
+    // ------------------------------------------------- trading extras
+
+    /// What an account may still trade today.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_trading_limits(&self, account_id: Uuid) -> Result<TradingLimits> {
+        let path = format!("/trading/accounts/{account_id}/limits");
+        self.rest.get(&path, &Empty).await
+    }
+
+    /// Costs an order without placing it.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn estimate_order(
+        &self,
+        account_id: Uuid,
+        request: &EstimateOrderRequest,
+    ) -> Result<Order> {
+        let path = format!("/trading/accounts/{account_id}/orders/estimation");
+        self.rest.post(&path, request).await
+    }
+
+    /// Declines to exercise an in-the-money option position at expiry.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn do_not_exercise(
+        &self,
+        account_id: Uuid,
+        contract: &crate::types::AssetIdent,
+    ) -> Result<()> {
+        self.send_void(
+            Method::POST,
+            &format!("/trading/accounts/{account_id}/positions/{contract}/do-not-exercise"),
+            None::<&Empty>,
+        )
+        .await
+    }
+
+    // -------------------------------------------------- tokenization
+
+    /// Mints a tokenized asset from an account's position.
+    ///
+    /// The account-scoped counterpart to
+    /// [`TradingClient::mint_token`](crate::trading::TradingClient::mint_token);
+    /// the models are shared.
+    ///
+    /// # Errors
+    /// Returns [`crate::Error::InvalidRequest`] if `qty` is not positive.
+    pub async fn mint_token_for_account(
+        &self,
+        account_id: Uuid,
+        request: &crate::trading::MintTokenRequest,
+    ) -> Result<crate::trading::TokenizationRequest> {
+        request.validate()?;
+        let path = format!("/accounts/{account_id}/tokenization/mint");
+        self.rest.post(&path, request).await
+    }
+
+    /// Lists an account's tokenization requests.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_tokenization_requests_for_account(
+        &self,
+        account_id: Uuid,
+        filter: Option<&crate::trading::GetTokenizationRequestsRequest>,
+    ) -> Result<Vec<crate::trading::TokenizationRequest>> {
+        let path = format!("/accounts/{account_id}/tokenization/requests");
+        match filter {
+            Some(filter) => self.rest.get(&path, filter).await,
+            None => self.rest.get(&path, &Empty).await,
+        }
+    }
+
+    /// Fetches one of an account's tokenization requests.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_tokenization_request_for_account(
+        &self,
+        account_id: Uuid,
+        request_id: Uuid,
+    ) -> Result<crate::trading::TokenizationRequest> {
+        let path = format!("/accounts/{account_id}/tokenization/requests/{request_id}");
+        self.rest.get(&path, &Empty).await
+    }
+
+    /// Fetches one by the caller's own request id.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_tokenization_request_by_client_id_for_account(
+        &self,
+        account_id: Uuid,
+        request: &crate::trading::ByClientRequestId,
+    ) -> Result<crate::trading::TokenizationRequest> {
+        let path = format!("/accounts/{account_id}/tokenization/requests:by_client_request_id");
+        self.rest.get(&path, request).await
+    }
+
+    /// Fetches one by the issuer's request id.
+    ///
+    /// Has no counterpart on the trading API, which knows only the client id.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_tokenization_request_by_issuer_id_for_account(
+        &self,
+        account_id: Uuid,
+        issuer_request_id: &str,
+    ) -> Result<crate::trading::TokenizationRequest> {
+        let path = format!("/accounts/{account_id}/tokenization/requests:by_issuer_request_id");
+        self.rest
+            .get(&path, &[("issuer_request_id", issuer_request_id)])
+            .await
+    }
+
+    /// Acknowledges an issuer's mint callback.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn tokenization_mint_callback(
+        &self,
+        account_id: Uuid,
+        body: &serde_json::Value,
+    ) -> Result<()> {
+        self.send_void(
+            Method::POST,
+            &format!("/accounts/{account_id}/tokenization/callback/mint"),
+            Some(body),
+        )
+        .await
+    }
+
+    /// Acknowledges an issuer's redeem callback.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn tokenization_redeem_callback(
+        &self,
+        account_id: Uuid,
+        body: &serde_json::Value,
+    ) -> Result<()> {
+        self.send_void(
+            Method::POST,
+            &format!("/accounts/{account_id}/tokenization/callback/redeem"),
+            Some(body),
+        )
+        .await
+    }
+
+    // ------------------------------------------------- crypto wallets
+
+    /// An account's crypto deposit wallets.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_crypto_wallets_for_account(
+        &self,
+        account_id: Uuid,
+        filter: Option<&crate::trading::GetCryptoWalletsRequest>,
+    ) -> Result<crate::trading::CryptoWallet> {
+        let path = format!("/accounts/{account_id}/wallets");
+        match filter {
+            Some(filter) => self.rest.get(&path, filter).await,
+            None => self.rest.get(&path, &Empty).await,
+        }
+    }
+
+    /// An account's on-chain transfers.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_crypto_transfers_for_account(
+        &self,
+        account_id: Uuid,
+    ) -> Result<crate::trading::CryptoTransfer> {
+        let path = format!("/accounts/{account_id}/wallets/transfers");
+        self.rest.get(&path, &Empty).await
+    }
+
+    /// Fetches one of an account's on-chain transfers.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_crypto_transfer_for_account(
+        &self,
+        account_id: Uuid,
+        transfer_id: &str,
+    ) -> Result<crate::trading::CryptoTransfer> {
+        let path = format!("/accounts/{account_id}/wallets/transfers/{transfer_id}");
+        self.rest.get(&path, &Empty).await
+    }
+
+    /// Withdraws crypto from an account.
+    ///
+    /// **This route is not deprecated, and its trading-API counterpart is.**
+    /// `POST /v2/wallets/transfers` sunsets 2026-10-09 with the web app as its
+    /// replacement; this one carries no such notice, which is why the crate has
+    /// the broker withdrawal and not the trading one.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn create_crypto_transfer_for_account(
+        &self,
+        account_id: Uuid,
+        request: &serde_json::Value,
+    ) -> Result<crate::trading::CryptoTransfer> {
+        let path = format!("/accounts/{account_id}/wallets/transfers");
+        self.rest.post(&path, request).await
+    }
+
+    /// The addresses an account may withdraw to.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_whitelisted_addresses_for_account(
+        &self,
+        account_id: Uuid,
+    ) -> Result<crate::trading::WhitelistedAddress> {
+        let path = format!("/accounts/{account_id}/wallets/whitelists");
+        self.rest.get(&path, &Empty).await
+    }
+
+    /// Allowlists a withdrawal address for an account.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn create_whitelisted_address_for_account(
+        &self,
+        account_id: Uuid,
+        request: &crate::trading::CreateWhitelistedAddressRequest,
+    ) -> Result<crate::trading::WhitelistedAddress> {
+        let path = format!("/accounts/{account_id}/wallets/whitelists");
+        self.rest.post(&path, request).await
+    }
+
+    /// Removes an allowlisted address.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn delete_whitelisted_address_for_account(
+        &self,
+        account_id: Uuid,
+        address_id: &str,
+    ) -> Result<()> {
+        self.send_void(
+            Method::DELETE,
+            &format!("/accounts/{account_id}/wallets/whitelists/{address_id}"),
+            None::<&Empty>,
+        )
+        .await
+    }
+
+    /// What a proposed crypto transfer would cost in gas.
+    ///
+    /// **A `v1` route here and `v2` on the trading API**, for the same
+    /// operation and the same response.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn estimate_crypto_transfer_fee(
+        &self,
+        request: &crate::trading::TransferFeeEstimateRequest,
+    ) -> Result<crate::trading::TransferFeeEstimate> {
+        self.rest.get("/wallets/fees/estimate", request).await
     }
 }

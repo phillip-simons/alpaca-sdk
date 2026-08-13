@@ -23,6 +23,9 @@ pub use live::{
     StreamConfig, StreamError, StreamMessage, SubscriptionSet, Subscriptions,
 };
 pub use meta::{Codes, Tape, TickType};
+// Shared with the broker API, which documents the same route, so it lives in
+// `types` and is re-exported here where market data callers look for it.
+pub use crate::types::LogoRequest;
 pub use models::*;
 pub use requests::*;
 pub use timeframe::{TimeFrame, TimeFrameUnit};
