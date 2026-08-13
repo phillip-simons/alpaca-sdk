@@ -1,0 +1,31 @@
+# Dependency updates.
+#
+# `cargo-deny` reports advisories — weekly, and on every push — but reporting is
+# not fixing, and a report against a dependency of an already-published version
+# needs a release to resolve. This opens the pull request that does it.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      # Conventional Commits, matching .github/CONTRIBUTING.md.
+      prefix: build
+      include: scope
+    groups:
+      # One pull request for the routine patch churn, so the interesting
+      # updates are not buried among them.
+      patch-updates:
+        update-types: ["patch"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: ci
+      include: scope

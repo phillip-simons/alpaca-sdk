@@ -1,0 +1,85 @@
+name: Bug report
+description: Something decodes wrong, routes wrong, or fails when it should not
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before anything else:** if this is a security issue, do not file it
+        here — see [SECURITY.md](https://github.com/phillip-simons/alpaca-sdk/blob/main/.github/SECURITY.md).
+
+        **Redact credentials.** API keys, account numbers and personal
+        identifiers do not belong in a public issue, including inside pasted
+        payloads.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you call, and what did it do instead of what you expected?
+    validations:
+      required: true
+
+  - type: textarea
+    id: payload
+    attributes:
+      label: The response body, if this is a decode failure
+      description: >
+        This is the single most useful thing you can provide. A raw payload is a
+        fact about the API; a description of one is not. `Error::Decode` carries
+        the body for exactly this reason. Redact identifiers, keep the shape.
+      render: json
+
+  - type: input
+    id: route
+    attributes:
+      label: Route
+      description: The endpoint involved, e.g. `GET /v2/stocks/bars`
+    validations:
+      required: false
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface
+      multiple: true
+      options:
+        - Trading REST
+        - Historical market data
+        - Live market data stream
+        - Trade update stream
+        - Broker API
+        - Transport / retry / errors
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: alpaca-sdk version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: features
+    attributes:
+      label: Features enabled
+      description: The feature list from your `Cargo.toml`, if not the defaults.
+      placeholder: "default, or e.g. broker, blocking"
+
+  - type: input
+    id: rust
+    attributes:
+      label: Rust version
+      description: Output of `rustc --version`.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: The smallest snippet that shows it. Paper credentials, please.
+      render: rust

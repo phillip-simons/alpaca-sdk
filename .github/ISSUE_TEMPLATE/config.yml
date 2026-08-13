@@ -1,0 +1,10 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Alpaca API support
+    url: https://alpaca.markets/support
+    about: >
+      Questions about the API itself, your account, entitlements or a 403 —
+      this is an unofficial SDK and cannot help with any of those.
+  - name: Security vulnerability
+    url: https://github.com/phillip-simons/alpaca-sdk/security/advisories/new
+    about: Report privately. Please do not open a public issue.

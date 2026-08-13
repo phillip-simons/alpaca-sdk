@@ -1,0 +1,47 @@
+name: Feature request
+description: A missing route, parameter, model, or ergonomic gap
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Route coverage is tracked in
+        [COVERAGE.md](https://github.com/phillip-simons/alpaca-sdk/blob/main/COVERAGE.md).
+        Worth a look first — a route listed as **deliberately skipped** was a
+        decision, and its reason is recorded next to it.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What is missing
+      description: The route, parameter, or capability you cannot reach today.
+    validations:
+      required: true
+
+  - type: input
+    id: reference
+    attributes:
+      label: Link to Alpaca's documentation for it
+      description: >
+        The published reference is what says whether a route is still current —
+        the vendored specs document routes that have been switched off. A link
+        here is what makes this actionable.
+      placeholder: "https://docs.alpaca.markets/us/reference/..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What you are doing instead
+      description: >
+        `request_raw` is the escape hatch for unwrapped routes. If it does not
+        work for your case, say why — that is often the more interesting bug.
+
+  - type: checkboxes
+    id: willing
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be willing to open a pull request for this
+          required: false
