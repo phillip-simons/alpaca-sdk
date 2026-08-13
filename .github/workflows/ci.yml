@@ -10,8 +10,46 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
+  # Which jobs need to run at all.
+  #
+  # A docs-only change does not need the compiler, but the nine Rust jobs below
+  # are *required* status checks — so they cannot simply be filtered out of the
+  # workflow. A workflow that never runs never reports, and branch protection
+  # waits for a report that will never arrive, which blocks the pull request
+  # permanently.
+  #
+  # Skipping at the *job* level instead is what works: a skipped job still
+  # reports, and a skipped required check counts as satisfied. Hence the `needs`
+  # and `if` on every job rather than a `paths` filter up at `on:`.
+  changes:
+    name: what changed
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              # Anything the compiler, the tests, or the dependency audit read.
+              # `fixtures/` counts: the tests read those payloads at runtime.
+              # This file counts too — a change to CI should prove itself.
+              - 'src/**'
+              - 'tests/**'
+              - 'examples/**'
+              - 'fixtures/**'
+              - 'build.rs'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'deny.toml'
+              - '.github/workflows/ci.yml'
+
   fmt:
     name: rustfmt
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -22,6 +60,8 @@ jobs:
 
   clippy:
     name: clippy
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -33,6 +73,8 @@ jobs:
 
   test:
     name: test (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -46,6 +88,8 @@ jobs:
 
   features:
     name: feature combinations
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -60,6 +104,8 @@ jobs:
 
   msrv:
     name: minimum supported rust version
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -73,6 +119,8 @@ jobs:
 
   deny:
     name: cargo-deny
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -80,6 +128,8 @@ jobs:
 
   docs:
     name: rustdoc
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: -D warnings --cfg docsrs
@@ -95,7 +145,8 @@ jobs:
     # ever run, not a target — so measuring it on every pull request would spend
     # an instrumented test run on a report no one is blocked by. `on.push` here
     # is `main` alone.
-    if: github.event_name == 'push'
+    needs: changes
+    if: github.event_name == 'push' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
