@@ -30,6 +30,12 @@ just check     # fmt, clippy, rustdoc, tests, feature combinations
 `just check` is the gate. Run it before every commit; CI runs it again along
 with the MSRV build and `cargo-deny`.
 
+On a change that touches no Rust — documentation, issue templates, this file —
+CI skips those jobs. They still report as skipped, which counts as satisfied, so
+the pull request is not left waiting on checks that will never run. Editing
+anything under `src/`, `tests/`, `examples/`, `fixtures/`, `Cargo.toml`,
+`Cargo.lock`, `build.rs`, `deny.toml` or `ci.yml` brings the whole matrix back.
+
 The minimum supported Rust version is **1.88**. Enabling `polars` raises it to
 1.95, which is why that feature is off by default — a convenience feature does
 not get to set the crate's floor.
