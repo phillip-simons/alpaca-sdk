@@ -1,7 +1,5 @@
 //! The [broker API](https://docs.alpaca.markets/us/docs/about-broker-api) client.
 //!
-//! Ported from `alpaca/broker/client.py`.
-//!
 //! Two things differ from every other client in this crate. It authenticates
 //! with HTTP basic auth rather than the `APCA-*` headers, and it acts *on behalf
 //! of* an account, so most routes carry an account id in the path.
@@ -68,12 +66,14 @@ use crate::rest::{Empty, RestClient, RestConfig};
 use crate::sse::EventStreamRequest;
 use crate::trading::{Activity, Position, Watchlist};
 
-/// The most documents alpaca-py will send in one upload.
+/// A conventional ceiling on documents per upload.
 ///
 /// Not documented by Alpaca — neither the reference nor the spec mentions a
-/// count limit, only a 10MB ceiling on each document's contents. Exposed so a
-/// caller who wants alpaca-py's behaviour can apply it, and not enforced by
-/// [`BrokerClient::upload_documents_to_account`].
+/// count limit, only a 10MB ceiling on each document's contents. It is exposed
+/// so a caller who wants a bound can apply one, and deliberately **not**
+/// enforced by [`BrokerClient::upload_documents_to_account`]: an undocumented
+/// limit is a guess, and rejecting a request Alpaca would have accepted is the
+/// worse of the two errors.
 pub const DOCUMENT_UPLOAD_LIMIT: usize = 10;
 
 /// The id an activity pages from, whichever kind it is.
@@ -84,14 +84,16 @@ fn activity_id(activity: &Activity) -> &str {
     }
 }
 
-/// alpaca-py's default page size for the token-paginated broker routes.
+/// The page size assumed for the token-paginated broker routes when the caller
+/// sets none. Alpaca's own default for these is 100.
 const DEFAULT_PAGE_SIZE: u32 = 100;
 
 /// The page size to ask for, given a cap on the total.
 ///
-/// alpaca-py narrows the last request to exactly what is still wanted rather
-/// than fetching a full page and discarding the tail. Returns `None` when there
-/// is no cap, leaving the caller's own page size alone.
+/// The last request is narrowed to exactly what is still wanted rather than
+/// fetching a full page and discarding the tail — one fewer record crossing the
+/// wire, and the cap is honoured exactly. Returns `None` when there is no cap,
+/// leaving the caller's own page size alone.
 fn page_limit(configured: &Option<u32>, max_items: Option<usize>, collected: usize) -> Option<u32> {
     let max_items = max_items?;
     let page_size = configured.unwrap_or(DEFAULT_PAGE_SIZE);
@@ -121,8 +123,7 @@ pub struct BrokerClient {
     /// Two need it. The document download answers `301` to a presigned storage
     /// URL, and `RestClient` refuses redirects deliberately; this client follows
     /// them and drops the credentials when one crosses to another host, which is
-    /// what `requests` does for alpaca-py and what keeps broker keys off a
-    /// storage provider. The event streams need a response body that is read
+    /// what keeps broker credentials off a storage provider. The event streams need a response body that is read
     /// incrementally rather than decoded whole.
     raw: reqwest::Client,
 }
@@ -147,7 +148,8 @@ impl BrokerClient {
     /// # Errors
     /// Returns an error if the credentials cannot be encoded as headers.
     pub fn with_config(credentials: &Credentials, config: RestConfig) -> Result<Self> {
-        // alpaca-py sets use_basic_auth=True on BrokerClient and nothing else.
+        // The broker API authenticates with HTTP basic auth over the key pair,
+        // where the trading and data APIs take the pair as two headers.
         let credentials = credentials.clone().into_basic();
         Ok(Self {
             raw: Self::raw_client(&credentials, &config)?,
@@ -242,9 +244,6 @@ impl BrokerClient {
     /// The account's records survive; only trading is stopped. Every position
     /// must be closed and every dollar withdrawn first — that is the caller's
     /// responsibility, and Alpaca rejects the request otherwise.
-    ///
-    /// alpaca-py also exposes this as a deprecated `delete_account`, which
-    /// forwards here; there is one route, so there is one method.
     ///
     /// # Errors
     /// Propagates transport and API failures.
@@ -402,8 +401,8 @@ impl BrokerClient {
 
     /// Fetches one page of an account's transfers.
     ///
-    /// This is alpaca-py's `PaginationType.NONE`: exactly one request, honouring
-    /// whatever `limit` and `offset` the filter carries. Use
+    /// Exactly one request, honouring whatever `limit` and `offset` the filter
+    /// carries. Use
     /// [`get_all_transfers_for_account`](Self::get_all_transfers_for_account) to
     /// walk every page.
     ///
@@ -423,9 +422,8 @@ impl BrokerClient {
 
     /// Walks every page of an account's transfers.
     ///
-    /// This is alpaca-py's default, `PaginationType.FULL`: request pages until
-    /// one comes back empty, then return the lot. `max_items` caps the total,
-    /// as alpaca-py's `max_items_limit` does.
+    /// Requests pages until one comes back empty, then returns the lot.
+    /// `max_items` caps the total across every page, not per page.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -439,9 +437,10 @@ impl BrokerClient {
         let mut collected: Vec<Transfer> = Vec::new();
 
         loop {
-            // alpaca-py sets the offset to the running count on every pass,
-            // including the first, so a caller-supplied offset is overwritten
-            // once the walk starts.
+            // The offset is the running count on every pass, including the
+            // first, so a caller-supplied offset is overwritten once the walk
+            // starts. Honouring it would make the cap mean something different
+            // on the first page than on the rest.
             filter.offset = Some(u32::try_from(collected.len()).map_err(|_| {
                 crate::Error::InvalidRequest("too many transfers to page through".to_owned())
             })?);
@@ -506,9 +505,9 @@ impl BrokerClient {
 
     /// Streams trade events as they happen.
     ///
-    /// Subscribes to `/v2/events/trades`. alpaca-py still calls the v1 route,
-    /// which Alpaca documents as "fully deprecated and no longer available" —
-    /// porting it faithfully would have shipped a route that does not answer.
+    /// Subscribes to `/v2/events/trades`. The v1 route is documented as "fully
+    /// deprecated and no longer available", and calling it ships a stream that
+    /// does not answer.
     ///
     /// # Errors
     /// Propagates transport failures and any non-success status the server
@@ -543,12 +542,11 @@ impl BrokerClient {
     /// Streams funding status changes as they happen.
     ///
     /// Subscribes to `/v2/events/funding/status`, which supersedes the v1
-    /// transfer stream alpaca-py calls. That route is deprecated and open only
-    /// to broker partners who already had it; new partners cannot use it at all.
+    /// transfer stream. That route is deprecated and open only to broker
+    /// partners who already had it; new partners cannot use it at all.
     ///
-    /// The v2 stream is also broader than its name here suggests: it covers bank
-    /// relationships, wire banks and funding wallets as well as transfers. The
-    /// method keeps alpaca-py's name so the mapping stays findable.
+    /// The v2 stream is broader than this method's name suggests: it covers bank
+    /// relationships, wire banks and funding wallets as well as transfers.
     ///
     /// # Errors
     /// Propagates transport failures and any non-success status the server
@@ -580,8 +578,7 @@ impl BrokerClient {
     /// Streams account activity events as they happen.
     ///
     /// A `v2beta1` stream, and the account-activity counterpart to the polled
-    /// [`get_account_activities`](Self::get_account_activities). Not in
-    /// alpaca-py.
+    /// [`get_account_activities`](Self::get_account_activities).
     ///
     /// Takes [`EventStreamRequest`] rather than [`GetEventsRequest`]: this
     /// stream bounds its window by timestamp where the older ones use a date.
@@ -599,8 +596,6 @@ impl BrokerClient {
 
     /// Streams admin actions as they happen.
     ///
-    /// Not in alpaca-py.
-    ///
     /// # Errors
     /// Propagates transport failures and any non-success status the server
     /// answers the subscription with.
@@ -614,8 +609,6 @@ impl BrokerClient {
 
     /// Streams IPO events as they happen.
     ///
-    /// Not in alpaca-py.
-    ///
     /// # Errors
     /// Propagates transport failures and any non-success status the server
     /// answers the subscription with.
@@ -628,8 +621,6 @@ impl BrokerClient {
     }
 
     /// Streams system events as they happen.
-    ///
-    /// Not in alpaca-py.
     ///
     /// # Errors
     /// Propagates transport failures and any non-success status the server
@@ -710,8 +701,8 @@ impl BrokerClient {
     /// Opens one of the timestamp-bounded event streams.
     ///
     /// The four streams the reference sweep found take an RFC-3339 window where
-    /// the five alpaca-py knows about take a date, so they take a different
-    /// filter type rather than sharing one that would be wrong half the time.
+    /// the five older ones take a date, so they take a different filter type
+    /// rather than sharing one that would be wrong half the time.
     async fn event_stream(
         &self,
         version: EventVersion,
@@ -807,9 +798,10 @@ impl BrokerClient {
 
     /// Fetches an account's Customer Identification Program record.
     ///
-    /// **Unverified.** alpaca-py leaves this route unimplemented — its comment
-    /// says the sandbox answers 404 — so [`CIPInfo`] is derived from the models
-    /// and the spec rather than from a captured response.
+    /// **Unverified.** No captured response exists for this route — the sandbox
+    /// is reported to answer 404 for it — so [`CIPInfo`] is derived from the
+    /// broker spec rather than from a payload. Treat a decode failure on the
+    /// first real response as expected work, not a regression.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -864,9 +856,11 @@ impl BrokerClient {
     /// [`download_trade_document_for_account_by_id`](Self::download_trade_document_for_account_by_id)
     /// for the contents.
     ///
-    /// **Undocumented.** This route appears in neither the `OpenAPI` spec nor the
-    /// published reference, which list only the collection, the upload and the
-    /// download. It is here because alpaca-py calls it. Prefer
+    /// **Undocumented, and possibly not real.** This route appears in neither
+    /// the `OpenAPI` spec nor the published reference, which list only the
+    /// collection, the upload and the download; no captured payload exists for
+    /// it either. It is implemented because other clients call it, and that is
+    /// the whole of the evidence. Prefer
     /// [`get_trade_documents_for_account`](Self::get_trade_documents_for_account)
     /// and filter, and treat a 404 here as the route not existing rather than
     /// the document not existing. See `COVERAGE.md`.
@@ -894,8 +888,9 @@ impl BrokerClient {
     /// credentials on the way — a presigned URL carries its own authorisation
     /// and has no business seeing an API key.
     ///
-    /// alpaca-py streams this straight to a path; the bytes are returned here so
-    /// the caller decides where they go.
+    /// The bytes are returned rather than written, so the caller decides where
+    /// they go — a document small enough to hold in memory is the common case,
+    /// and streaming to a path is a policy this crate has no business setting.
     ///
     /// # Errors
     /// Propagates transport and API failures. Retries follow the client's retry
@@ -969,11 +964,11 @@ impl BrokerClient {
     /// Contents are base64-encoded, and capped at 10MB each when Alpaca does
     /// the KYC. The route answers `204`, so a success returns nothing.
     ///
-    /// alpaca-py additionally refuses more than [`DOCUMENT_UPLOAD_LIMIT`]
-    /// documents in one call. That limit is not in the reference or the spec,
-    /// and it is not enforced here: it may well be real, but rejecting a
-    /// request Alpaca would have accepted is the worse of the two failures, and
-    /// the server's answer says more than a guess of ours would.
+    /// [`DOCUMENT_UPLOAD_LIMIT`] is a conventional ceiling on how many documents
+    /// go in one call. It is not in the reference or the spec, and it is not
+    /// enforced here: it may well be real, but rejecting a request Alpaca would
+    /// have accepted is the worse of the two failures, and the server's answer
+    /// says more than a guess of ours would.
     ///
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if any document fails
@@ -1351,8 +1346,9 @@ impl BrokerClient {
     /// An account's trading configuration.
     ///
     /// **Undocumented.** Alpaca documents the `PATCH` on this path but no `GET`,
-    /// in neither the spec nor the reference. It is here because alpaca-py calls
-    /// it and has a captured payload for it. See `COVERAGE.md`.
+    /// in neither the spec nor the reference. It is implemented anyway because a
+    /// captured payload proves it answers — which is stronger evidence than the
+    /// documentation's silence is against it. See `COVERAGE.md`.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.

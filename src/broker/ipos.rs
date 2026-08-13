@@ -4,7 +4,7 @@
 //! orders. Pairs with the IPO event stream on
 //! [`BrokerClient::get_ipo_events`](crate::broker::BrokerClient::get_ipo_events).
 //!
-//! Not in alpaca-py, spec-derived, and unverified against a live response.
+//! Spec-derived, and unverified against a live response.
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;

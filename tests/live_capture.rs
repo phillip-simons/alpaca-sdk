@@ -1,8 +1,8 @@
 //! Captures payloads for the routes no SDK's tests cover.
 //!
-//! `fixtures/` came from alpaca-py's tests and `fixtures/go/` from the Go SDK's.
-//! Between them they miss forex, logos, the stock and option metadata, and
-//! indices — nobody tests those, so no SDK can supply a payload for them. This
+//! `fixtures/` and `fixtures/go/` come from other SDKs' test suites. Between
+//! them they miss forex, logos, the stock and option metadata, and indices —
+//! nobody tests those, so no SDK can supply a payload for them. This
 //! asks Alpaca directly.
 //!
 //! Phase 6.5 widened it. Most of the routes added there could only be tested

@@ -80,7 +80,7 @@ async fn crypto_bars_deserialize_from_the_captured_payload() {
 
 #[tokio::test]
 async fn crypto_client_sends_no_auth_headers() {
-    // Crypto market data is served unauthenticated, and alpaca-py overrides
+    // Crypto market data is served unauthenticated, which is why
     // _validate_credentials so the client can be built without keys.
     let server = MockServer::start().await;
     Mock::given(method("GET"))
@@ -301,7 +301,7 @@ async fn latest_crypto_trade_has_its_symbol_filled_in() {
 
 #[tokio::test]
 async fn stock_snapshots_have_no_wrapping_key() {
-    // The one endpoint alpaca-py flags no_sub_key=True for: symbols sit at the
+    // The one endpoint with no wrapping key: symbols sit at the
     // top level, so the usual data-key unwrap would find nothing.
     let server = MockServer::start().await;
     Mock::given(method("GET"))
@@ -422,7 +422,7 @@ async fn news_articles_deserialize_with_their_images() {
 
 #[tokio::test]
 async fn a_repeated_page_token_stops_the_loop() {
-    // A server that keeps handing back the same token makes alpaca-py accumulate
+    // A server that keeps handing back the same token would accumulate
     // pages until it runs out of memory. Here the walk stops instead.
     let server = MockServer::start().await;
     Mock::given(method("GET"))
@@ -484,7 +484,7 @@ async fn corporate_actions_group_by_kind() {
     assert_eq!(actions.reverse_splits[0].old_rate, 50.0);
     assert_eq!(actions.forward_splits[0].symbol, "SRE");
     assert!(!actions.cash_dividends.is_empty());
-    // Every record carries an id that none of the alpaca-py models declare.
+    // Every record carries an id that the specification omits.
     assert!(actions.reverse_splits[0].id.is_some());
     assert_eq!(actions.len(), 13);
 }

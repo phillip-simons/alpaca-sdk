@@ -5,8 +5,8 @@
 //!
 //! # What is verified, and what is not
 //!
-//! The routes ported in phase 6 came from alpaca-py and are checked against
-//! captured payloads. The routes added in phase 6.5 — instant funding, JIT,
+//! The routes added in phase 6 are checked against captured payloads. Those
+//! added in phase 6.5 — instant funding, JIT,
 //! FPSL, funding wallets, IPOs, reporting, OAuth, tokenization and the crypto
 //! wallets — came from the published reference and the vendored specs, and have
 //! never met a real response. This account has no broker sandbox key; see

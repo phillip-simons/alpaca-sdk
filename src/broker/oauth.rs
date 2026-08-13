@@ -10,7 +10,7 @@
 //! reader who knows the convention would otherwise assume the crate had it
 //! wrong.
 //!
-//! Not in alpaca-py, spec-derived, and unverified against a live response.
+//! Spec-derived, and unverified against a live response.
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

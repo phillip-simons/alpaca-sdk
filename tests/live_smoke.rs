@@ -89,7 +89,7 @@ async fn clock_and_calendar_read_back() {
     println!("calendar[0] {} {} → {}", day.date, day.open, day.close);
 
     // The session fields and settlement_date exist in real responses but in no
-    // alpaca-py model, and the session times use a different format from
+    // captured fixture, and the session times use a different format from
     // open/close. This is the only place that gets checked against the real API.
     let session_open = day
         .session_open

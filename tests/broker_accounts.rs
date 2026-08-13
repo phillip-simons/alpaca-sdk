@@ -1,4 +1,4 @@
-//! Broker models and routes, against the payloads alpaca-py captured.
+//! Broker models and routes, against captured payloads.
 
 #![cfg(feature = "broker")]
 
@@ -47,7 +47,7 @@ fn client(server: &MockServer) -> BrokerClient {
 #[tokio::test]
 async fn the_broker_client_uses_basic_auth_not_apca_headers() {
     // This is the one thing that differs from every other client in the crate:
-    // alpaca-py sets use_basic_auth=True on BrokerClient alone.
+    // The broker API authenticates with basic auth; the others take headers.
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path(format!("/v1/accounts/{ACCOUNT_ID}")))
@@ -145,9 +145,9 @@ fn account_carries_its_nested_records() {
 
 #[test]
 fn account_keeps_kyc_results_as_raw_json() {
-    // The per-check payloads vary by verification provider. alpaca-py does not
-    // model them either; guessing a shape would be worse than passing them
-    // through intact.
+    // The per-check payloads vary by verification provider, so this crate does
+    // not model them; guessing a shape would be worse than passing them through
+    // intact.
     let account: Account = parse("broker/test_accounts_routes__test_get_account__01.json");
 
     let kyc = account.kyc_results.expect("kyc results");
@@ -221,7 +221,7 @@ async fn all_accounts_positions_can_ask_for_a_later_page() {
 
 #[tokio::test]
 async fn closing_an_account_posts_to_the_close_action() {
-    // Not a DELETE: the account's records survive, and alpaca-py's
+    // Not a DELETE: the account's records survive, and the older
     // `delete_account` is a deprecated alias that posts here too.
     let server = MockServer::start().await;
     Mock::given(method("POST"))
@@ -239,7 +239,7 @@ async fn closing_an_account_posts_to_the_close_action() {
 
 #[test]
 fn the_trade_account_carries_the_fields_only_the_broker_api_returns() {
-    // alpaca-py subclasses the trading TradeAccount to add these; here the
+    // The broker record is the trading TradeAccount plus these; here the
     // trading record is flattened in, so both halves must survive one parse.
     let account: alpaca_sdk::broker::TradeAccount =
         parse("broker/test_accounts_routes__test_get_trade_account_by_id__01.json");
@@ -370,10 +370,9 @@ fn a_complete_application_validates() {
 
 #[test]
 fn every_field_the_reference_marks_required_is_checked() {
-    // These come from the API reference, not from alpaca-py — whose own
-    // validator requires phone_number (the reference does not), misses six
-    // fields that are required, and loses two of its four disclosure checks to
-    // a duplicate key in a dict literal.
+    // The required set comes from the API reference. It is worth pinning: the
+    // obvious alternative source, another SDK's validator, requires a field the
+    // reference does not and misses six that it does.
     /// A field name paired with a way to remove it from a valid application.
     type Case = (&'static str, Box<dyn Fn(&mut CreateAccountRequest)>);
 
@@ -456,8 +455,9 @@ fn every_field_the_reference_marks_required_is_checked() {
 }
 
 #[test]
-fn a_phone_number_is_not_required_even_though_alpaca_py_demands_one() {
-    // alpaca-py rejects an application with no phone_number. The reference does
+fn a_phone_number_is_not_required_by_the_reference() {
+    // A stricter reading rejects an application with no phone_number. The
+    // reference does
     // not list it as required, and refusing a request Alpaca would accept is
     // the worse failure of the two.
     let mut request = valid_application();

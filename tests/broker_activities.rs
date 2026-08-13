@@ -4,9 +4,9 @@
 //! activity's own id — so the walk is tested against a mock that hands back
 //! pages and then an empty one.
 //!
-//! The CIP models have never met a real payload: alpaca-py's two CIP methods are
-//! empty stubs, so there is no fixture to check them against. What is here is
-//! built from `alpaca/broker/models/cip.py` and asserts the shape the port
+//! The CIP models have never met a real payload — the sandbox is reported to
+//! answer 404 for those routes — so there is no fixture to check them against.
+//! What is here is built from the broker spec and asserts the shape the crate
 //! commits to, not the shape Alpaca is known to send.
 
 #![cfg(feature = "broker")]
@@ -53,9 +53,9 @@ const ACTIVITIES: &str = "broker/test_account_activities_routes__test_get_activi
 
 #[test]
 fn broker_activities_are_the_trading_models_unchanged() {
-    // alpaca-py imports TradeActivity and NonTradeActivity from alpaca.trading
-    // rather than subclassing them, so unlike Order and TradeAccount there is
-    // nothing extra to model. account_id is already on the trading record,
+    // The broker returns the trading activity records unchanged: unlike Order
+    // and TradeAccount there is no correspondent-only field to add.
+    // account_id is already on the trading record,
     // which matters here: this route spans every account.
     let activities: Vec<Activity> = parse(ACTIVITIES);
 
@@ -98,8 +98,8 @@ async fn the_activity_type_filter_is_one_comma_separated_parameter() {
 
 #[tokio::test]
 async fn date_with_after_is_alpacas_to_reject_not_ours() {
-    // alpaca-py refuses `date` alongside `after` or `until`. The reference
-    // documents no such rule — the one exclusivity it does document is between
+    // `date` alongside `after` or `until` is a plausible conflict. The
+    // reference documents no rule against it — the one exclusivity it does document is between
     // `category` and `activity_types`, which this filter does not carry. So the
     // combination is sent and Alpaca answers.
     let server = MockServer::start().await;
@@ -243,8 +243,7 @@ async fn max_items_narrows_the_page_size_and_truncates() {
 
 #[tokio::test]
 async fn cip_records_round_trip_through_both_routes() {
-    // No fixture exists for these; alpaca-py never implemented them. This
-    // asserts the shape the port commits to, and that both routes are wired to
+    // No fixture exists for these. This asserts the shape the crate commits to, and that both routes are wired to
     // the same path.
     let payload = json!({
         "id": "c3b8e2a1-4f6d-4f0a-9c1e-2b7d6a5e4f30",

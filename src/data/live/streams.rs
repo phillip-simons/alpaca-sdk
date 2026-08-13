@@ -1,9 +1,7 @@
 //! The four concrete market data streams.
 //!
-//! Ported from `alpaca/data/live/`.
-//!
-//! Each wraps a [`DataStream`] with the endpoint its asset class uses and the
-//! subscription methods alpaca-py exposes for it.
+//! Each wraps a [`DataStream`] with the endpoint its asset class uses and only
+//! the channels that class actually carries.
 
 use std::time::Duration;
 
@@ -55,8 +53,8 @@ macro_rules! common {
 
         /// Reconnect after this long without market data.
         ///
-        /// Off by default, matching alpaca-py: a legitimately quiet
-        /// subscription would otherwise reconnect on a timer.
+        /// Off by default: a legitimately quiet subscription would otherwise
+        /// reconnect on a timer.
         ///
         /// # Errors
         /// Returns [`Error::InvalidRequest`] if the timeout is not positive.
@@ -103,7 +101,8 @@ impl StockDataStream {
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] for any other feed; only these two
-    /// carry a live stock stream, which alpaca-py also rejects up front.
+    /// carry a live stock stream, and a wrong one fails at the handshake rather
+    /// than at construction.
     pub fn new(credentials: Credentials, feed: DataFeed) -> Result<Self> {
         if !matches!(feed, DataFeed::Iex | DataFeed::Sip) {
             return Err(Error::InvalidRequest(format!(
@@ -137,8 +136,7 @@ impl StockDataStream {
     /// Receives corrections to previously reported trades.
     ///
     /// Not a subscription: corrections arrive with the trades subscription and
-    /// are rejected if named in a subscribe payload. alpaca-py calls the
-    /// equivalent `register_trade_corrections`.
+    /// are rejected if named in a subscribe payload.
     pub fn register_trade_corrections<I, S>(&mut self, symbols: I) -> &mut Self
     where
         I: IntoIterator<Item = S>,

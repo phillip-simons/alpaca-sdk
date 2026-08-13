@@ -1,6 +1,4 @@
 //! Endpoints, retry policy, and shared constants.
-//!
-//! Ported from `alpaca/common/constants.py`.
 
 use std::time::Duration;
 
@@ -20,8 +18,7 @@ pub const DEFAULT_RETRY_ATTEMPTS: u32 = 3;
 ///
 /// This is the ~1 second the [rate-limit page][rate-limits] asks for, and the
 /// same base the stream reconnect uses ([`crate::backoff::DEFAULT_MIN_BACKOFF`]).
-/// alpaca-py waits a flat 3 seconds instead; see [`RetryConfig`] for how to get
-/// that behaviour back.
+/// See [`RetryConfig`] for how to wait a flat interval instead.
 ///
 /// [rate-limits]: https://docs.alpaca.markets/us/docs/broker-api-rate-limits
 pub const DEFAULT_RETRY_WAIT: Duration = crate::backoff::DEFAULT_MIN_BACKOFF;
@@ -34,8 +31,8 @@ pub const DEFAULT_RETRY_STATUS_CODES: &[u16] = &[429, 504];
 
 /// The `User-Agent` sent with every request.
 ///
-/// Mirrors the `APCA-PY/<sdk> Python/<runtime>` shape alpaca-py sends, as
-/// `APCA-RS/<sdk> Rust/<rustc>`; the compiler version is captured in `build.rs`.
+/// `APCA-RS/<sdk> Rust/<rustc>`, following the `APCA-<lang>` convention Alpaca's
+/// clients use. The compiler version is captured in `build.rs`.
 #[must_use]
 pub fn user_agent() -> &'static str {
     concat!(
@@ -144,8 +141,8 @@ impl From<BaseUrl> for String {
 ///
 /// The default is [`Exponential`][Self::Exponential], which is what [Alpaca's
 /// rate-limit page][rate-limits] asks for: "stop, wait, and retry using
-/// exponential backoff". [`Flat`][Self::Flat] is alpaca-py's behaviour and is
-/// kept for callers who were relying on it.
+/// exponential backoff". [`Flat`][Self::Flat] waits the same interval every
+/// time, for callers who want a predictable one.
 ///
 /// [rate-limits]: https://docs.alpaca.markets/us/docs/broker-api-rate-limits
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -173,15 +170,15 @@ pub enum RetryBackoff {
 /// — on HTTP 429 and 504, waiting about a second before the first and doubling
 /// from there, capped at 30 seconds and jittered.
 ///
-/// **This is not what alpaca-py does.** alpaca-py waits a flat 3 seconds, which
-/// contradicts [Alpaca's own rate-limit documentation][rate-limits]. Callers who
-/// want the old behaviour can ask for it by name:
+/// A flat wait is available for callers who want one, and has to be asked for
+/// by name — it does not follow [Alpaca's own rate-limit
+/// documentation][rate-limits], which is why it is not the default:
 ///
 /// ```
 /// use std::time::Duration;
 /// use alpaca_sdk::{RetryBackoff, RetryConfig};
 ///
-/// let like_alpaca_py = RetryConfig::default()
+/// let flat = RetryConfig::default()
 ///     .backoff(RetryBackoff::Flat)
 ///     .wait(Duration::from_secs(3));
 /// ```
@@ -291,7 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn endpoints_match_alpaca_py() {
+    fn endpoints_are_the_documented_hosts() {
         assert_eq!(
             BaseUrl::TradingPaper.as_str(),
             "https://paper-api.alpaca.markets"
@@ -317,10 +314,10 @@ mod tests {
         assert_eq!(BaseUrl::data(false), BaseUrl::Data);
     }
 
-    /// The attempt count and the retryable statuses still match alpaca-py. The
-    /// wait deliberately does not — see [`RetryConfig`].
+    /// The wait is the rate-limit page's, not a flat interval — see
+    /// [`RetryConfig`].
     #[test]
-    fn retry_defaults_follow_the_rate_limit_page_not_alpaca_py() {
+    fn retry_defaults_follow_the_rate_limit_page() {
         let cfg = RetryConfig::default();
         assert_eq!(cfg.attempts, 3);
         assert_eq!(cfg.wait, Duration::from_secs(1));

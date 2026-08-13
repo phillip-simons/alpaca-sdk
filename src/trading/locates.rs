@@ -8,8 +8,8 @@
 //! them through [`RestClient::at_version`](crate::rest::RestClient::at_version)
 //! for that reason.
 //!
-//! Not in alpaca-py, and no captured payload exists: everything here follows
-//! the published reference, and the first real response is what will confirm it.
+//! No captured payload exists: everything here follows the published reference,
+//! and the first real response is what will confirm it.
 
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;

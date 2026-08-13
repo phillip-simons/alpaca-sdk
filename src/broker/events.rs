@@ -2,17 +2,17 @@
 //!
 //! Nine endpoints push events as they happen: account status changes, trades,
 //! journal status, funding status, non-trading activity, account activities,
-//! admin actions, IPO events and system events. alpaca-py knows about five of
-//! them, and called retired routes for three of those.
+//! admin actions, IPO events and system events. Four of them appear only in the
+//! published reference, and three of the older five had been switched off at the
+//! routes other clients still call.
 //!
 //! The transport itself is [`crate::sse`], which the trading and market data
 //! streams share. What lives here is what is specific to the broker's streams:
 //! the filter type, and the fact that Alpaca versions each stream individually.
 //!
-//! Each event's `data` is JSON whose shape depends on the endpoint. alpaca-py
-//! yields it as a raw string; [`BrokerEvent::json`] deserializes it into a type
-//! of the caller's choosing, since no captured payloads exist to model these
-//! from.
+//! Each event's `data` is JSON whose shape depends on the endpoint. No captured
+//! payloads exist to model these from, so [`BrokerEvent::json`] deserializes it
+//! into a type of the caller's choosing rather than into a guess.
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -20,8 +20,8 @@ use uuid::Uuid;
 
 /// One event from a broker event stream.
 ///
-/// The same type every Alpaca event stream yields; the alias keeps the broker
-/// spelling that alpaca-py's readers will look for.
+/// The same type every Alpaca event stream yields; the alias is here so the
+/// broker module reads in its own vocabulary.
 pub type BrokerEvent = crate::sse::Event;
 
 /// Filters for an event stream.

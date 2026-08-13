@@ -1,10 +1,10 @@
-//! Trading models against the API responses alpaca-py captured in its tests.
+//! Trading models against captured API responses.
 //!
 //! These payloads came off the real API, so they carry the quirks a synthetic
 //! fixture would not: string-typed integers, fields absent from the documented
 //! models, `qty` as a bare number in one response and a string in the next.
 //! Extracted by `scripts/extract_fixtures.py`; see `fixtures/index.json` for
-//! which alpaca-py test each one came from.
+//! which test suite each one was captured from.
 
 #![cfg(feature = "trading")]
 
@@ -45,8 +45,7 @@ fn account_deserializes_from_the_captured_response() {
 #[test]
 fn account_accepts_integers_sent_as_strings() {
     // The captured response has "options_approved_level": "1" alongside
-    // "daytrade_count": 0. pydantic coerces the string; a plain i64 field here
-    // would reject the whole payload.
+    // "daytrade_count": 0. A plain i64 field would reject the whole payload.
     let account: TradeAccount = parse("trading/test_account_routes__test_get_account__01.json");
 
     assert_eq!(account.options_approved_level, Some(1));
@@ -92,7 +91,7 @@ fn account_configuration_tolerates_removed_deprecated_fields() {
 fn asset_maps_the_class_field() {
     let asset: Asset = parse("trading/test_asset_routes__test_get_asset__01.json");
 
-    // Sent as "class", which pydantic aliases and serde renames.
+    // Sent on the wire as "class", hence the serde rename.
     assert_eq!(asset.asset_class, AssetClass::UsEquity);
     assert_eq!(asset.exchange, AssetExchange::Nasdaq);
     assert_eq!(asset.symbol, "AAPL");
@@ -102,7 +101,7 @@ fn asset_maps_the_class_field() {
 #[test]
 fn asset_ignores_fields_absent_from_the_model() {
     // The captured response carries last_price and last_close_pct_change, which
-    // no alpaca-py model declares. Rejecting unknown fields would break here.
+    // no specification declares. Rejecting unknown fields would break here.
     let asset: Asset = parse("trading/test_asset_routes__test_get_asset__01.json");
 
     assert_eq!(
@@ -137,8 +136,8 @@ fn market_order_deserializes_with_qty_as_a_bare_number() {
 
 #[test]
 fn order_ignores_the_undocumented_commission_field() {
-    // The captured payload has "commission": 1.25, which alpaca-py's Order does
-    // not declare.
+    // The captured payload carries "commission": 1.25, which the trading
+    // specification does not declare.
     let order: Order = parse("trading/test_order_routes__test_market_order__01.json");
 
     assert_eq!(
@@ -157,10 +156,10 @@ fn limit_order_carries_its_limit_price() {
 
 #[test]
 fn order_list_deserializes() {
-    // This alpaca-py fixture is an OpenAPI documentation sample rather than a
-    // real capture: several values are the literal placeholder "string",
-    // including `hwm`, which is a price. alpaca-py accepts it because it types
-    // hwm as Optional[str] and never converts it.
+    // This fixture is an OpenAPI documentation sample rather than a real
+    // capture: several values are the literal placeholder "string", including
+    // `hwm`, which is a price. A client that keeps prices as strings never
+    // notices.
     //
     // Rejecting a non-numeric price is the behavior we want, so the placeholder
     // is patched out here rather than the type being weakened to match. See
@@ -179,8 +178,8 @@ fn order_list_deserializes() {
 
 #[test]
 fn a_non_numeric_price_is_rejected() {
-    // A deliberate divergence from alpaca-py, which types prices as
-    // Optional[str] and hands the caller whatever arrived.
+    // Typing a price as a string and handing the caller whatever arrived would
+    // accept this; parsing it is what catches it.
     let json = r#"{
         "id": "61e69015-8549-4bfd-b9c3-01e75843f47d",
         "client_order_id": "x",
@@ -243,7 +242,7 @@ fn close_all_positions_response_distinguishes_success_from_failure() {
     assert!(!responses.is_empty());
 
     // The body is an order when the close succeeded and a failure detail when
-    // it did not. alpaca-py types it as a Union of the two.
+    // it did not, so both shapes have to decode.
     for response in &responses {
         match &response.body {
             ClosePositionBody::Order(order) => assert!(!order.client_order_id.is_empty()),
@@ -291,8 +290,7 @@ fn corporate_action_announcements_deserialize() {
 #[test]
 fn multi_leg_order_empty_strings_become_none() {
     // An mleg parent order: the fields describing a single leg come back as ""
-    // because the parent has several. alpaca-py rewrites all seven in
-    // Order.__init__ before validation.
+    // because the parent has several. All seven read as absent.
     let json = r#"{
         "id": "61e69015-8549-4bfd-b9c3-01e75843f47d",
         "client_order_id": "mleg-parent",
@@ -380,7 +378,7 @@ fn nested_legs_deserialize_recursively() {
 
 #[test]
 fn an_unknown_order_status_does_not_break_the_response() {
-    // pydantic raises ValidationError here, taking down the whole call.
+    // A strict decoder fails the whole call here.
     let json = r#"{
         "id": "61e69015-8549-4bfd-b9c3-01e75843f47d",
         "client_order_id": "x",
@@ -403,8 +401,8 @@ fn an_unknown_order_status_does_not_break_the_response() {
 
 #[test]
 fn calendar_combines_the_date_with_the_time_strings() {
-    // The API sends open and close as bare HH:MM; alpaca-py joins them onto the
-    // date in its constructor.
+    // The API sends open and close as bare HH:MM, joined onto the date here so
+    // the caller does not re-parse them.
     let calendars: Vec<Calendar> =
         serde_json::from_str(r#"[{"date": "2022-04-13", "open": "09:30", "close": "16:00"}]"#)
             .unwrap();
@@ -413,14 +411,14 @@ fn calendar_combines_the_date_with_the_time_strings() {
     assert_eq!(day.date.to_string(), "2022-04-13");
     assert_eq!(day.open.to_string(), "2022-04-13 09:30:00");
     assert_eq!(day.close.to_string(), "2022-04-13 16:00:00");
-    // Absent from this payload, and from every alpaca-py model.
+    // Absent from this payload, and from the specification.
     assert_eq!(day.session_open, None);
     assert_eq!(day.settlement_date, None);
 }
 
 #[test]
 fn calendar_reads_the_session_fields_the_real_api_sends() {
-    // Exactly what /v2/calendar returns, which no alpaca-py model declares.
+    // Exactly what /v2/calendar returns, which the specification omits.
     // The session times are HHMM with no separator, unlike open and close.
     let calendars: Vec<Calendar> = serde_json::from_str(
         r#"[{

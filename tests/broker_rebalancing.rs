@@ -63,7 +63,7 @@ fn a_portfolio_reads_its_percentages_as_decimals() {
     assert_eq!(portfolio.status, PortfolioStatus::Active);
     assert_eq!(portfolio.cooldown_days, Some(2));
 
-    // "35" on the wire, declared float in alpaca-py.
+    // "35" on the wire: a string, not a number.
     assert_eq!(portfolio.weights.len(), 3);
     assert_eq!(portfolio.weights[0].percent, Decimal::from(35));
     assert_eq!(portfolio.weights[0].weight_type, WeightType::Asset);
@@ -72,8 +72,7 @@ fn a_portfolio_reads_its_percentages_as_decimals() {
 
 #[test]
 fn a_conditions_sub_type_is_resolved_by_its_value_not_its_position() {
-    // alpaca-py types this as Union[DriftBandSubType, CalendarSubType] and lets
-    // pydantic try each in turn. That cannot work here — every generated enum
+    // Trying each of the two enums in turn cannot work here: every wire enum
     // takes any string into Unknown, so the first would always win. The two
     // value sets are disjoint, so the value itself decides.
     let portfolios: Vec<Portfolio> =
@@ -148,7 +147,7 @@ fn a_run_carries_its_orders_skipped_and_placed() {
 
 #[test]
 fn the_constructors_round_a_percentage_to_two_places() {
-    // alpaca-py rounds in a field validator; here the constructors do it.
+    // The constructors round; a field assigned directly is the caller's.
     assert_eq!(
         Weight::asset("AAPL", Decimal::new(33333, 3)).percent,
         Decimal::new(3333, 2)
@@ -414,7 +413,7 @@ async fn an_empty_page_stops_the_walk_even_with_a_token() {
 
 #[tokio::test]
 async fn max_items_narrows_the_page_size_rather_than_over_fetching() {
-    // alpaca-py asks for exactly what is still wanted on the last request.
+    // The last request asks for exactly what is still wanted.
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/v1/rebalancing/subscriptions"))

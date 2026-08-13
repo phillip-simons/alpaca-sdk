@@ -10,8 +10,8 @@ use crate::data::models::{
 /// A subscription channel.
 ///
 /// The wire names are what goes in a subscribe payload; the message type is the
-/// one-letter `T` on an incoming frame. alpaca-py keeps these in two parallel
-/// dicts, `_MsgType` and `_CHANNEL_TYPES`.
+/// one-letter `T` on an incoming frame. Both live on this enum so the two
+/// spellings of a channel cannot drift apart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Channel {
     /// Executed trades.
@@ -79,8 +79,8 @@ impl Channel {
     /// Whether this channel may appear in a subscribe payload.
     ///
     /// Corrections and cancel errors arrive with the trades subscription and are
-    /// rejected if named explicitly, so alpaca-py filters them out of the
-    /// subscribe message and out of the "is anything subscribed" check.
+    /// rejected if named explicitly, so they are filtered out of the subscribe
+    /// message and out of the "is anything subscribed" check.
     #[must_use]
     pub const fn is_subscribable(self) -> bool {
         !matches!(self, Self::Corrections | Self::CancelErrors)
@@ -171,9 +171,9 @@ pub enum StreamMessage {
     CancelError(TradeCancel),
     /// A frame this crate does not model.
     ///
-    /// Limit up / limit down bands land here: alpaca-py has no model for them
-    /// either and hands back the raw payload, so inventing a shape would be a
-    /// guess rather than a port.
+    /// Limit up / limit down bands land here. No captured payload exists for
+    /// them, so the raw frame is handed back rather than decoded into a shape
+    /// nobody has seen.
     Other {
         /// The `T` value identifying the frame.
         message_type: String,

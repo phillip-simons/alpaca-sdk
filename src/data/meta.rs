@@ -9,8 +9,8 @@
 //! - `GET /v2/stocks/meta/conditions/{ticktype}`
 //! - `GET /v1beta1/options/meta/conditions/{ticktype}`
 //!
-//! No SDK ports them, so nothing here came from alpaca-py; the shapes are the
-//! ones `just capture` recorded from the live API, in `fixtures/live/`.
+//! No other SDK ports them, so the shapes here are the ones `just capture`
+//! recorded from the live API, in `fixtures/live/`.
 //!
 //! # A single space is a condition code
 //!

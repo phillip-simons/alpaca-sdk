@@ -2,10 +2,10 @@
 //!
 //! Alpaca accepts three credential forms — a key pair, HTTP basic auth, and an
 //! OAuth token — documented at
-//! <https://docs.alpaca.markets/us/docs/authentication>. alpaca-py takes an
-//! `(api_key, secret_key, oauth_token)` triple and validates it at runtime, and
-//! raises `ValueError` on the three invalid combinations. Modelling the same thing
-//! as an enum makes those states unrepresentable, so the checks disappear entirely.
+//! <https://docs.alpaca.markets/us/docs/authentication>. They are an enum rather
+//! than an `(api_key, secret_key, oauth_token)` triple with runtime checks, so
+//! the invalid combinations — a key with no secret, a token and a key together —
+//! cannot be built at all.
 
 use std::fmt;
 
@@ -198,7 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn basic_auth_matches_alpaca_py_encoding() {
+    fn basic_auth_is_the_base64_of_key_colon_secret() {
         let mut headers = HeaderMap::new();
         Credentials::basic("key", "secret")
             .unwrap()

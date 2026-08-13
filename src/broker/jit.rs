@@ -9,7 +9,7 @@
 //! live under `/v1/transfers/jit/…`; settlements live under `/v1/jit/…`. That is
 //! Alpaca's split, not a mistake here.
 //!
-//! Not in alpaca-py, spec-derived, and unverified against a live response.
+//! Spec-derived, and unverified against a live response.
 
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;

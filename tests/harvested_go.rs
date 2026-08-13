@@ -1,8 +1,8 @@
 //! The payloads harvested from `alpaca-trade-api-go`'s test suite.
 //!
-//! These come from a second SDK's tests rather than alpaca-py's, which is the
-//! point: two independent authors wrote down what Alpaca sends, and where they
-//! disagree one of them is wrong about the API.
+//! These come from a second SDK's tests, which is the point: two independent
+//! authors wrote down what Alpaca sends, and where they disagree one of them is
+//! wrong about the API.
 //!
 //! Regenerate with `just harvest`. `fixtures/go/index.json` records where each
 //! payload came from, and which route the Go test asserted for it.
@@ -120,7 +120,7 @@ fn parse_as<T: serde::de::DeserializeOwned>(name: &str, value: &serde_json::Valu
 #[test]
 fn the_go_suites_bars_fit_our_bar_model() {
     // Cross-SDK verification: these payloads were written by whoever maintains
-    // the Go client, against the same API, without reference to alpaca-py.
+    // a different client, against the same API, written independently.
     let mut checked = 0;
     for (name, value) in harvested() {
         let Some(bars) = value.get("bars") else {

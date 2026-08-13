@@ -160,8 +160,8 @@ async fn retries_429_then_succeeds() {
 async fn issues_four_requests_before_giving_up() {
     let server = MockServer::start().await;
 
-    // alpaca-py's loop performs DEFAULT_RETRY_ATTEMPTS retries *after* the
-    // initial request, so the default policy makes four requests in total.
+    // `attempts` counts retries *after* the initial request, so the default
+    // policy makes four requests in total.
     Mock::given(method("GET"))
         .and(path("/v2/account"))
         .respond_with(ResponseTemplate::new(429).set_body_json(json!({

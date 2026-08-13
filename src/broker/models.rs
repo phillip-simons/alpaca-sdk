@@ -1,10 +1,8 @@
 //! Broker API models.
 //!
-//! Ported from `alpaca/broker/models/`.
-//!
-//! Grounded in the payloads alpaca-py captured, then cross-checked against
-//! `broker-api.json`. Where the two disagree the fixture wins: the spec has
-//! already been wrong about field optionality elsewhere in this port.
+//! Grounded in captured payloads, then cross-checked against `broker-api.json`.
+//! Where the two disagree the payload wins: the spec has already been wrong
+//! about field optionality more than once.
 
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -227,7 +225,7 @@ pub struct TrustedContact {
 /// The outcome of identity verification.
 ///
 /// The per-check payloads vary by provider and are not modelled; they are kept
-/// as raw JSON rather than guessed at, which is how alpaca-py treats them too.
+/// as raw JSON rather than guessed at.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct KycResults {
     /// Checks that rejected.
@@ -303,8 +301,8 @@ pub struct Account {
 ///
 /// The broker API answers `/trading/accounts/{id}/account` with everything the
 /// trading API's [`crate::trading::TradeAccount`] carries plus the fields below,
-/// so that record is flattened in rather than transcribed — alpaca-py subclasses
-/// it for the same reason. Reach the shared fields through
+/// so that record is flattened in rather than transcribed. Reach the shared
+/// fields through
 /// [`account`](Self::account).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TradeAccount {
@@ -494,9 +492,9 @@ pub struct Transfer {
 
 /// Cash or securities moving from one account to another.
 ///
-/// `net_amount`, `qty` and `price` are declared `float` in alpaca-py but arrive
-/// as strings — `"115.5"` in the captured payload — so they are [`Decimal`]
-/// here. Reading them as floats is the precision loss this port exists to avoid.
+/// `net_amount`, `qty` and `price` arrive as strings — `"115.5"` in the captured
+/// payload — so they are [`Decimal`] here. Reading a string price as a float is
+/// the precision loss the money types exist to avoid.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Journal {
     /// Alpaca's id for the journal.
@@ -581,8 +579,9 @@ pub struct TradeDocument {
     pub document_type: TradeDocumentType,
     /// A more specific classification.
     ///
-    /// Alpaca sends `""` when there is none, which reads as absent here — the
-    /// same transformation alpaca-py makes in its constructor.
+    /// Alpaca sends `""` when there is none, which reads as absent here: an
+    /// empty string is not a sub type, and `Option` is what "no sub type" means
+    /// in this crate.
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub sub_type: Option<TradeDocumentSubType>,
     /// The date the document covers.
@@ -657,8 +656,7 @@ impl W8BenDocument {
     ///
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if none of `foreign_tax_id`,
-    /// `tax_id_ssn` and `ftin_not_required` is set. alpaca-py enforces the same
-    /// rule in a model validator.
+    /// `tax_id_ssn` and `ftin_not_required` is set.
     pub fn validate(&self) -> crate::error::Result<()> {
         if self.foreign_tax_id.is_none()
             && self.tax_id_ssn.is_none()
@@ -675,10 +673,11 @@ impl W8BenDocument {
 
 /// One line of a portfolio's target allocation.
 ///
-/// alpaca-py rounds `percent` to two decimal places in a field validator, which
-/// fires on responses as well as requests. Here the two constructors round and
-/// nothing else does: a percentage Alpaca sends back is kept exactly as sent,
-/// and a `percent` assigned directly to the field is the caller's to round.
+/// The two constructors round `percent` to two decimal places, which is what
+/// Alpaca accepts, and nothing else does. A percentage Alpaca sends back is kept
+/// exactly as sent — editing a server's own numbers on the way in is worse than
+/// the inconsistency — and a `percent` assigned directly to the field is the
+/// caller's to round.
 /// Rounding a value on the way *in* would be the port quietly editing Alpaca's
 /// own numbers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -691,7 +690,7 @@ pub struct Weight {
     pub symbol: Option<String>,
     /// The share of the portfolio, as a percentage.
     ///
-    /// Declared `float` in alpaca-py; the wire carries `"35"`, a string.
+    /// The wire carries `"35"`, a string, not a number.
     #[serde(with = "crate::types::decimal")]
     pub percent: Decimal,
 }
@@ -699,8 +698,8 @@ pub struct Weight {
 impl Weight {
     /// A cash line holding `percent` of the portfolio.
     ///
-    /// `percent` is rounded to two decimal places, which is what Alpaca accepts
-    /// and what alpaca-py's validator does.
+    /// `percent` is rounded to two decimal places, which is what Alpaca
+    /// accepts.
     #[must_use]
     pub fn cash(percent: Decimal) -> Self {
         Self {
@@ -745,11 +744,10 @@ impl Weight {
 
 /// Which sub type a rebalancing condition carries.
 ///
-/// The `type` field decides which enum `sub_type` belongs to. alpaca-py models
-/// this as `Union[DriftBandSubType, CalendarSubType]`, which pydantic resolves
-/// by trying each in turn — a scheme that cannot work here, because every
-/// generated enum accepts any string into `Unknown` and so would always match
-/// first. The two value sets are disjoint, so the wire value alone decides.
+/// The `type` field decides which enum `sub_type` belongs to. Trying each in
+/// turn cannot work here: every wire enum accepts any string into `Unknown`, so
+/// the first one tried would always match. The two value sets are disjoint, so
+/// the wire value alone decides.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RebalancingSubType {
     /// A drift band condition's sub type.
@@ -975,8 +973,7 @@ pub struct RunsPage {
 
 /// The KYC provider's verdict on the account holder.
 ///
-/// Every field is optional: which of them a provider fills in varies, and
-/// alpaca-py declares them all optional for the same reason.
+/// Every field is optional, because which of them a provider fills in varies.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CIPKycInfo {
     /// The provider's id for this check.
@@ -1227,10 +1224,9 @@ pub struct CIPWatchlist {
 /// Correspondents that run their own KYC submit these; Alpaca stores them as
 /// the regulatory record of who was checked and how.
 ///
-/// **Unverified against a live response.** alpaca-py's two CIP methods are
-/// empty stubs — its own comment says the sandbox answers 404 for these routes
-/// — so no fixture exists and none of these models has ever met a real payload.
-/// They follow `alpaca/broker/models/cip.py` and the broker spec. Treat a
+/// **Unverified against a live response.** The sandbox is reported to answer
+/// 404 for the CIP routes, so no fixture exists and none of these models has
+/// ever met a real payload. They follow the broker spec. Treat a
 /// decode failure here as a bug report rather than a surprise.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CIPInfo {

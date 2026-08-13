@@ -4,8 +4,7 @@
 //! that way in request bodies. They are [`Decimal`] here, deserialized from
 //! either a string or a number and serialized back as a string — the only form
 //! that survives a round trip exactly. Reading them as `f64` loses precision on
-//! fractional-share quantities, which is what happens to anyone who takes the
-//! `Union[str, float]` alpaca-py declares and reaches for `float()`.
+//! fractional-share quantities.
 //!
 //! Market data floats (bar OHLCV, vwap) stay `f64`: they arrive as JSON numbers
 //! and are already approximate on the wire, so `Decimal` would add cost without

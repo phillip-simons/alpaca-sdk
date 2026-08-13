@@ -10,8 +10,8 @@ impl ActivityType {
     /// Whether this activity type belongs to a trade activity rather than a
     /// non-trade activity.
     ///
-    /// Currently that means exactly [`ActivityType::Fill`]. alpaca-py keeps this
-    /// as a method rather than an inline comparison because the set may grow.
+    /// Currently that means exactly [`ActivityType::Fill`]. It is a method
+    /// rather than an inline comparison because the set may grow.
     #[must_use]
     pub fn is_trade_activity(&self) -> bool {
         matches!(self, Self::Fill)

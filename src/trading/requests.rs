@@ -3,12 +3,9 @@
 //! See [orders at Alpaca](https://docs.alpaca.markets/us/docs/orders-at-alpaca)
 //! for what the order classes and time-in-force values mean.
 //!
-//! Ported from `alpaca/trading/requests.py`.
-//!
-//! alpaca-py builds these with keyword arguments and validates the combinations
-//! in `model_validator` hooks. Rust has no kwargs, so each Python subclass
-//! becomes a constructor, and several of the validators disappear because the
-//! invalid states cannot be constructed:
+//! Each order shape is a constructor rather than one struct with every field
+//! optional, so several combinations Alpaca would reject cannot be built at
+//! all:
 //!
 //! - "exactly one of `qty` or `notional`" is [`OrderAmount`]
 //! - "exactly one of `trail_price` or `trail_percent`" is [`Trail`]
@@ -19,8 +16,8 @@
 //! is checked in [`OrderRequest::validate`], which the client calls before
 //! sending.
 //!
-//! Optional fields are skipped when absent, which is what alpaca-py's
-//! `NonEmptyRequest::to_request_fields` reimplements by hand.
+//! Optional fields are skipped when absent rather than sent as null: Alpaca
+//! treats an explicit null differently from an omitted key on several routes.
 
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
@@ -37,8 +34,8 @@ use crate::types::{ContractType, Sort};
 
 /// How much of an asset to trade.
 ///
-/// Alpaca accepts a share quantity or a dollar amount, never both. alpaca-py
-/// takes two optional fields and rejects the invalid combinations at runtime.
+/// Alpaca accepts a share quantity or a dollar amount, never both, so this is
+/// an enum rather than two optional fields and a runtime check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OrderAmount {
     /// A number of shares. Fractional quantities are supported for stocks with
@@ -136,9 +133,9 @@ impl OptionLegRequest {
 
     /// A leg identified by position intent instead of side.
     ///
-    /// alpaca-py requires at least one of the two; this constructor and
-    /// [`OptionLegRequest::new`] are the only ways to build one, so the check is
-    /// unnecessary here.
+    /// Alpaca requires a side or a position intent. This constructor and
+    /// [`OptionLegRequest::new`] are the only ways to build a leg, so neither
+    /// can be missing and there is nothing to check at runtime.
     #[must_use]
     pub fn with_position_intent(
         symbol: impl Into<String>,
@@ -635,7 +632,8 @@ impl ReplaceOrderRequest {
 
 /// How much of a position to close.
 ///
-/// alpaca-py takes two optional fields and rejects both-or-neither at runtime.
+/// A quantity or a percentage, never both and never neither — an enum rather
+/// than two optional fields and a runtime check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClosePositionRequest {
     /// Close this number of shares.
@@ -690,7 +688,6 @@ pub struct GetOrdersRequest {
     pub symbols: Option<Vec<String>>,
     /// Only orders in these asset classes.
     ///
-    /// Documented by the reference and absent from alpaca-py.
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
@@ -701,7 +698,6 @@ pub struct GetOrdersRequest {
     ///
     /// The id-based cursor, which is steadier than
     /// [`until`](Self::until) when several orders share a timestamp.
-    /// Documented by the reference and absent from alpaca-py.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub before_order_id: Option<Uuid>,
     /// Only orders placed after this one.
@@ -907,7 +903,8 @@ impl CreateWatchlistRequest {
 /// Changes to apply to a watchlist.
 ///
 /// At least one field must be set; [`UpdateWatchlistRequest::validate`] checks
-/// it, mirroring alpaca-py's validator.
+/// it, because a `PATCH` with an empty body changes nothing and Alpaca's answer
+/// to one is not documented.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UpdateWatchlistRequest {
     /// A new name for the watchlist.
@@ -1010,9 +1007,9 @@ impl GetCorporateAnnouncementsRequest {
 
     /// The query parameters for this request.
     ///
-    /// `ca_types` is emitted once per value, which is what Python's `requests`
-    /// does with a list and therefore what alpaca-py sends. It cannot go through
-    /// the normal query serializer at all: `serde_urlencoded` has no
+    /// `ca_types` is emitted once per value — `?ca_types=x&ca_types=y` — rather
+    /// than comma-separated, which is what this route expects. It cannot go
+    /// through the normal query serializer at all: `serde_urlencoded` has no
     /// representation for a sequence and fails the whole request.
     #[must_use]
     pub fn to_query(&self) -> Vec<(&'static str, String)> {
@@ -1064,7 +1061,10 @@ pub struct GetOptionContractsRequest {
         serialize_with = "crate::types::serde_util::comma_separated"
     )]
     pub underlying_symbols: Option<Vec<String>>,
-    /// Only contracts with this status. alpaca-py defaults this to active.
+    /// Only contracts with this status.
+    ///
+    /// Leaving it unset is not the same as asking for everything: the reference
+    /// says "by default only active contracts are returned".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<AssetStatus>,
     /// Only contracts expiring on this date.
@@ -1086,14 +1086,12 @@ pub struct GetOptionContractsRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<ExerciseStyle>,
     /// Whether to include each contract's deliverables.
-    ///
-    /// Documented by the reference and absent from alpaca-py.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_deliverables: Option<bool>,
     /// Only contracts in — or only contracts outside — the Penny Program.
     ///
     /// The Penny Program Indicator: `true` selects contracts eligible for penny
-    /// price increments. Documented by the reference and absent from alpaca-py.
+    /// price increments.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ppind: Option<bool>,
     /// Only contracts struck at or above this price.
@@ -1119,8 +1117,10 @@ pub struct GetOptionContractsRequest {
 }
 
 impl GetOptionContractsRequest {
-    /// Contracts on `underlying_symbols`, with alpaca-py's default of active
-    /// status applied.
+    /// Contracts on `underlying_symbols`, asking for active ones explicitly.
+    ///
+    /// That matches what the route does when `status` is unset, spelled out
+    /// rather than relied upon.
     #[must_use]
     pub fn new(underlying_symbols: Vec<String>) -> Self {
         Self {
@@ -1158,8 +1158,8 @@ mod tests {
 
     #[test]
     fn market_order_serializes_only_the_fields_that_are_set() {
-        // alpaca-py's NonEmptyRequest exists to strip the None fields; here that
-        // is skip_serializing_if.
+        // An unset field must be absent from the body, not sent as null:
+        // Alpaca distinguishes the two on several routes.
         let json = serde_json::to_value(market()).unwrap();
 
         assert_eq!(

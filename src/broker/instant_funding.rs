@@ -5,7 +5,7 @@
 //! account trades on it immediately, and the correspondent owes Alpaca until the
 //! [deadline](InstantFunding::deadline). Interest accrues past it.
 //!
-//! Not in alpaca-py, spec-derived, and unverified against a live response.
+//! Spec-derived, and unverified against a live response.
 //! Settlements are shared with [JIT](crate::broker::jit); see
 //! [`crate::broker::settlements`].
 

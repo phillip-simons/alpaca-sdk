@@ -1,11 +1,10 @@
 //! `DataFrame` conversion for the market data collections.
 //!
-//! alpaca-py exposes this as a `.df` property on `BarSet` and its siblings. Here
-//! those are `pub type … = HashMap<String, Vec<Bar>>`, and a type alias cannot
-//! take an inherent `impl`, so the conversion arrives as an extension trait
-//! instead — [`ToFrame`], brought into scope with a `use`. That choice is not
-//! only forced: an extension trait is additive, where the newtype the inherent
-//! method would have needed is a breaking change.
+//! `BarSet` and its siblings are `pub type … = HashMap<String, Vec<Bar>>`, and a
+//! type alias cannot take an inherent `impl`, so the conversion arrives as an
+//! extension trait — [`ToFrame`], brought into scope with a `use`. That choice
+//! is not only forced: an extension trait is additive, where the newtype an
+//! inherent method would have needed is a breaking change.
 
 use std::collections::HashMap;
 

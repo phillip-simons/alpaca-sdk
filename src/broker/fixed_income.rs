@@ -1,8 +1,7 @@
 //! [Fixed income assets](https://docs.alpaca.markets/us/reference/uscorporates-1):
 //! the US corporate and treasury master lists, and entry requirements.
 //!
-//! Not in alpaca-py. Unlike most of the broker surface added in phase 6.5,
-//! these are verified against real payloads: `just harvest` lifted them out of
+//! Unlike most of the broker surface, these are verified against real payloads: `just harvest` lifted them out of
 //! the Go SDK's tests, where they are raw JSON pasted into backtick literals,
 //! so the wire's quirks survived the trip. See `fixtures/go/`.
 //!

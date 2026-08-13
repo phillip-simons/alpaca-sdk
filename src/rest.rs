@@ -4,11 +4,9 @@
 //! raw request methods stay available as an escape hatch for routes this crate
 //! does not wrap.
 //!
-//! Migrating from alpaca-py: this is where `raw_data=True` went. A boolean
-//! cannot change a function's return type in Rust, so the escape hatch is a
-//! method — [`RestClient::request_raw`] — rather than a constructor flag.
-//!
-//! Ported from `alpaca/common/rest.py`.
+//! [`RestClient::request_raw`] returns the body undecoded, which is the escape
+//! hatch for a route this crate has not wrapped or a response whose shape has
+//! changed.
 
 use std::time::Duration;
 
@@ -482,7 +480,7 @@ mod tests {
     }
 
     #[test]
-    fn url_matches_alpaca_py_concatenation() {
+    fn url_joins_base_version_and_path() {
         let client = client("https://paper-api.alpaca.markets");
         assert_eq!(
             client.url("/orders"),

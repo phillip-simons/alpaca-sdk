@@ -1,9 +1,8 @@
 //! [Tokenized assets](https://docs.alpaca.markets/us/reference/posttokenizationmint):
 //! minting a position onto a chain, and tracking the request.
 //!
-//! Not in alpaca-py. No captured payload exists for any of these routes, so the
-//! models follow the published reference and are unverified against a live
-//! response.
+//! No captured payload exists for any of these routes, so the models follow the
+//! published reference and are unverified against a live response.
 //!
 //! The broker API carries the same four routes under an account id; see
 //! [`BrokerClient`](crate::broker::BrokerClient). The models are shared.

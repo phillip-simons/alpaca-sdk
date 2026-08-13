@@ -1,11 +1,10 @@
 //! The live market data stream, against a websocket server that misbehaves on
 //! demand.
 //!
-//! These are the behaviors a clean-room rewrite loses: they are hard-won fixes
-//! in alpaca-py, invisible in the type signatures, and impossible to provoke
-//! against the real API. A mock can drop a socket mid-stream, go mute while
-//! staying connected, and reject an entitlement — Alpaca will not do those on
-//! request.
+//! These are the behaviours a rewrite loses: hard-won fixes, invisible in the
+//! type signatures and impossible to provoke against the real API. A mock can
+//! drop a socket mid-stream, go mute while staying connected, and reject an
+//! entitlement — Alpaca will not do those on request.
 
 #![cfg(feature = "data")]
 
@@ -195,7 +194,7 @@ async fn authenticates_then_subscribes() {
     let seen = received.lock().await;
     assert_eq!(seen.len(), 2, "expected an auth then a subscribe");
 
-    // Auth carries the key pair, in the order alpaca-py sends it.
+    // Auth carries the key pair as `key` and `secret`, not nested under data.
     assert_eq!(seen[0]["action"], "auth");
     assert_eq!(seen[0]["key"], "key");
     assert_eq!(seen[0]["secret"], "secret");
@@ -285,7 +284,7 @@ async fn corrections_and_cancels_still_arrive_without_being_subscribed() {
 #[tokio::test]
 async fn an_insufficient_subscription_stops_the_stream_for_good() {
     // Retrying an entitlement failure never succeeds and burns the one
-    // connection Alpaca allows, so alpaca-py aborts rather than reconnecting.
+    // connection Alpaca allows, so the stream ends rather than reconnecting.
     let (endpoint, _, connections) = serve(Script::RejectSubscription).await;
 
     let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
@@ -403,7 +402,7 @@ async fn a_mute_connection_reconnects_when_a_data_timeout_is_set() {
 #[tokio::test]
 async fn a_mute_connection_is_left_alone_without_a_data_timeout() {
     // The default. A quiet news or bars subscription must not reconnect on a
-    // timer, which is why alpaca-py leaves the timeout off unless asked.
+    // timer, which is why the timeout is off unless asked for.
     let (endpoint, _, connections) = serve(Script::GoMute).await;
 
     let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
@@ -429,8 +428,8 @@ async fn a_data_timeout_must_be_positive() {
 
 #[tokio::test]
 async fn running_without_a_subscription_is_an_error() {
-    // alpaca-py spins waiting for a subscription and never opens the socket;
-    // saying so is more useful than hanging.
+    // Spinning until something is subscribed would hang; saying so is more
+    // useful.
     let stream = StockDataStream::with_endpoint(credentials(), "ws://127.0.0.1:1");
 
     let messages = collect(stream.run(), 1, Duration::from_secs(3)).await;
@@ -481,7 +480,7 @@ async fn a_non_fatal_error_frame_does_not_end_the_stream() {
 
 #[tokio::test]
 async fn the_stock_stream_rejects_a_feed_without_a_live_socket() {
-    // Only iex and sip carry one; alpaca-py raises here too.
+    // Only iex and sip carry one.
     assert!(
         StockDataStream::new(credentials(), alpaca_sdk::data::DataFeed::Otc).is_err(),
         "otc has no live stream"

@@ -5,7 +5,7 @@
 //! Positions as of a close, the same positions aggregated across every account,
 //! and the interest each account earned on its idle cash.
 //!
-//! Not in alpaca-py, spec-derived, and unverified against a live response.
+//! Spec-derived, and unverified against a live response.
 
 use std::collections::HashMap;
 

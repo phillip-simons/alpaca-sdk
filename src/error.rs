@@ -5,8 +5,9 @@
 //! HTML. The body is parsed once here, at construction, and a non-JSON body
 //! degrades to [`ApiError::body`] with `code` left as `None`.
 //!
-//! alpaca-py's `APIError` re-parses the body on every access to `code` or
-//! `message`, and raises `json.JSONDecodeError` when the body is not JSON.
+//! Parsing once matters for the degenerate case: a gateway's HTML is not JSON,
+//! and an error type that fails while reporting an error is the worst place to
+//! fail.
 
 use std::fmt;
 
@@ -190,7 +191,8 @@ mod tests {
 
     #[test]
     fn non_json_body_degrades_instead_of_panicking() {
-        // alpaca-py's APIError.code raises json.JSONDecodeError on this input.
+        // A 502 from a gateway is HTML, and this is the path where an error
+        // type must not itself error.
         let err = ApiError::from_body(502, "/v2/account", "<html>bad gateway</html>".to_owned());
 
         assert_eq!(err.code, None);
@@ -199,7 +201,7 @@ mod tests {
     }
 
     #[test]
-    fn retryable_statuses_match_alpaca_py_defaults() {
+    fn only_429_and_504_are_retryable() {
         for status in [429, 504] {
             assert!(ApiError::from_body(status, "/v2/account", String::new()).is_retryable());
         }

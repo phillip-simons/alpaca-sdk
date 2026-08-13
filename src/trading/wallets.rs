@@ -1,8 +1,8 @@
 //! [Crypto funding](https://docs.alpaca.markets/us/reference/listcryptofundingwallets):
 //! deposit wallets, on-chain transfers, and the withdrawal allowlist.
 //!
-//! Not in alpaca-py. No captured payload exists, so these models follow the
-//! published reference and are unverified against a live response.
+//! No captured payload exists, so these models follow the published reference
+//! and are unverified against a live response.
 //!
 //! **The withdrawal route is missing on purpose.** `POST /v2/wallets/transfers`
 //! is deprecated as of 2026-07-09 with a sunset of 2026-10-09, and the

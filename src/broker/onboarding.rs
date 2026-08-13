@@ -2,7 +2,7 @@
 //! the Onfido identity-verification handoff, country risk ratings, IRA excess
 //! contributions, trading limits, and order estimation.
 //!
-//! Nothing here is in alpaca-py. All of it is spec-derived and unverified
+//! All of it is spec-derived and unverified
 //! against a live response.
 
 use chrono::{DateTime, Utc};

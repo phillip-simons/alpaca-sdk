@@ -1,7 +1,5 @@
 //! Enums shared by more than one API surface.
 //!
-//! Ported from `alpaca/common/enums.py`.
-//!
 //! `PaginationType` is deliberately absent: its three modes are expressed here as
 //! a `Stream` plus `try_collect`, so an enum selecting between them would have
 //! nothing to select.

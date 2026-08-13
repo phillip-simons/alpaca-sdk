@@ -56,8 +56,8 @@ fn account_id() -> Uuid {
 #[test]
 fn a_broker_order_carries_the_commission_the_trading_model_has_no_field_for() {
     // The one difference between broker and trading orders, and the reason the
-    // broker routes cannot simply return `trading::Order`: alpaca-py subclasses
-    // it to add this. It arrives as a JSON number here.
+    // broker routes cannot simply return `trading::Order`, which has no field
+    // for it. It arrives as a JSON number.
     let order: Order =
         parse("broker/test_trading_routes__test_close_position_for_account_with_qty__01.json");
 
@@ -103,13 +103,13 @@ async fn submit_order_for_account_posts_under_the_account() {
 
 #[tokio::test]
 async fn a_local_currency_limit_order_reaches_the_server() {
-    // alpaca-py refuses any non-USD order that is not a market order. The LCT
-    // documentation says otherwise — "market, limit, stop & stop limit orders"
-    // — so refusing one here would reject a request Alpaca accepts.
+    // A non-USD order is not restricted to market orders: the LCT
+    // documentation says "market, limit, stop & stop limit orders", so refusing
+    // one here would reject a request Alpaca accepts.
     //
     // Asserted against a mock rather than by calling validate(), because what
     // matters is that the request is *sent*. If a future re-port reinstates
-    // alpaca-py's rule, this fails.
+    // the stricter reading, this fails.
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path(format!("/v1/trading/accounts/{ACCOUNT_ID}/orders")))
@@ -312,8 +312,8 @@ async fn get_open_position_for_account_takes_a_symbol_or_an_id() {
 
 #[tokio::test]
 async fn exercising_an_option_sends_the_commission_only_when_one_is_set() {
-    // alpaca-py drops unset request fields, so a commission-free exercise posts
-    // an empty object rather than `{"commission": null}`.
+    // Unset request fields are dropped, so a commission-free exercise posts an
+    // empty object rather than `{"commission": null}`.
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path(format!(

@@ -1,13 +1,11 @@
 //! Corporate action models.
 //!
-//! Ported from `alpaca/data/models/corporate_actions.py`.
-//!
 //! The endpoint groups actions by type under `corporate_actions`, with one array
-//! per kind. alpaca-py flattens them into `Dict[str, List[CorporateAction]]`
-//! keyed by the type name, which loses which concrete type each entry is; here
-//! each kind is its own field, so no downcasting is needed to read one.
+//! per kind. Each kind is its own field rather than one map keyed by type name,
+//! so reading an entry needs no downcast and the compiler knows which fields it
+//! has.
 //!
-//! Every record carries an `id` that none of the Python models declare.
+//! Every record carries an `id` that the specs do not declare.
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};

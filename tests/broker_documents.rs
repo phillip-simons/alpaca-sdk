@@ -58,7 +58,7 @@ fn document_id() -> Uuid {
 #[test]
 fn an_empty_sub_type_reads_as_no_sub_type() {
     // Alpaca sends "" rather than omitting the field. Parsing that as a sub type
-    // would be an error; alpaca-py rewrites it to None in its constructor.
+    // would be an error, so an empty string reads as absent.
     let documents: Vec<TradeDocument> =
         parse("broker/test_documents_routes__test_get_trade_documents_for_account__01.json");
 
@@ -276,9 +276,9 @@ async fn uploading_posts_an_array_and_expects_no_body_back() {
 
 #[tokio::test]
 async fn more_than_ten_documents_is_alpacas_to_refuse_not_ours() {
-    // alpaca-py caps an upload at ten. Alpaca documents a 10MB ceiling on each
-    // document's *contents* and no limit on the count, so the cap is its own
-    // invention — plausibly real, but not ours to enforce. Eleven documents go
+    // Alpaca documents a 10MB ceiling on each document's *contents* and no
+    // limit on the count, so a count cap would be a guess — plausibly right,
+    // but not ours to enforce. Eleven documents go
     // to the server, and the server decides.
     let server = MockServer::start().await;
     Mock::given(method("POST"))
@@ -300,13 +300,14 @@ async fn more_than_ten_documents_is_alpacas_to_refuse_not_ours() {
         .await
         .unwrap();
 
-    // The number alpaca-py uses is still exposed, for a caller who wants it.
+    // The conventional number is still exposed, for a caller who wants it.
     assert_eq!(alpaca_sdk::broker::DOCUMENT_UPLOAD_LIMIT, 10);
 }
 
 #[test]
 fn a_w8ben_may_not_be_uploaded_as_a_general_document() {
-    // alpaca-py raises for this, in both directions.
+    // Both directions: a W-8BEN through the general request, and a general
+    // document through the W-8BEN one.
     let by_type =
         UploadDocumentRequest::new(DocumentType::W8ben, "QQ==", UploadDocumentMimeType::Pdf);
     assert!(by_type.validate().is_err());

@@ -6,7 +6,7 @@
 //! accounts. Modelling them once keeps the wire fact — that these are the same
 //! resource under two paths — visible instead of duplicated.
 //!
-//! Not in alpaca-py, spec-derived, and unverified against a live response.
+//! Spec-derived, and unverified against a live response.
 
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;

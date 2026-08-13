@@ -1,28 +1,21 @@
 #!/usr/bin/env python3
-"""Diff this crate's generated enums against the same-named spec schemas.
+"""Diff this crate's wire enums against the same-named spec schemas.
 
-The 71 `wire_enum!` blocks come from alpaca-py, via `scripts/gen_enums.py`. The
-specs are Alpaca's own. Where both name the same type, they should agree, and
-mostly they do not: only 7 of the 19 with a same-named schema match exactly.
+The `wire_enum!` blocks are checked-in source; the specs are Alpaca's own. Where
+both name the same type they should agree, and mostly they do not: only 7 of the
+19 with a same-named schema match exactly.
 
 This is a quality report, not a bug report. An unknown value deserializes into
 `Unknown(String)` rather than failing, so drift costs a caller a match arm, not
 a decode. What it is good for is the opposite direction: a value the spec has
 and the crate does not is a value nobody can match on by name.
 
-# Why this is not in gen_enums.py
-
-The roadmap asked for it there. It is separate because `gen_enums.py` needs an
-alpaca-py checkout to run at all, and this needs only `specs/` and the checked-in
-`.rs` files — which are the artifact that actually ships. A drift check that can
-only run during a regeneration is a check that runs once a year.
-
 # What it will not do
 
-It never suggests removing a value the spec lacks. alpaca-py carries values
-Alpaca still serves and has stopped documenting, and deleting one turns a
-working match arm into an `Unknown`. Extra values are reported as a separate,
-quieter list for that reason.
+It never suggests removing a value the spec lacks. Alpaca serves values it has
+stopped documenting, and deleting one turns a working match arm into an
+`Unknown`. Extra values are reported as a separate, quieter list for that
+reason.
 
 Usage:
     python3 scripts/enum_drift.py [--specs specs] [--src src]
@@ -43,7 +36,7 @@ VARIANT = re.compile(r'^\s*(\w+) => "([^"]*)",\s*$')
 # here is a claim that they are unrelated, not that the difference is fine.
 NOT_DRIFT: dict[str, str] = {
     "Exchange": (
-        "The spec's schema of this name is venue names; alpaca-py's is the "
+        "The spec's schema of this name is venue names; this crate's is the "
         "single-letter tape codes the data API actually sends. Different "
         "vocabularies, same word."
     ),
@@ -61,8 +54,8 @@ UNRESOLVED: dict[tuple[str, str], str] = {
 def crate_enums(src: pathlib.Path) -> dict[str, list[str]]:
     """Every `wire_enum!` in the crate, as `{name: [wire values]}`.
 
-    Reads the generated files rather than regenerating them, so this reports on
-    what is checked in — including a hand edit that should not be there.
+    Reads the source files, so a variant added or renamed by hand shows up here
+    the same way a spec change does.
     """
     enums: dict[str, list[str]] = {}
     for rs in sorted(src.rglob("*enums*.rs")):
@@ -190,7 +183,7 @@ def main() -> int:
 
     if extra:
         print("\nIn the crate, not in the spec. **Do not delete these.**")
-        print("alpaca-py carries values Alpaca still serves and no longer documents;")
+        print("Alpaca still serves values it has stopped documenting;")
         print("removing one turns a working match arm into an `Unknown`.\n")
         for name, values in sorted(extra.items()):
             print(f"  {name}: {', '.join(values)}")

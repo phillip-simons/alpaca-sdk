@@ -59,9 +59,9 @@ fn to_account() -> Uuid {
 
 #[test]
 fn a_journal_reads_its_amount_as_a_decimal_not_a_float() {
-    // alpaca-py declares net_amount, qty and price as `float`, but the wire
-    // carries "115.5" — a string. Reading it as a float is the precision loss
-    // this port exists to avoid.
+    // net_amount, qty and price arrive as strings — "115.5" — not numbers.
+    // Reading them as floats is the precision loss the money types exist to
+    // avoid.
     let journal: Journal = parse("broker/test_journal_routes__test_create_journal__01.json");
 
     assert_eq!(journal.net_amount, Some(Decimal::new(1155, 1)));
@@ -107,8 +107,8 @@ fn a_failed_batch_entry_keeps_its_error_message() {
 
 #[test]
 fn cash_and_security_journals_may_not_borrow_each_others_fields() {
-    // alpaca-py enforces this in a model validator: amount belongs to cash
-    // journals, symbol and qty to security journals, and neither may be empty.
+    // amount belongs to cash journals, symbol and qty to security journals,
+    // and neither may be empty.
     let cash = CreateJournalRequest::cash(from_account(), to_account(), Decimal::from(50));
     assert!(cash.validate().is_ok());
 

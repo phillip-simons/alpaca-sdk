@@ -1,6 +1,7 @@
-//! The broker routes alpaca-py does not implement: fixed income, instant
-//! funding, JIT, FPSL, IPOs, reporting, OAuth, funding wallets, tokenization,
-//! crypto wallets, and the account odds and ends.
+//! The broker routes found in the published reference rather than in any
+//! captured payload: fixed income, instant funding, JIT, FPSL, IPOs, reporting,
+//! OAuth, funding wallets, tokenization, crypto wallets, and the account odds
+//! and ends.
 //!
 //! Two kinds of evidence here, and the difference matters:
 //!
@@ -497,8 +498,8 @@ async fn the_brokers_per_market_calendar_is_v2_where_tradings_is_v3() {
 async fn category_and_activity_types_cannot_both_be_set() {
     // The one exclusivity the reference documents on this route: "Cannot be
     // used with `activity_types` parameter". A documented rule, so it is
-    // enforced — unlike alpaca-py's date/after/until rule, which nothing
-    // documents and this crate does not reproduce.
+    // enforced — unlike the plausible date/after/until conflict, which nothing
+    // documents and this crate does not reject.
     use alpaca_sdk::broker::{ActivityCategory, GetAccountActivitiesRequest};
     use alpaca_sdk::trading::ActivityType;
 
@@ -521,6 +522,6 @@ async fn category_and_activity_types_cannot_both_be_set() {
     };
     assert!(
         dated.validate().is_ok(),
-        "alpaca-py's rule is not reinstated"
+        "an undocumented rule has not crept back in"
     );
 }

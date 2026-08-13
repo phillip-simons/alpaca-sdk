@@ -2,8 +2,8 @@
 //!
 //! These are `text/event-stream` over plain HTTP, not websockets, so what is
 //! worth pinning down is the wire contract: five distinct paths, the SSE headers
-//! alpaca-py sends, and a subscription that fails loudly instead of handing back
-//! a silent empty stream.
+//! Alpaca's event streams expect, and a subscription that fails loudly instead
+//! of handing back a silent empty stream.
 
 #![cfg(feature = "broker")]
 
@@ -265,7 +265,7 @@ async fn resuming_sends_the_event_id_that_was_last_seen() {
         .await;
 
     // The id comes off a BrokerEvent, which is why that field is kept —
-    // alpaca-py discards it and yields only the payload.
+    // Discarding it would leave a dropped stream with nothing to resume from.
     drop(
         client(&server)
             .get_journal_events(Some(&GetEventsRequest::after_id("42")))
@@ -317,9 +317,8 @@ async fn the_ulid_cursor_is_spelled_for_the_version_being_called() {
 
 #[tokio::test]
 async fn the_streams_alpaca_retired_are_not_called() {
-    // alpaca-py subscribes to /v1/events/trades, which Alpaca documents as
-    // fully deprecated and no longer available, and to the legacy v1 journal
-    // and transfer streams. Mounting *only* the retired paths means any request
+    // /v1/events/trades is documented as fully deprecated and no longer
+    // available, as are the legacy v1 journal and transfer streams. Mounting *only* the retired paths means any request
     // to one fails the test — the client must not go near them.
     for retired in [
         "/v1/events/trades",

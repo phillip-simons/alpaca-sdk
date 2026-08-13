@@ -157,7 +157,7 @@ async fn the_status_filter_is_one_comma_separated_parameter() {
 #[tokio::test]
 async fn an_empty_status_filter_sends_no_parameter_at_all() {
     // Sending `statuses=` would filter for the empty status rather than for
-    // everything; alpaca-py omits the key when the list is empty.
+    // everything, so an empty list must still be sent as an empty list.
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path(format!("/v1/accounts/{ACCOUNT_ID}/ach_relationships")))
@@ -213,7 +213,7 @@ fn a_bank_parses_from_the_captured_payload() {
 
 #[test]
 fn a_domestic_bank_may_not_carry_an_address_and_an_international_one_must() {
-    // alpaca-py enforces both directions in a model validator, and the API
+    // Both directions are rejected before sending, and the API
     // rejects the request either way, so it is worth catching before the call.
     let mut domestic = CreateBankRequest::domestic("My Bank", "123456789", "123456789abc");
     assert!(domestic.validate().is_ok());
@@ -235,9 +235,8 @@ fn a_domestic_bank_may_not_carry_an_address_and_an_international_one_must() {
     );
     assert!(international.validate().is_ok());
 
-    // alpaca-py requires all five address fields on an international bank. The
-    // reference marks every one of them optional, so an incomplete one is
-    // Alpaca's to reject — not ours.
+    // The reference marks every one of the five address fields optional, so an
+    // incomplete international bank is Alpaca's to reject — not ours.
     let mut incomplete = international;
     incomplete.postal_code = None;
     assert!(incomplete.validate().is_ok());
@@ -327,7 +326,7 @@ fn a_transfer_keeps_its_amounts_exact() {
 
 #[tokio::test]
 async fn a_transfer_pins_its_own_type_in_the_body() {
-    // alpaca-py has one class per transfer type, each with a validator that
+    // One type per transfer kind would need a runtime validator that
     // rejects the other value. The enum makes that unrepresentable, but the
     // field still has to reach the wire.
     let server = MockServer::start().await;

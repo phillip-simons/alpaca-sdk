@@ -1,6 +1,4 @@
 //! Bar aggregation intervals.
-//!
-//! Ported from `alpaca/data/timeframe.py`.
 
 use std::fmt;
 use std::str::FromStr;
@@ -181,7 +179,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shorthand_constructors_match_alpaca_py() {
+    fn shorthand_constructors_build_the_documented_units() {
         assert_eq!(TimeFrame::minute().to_string(), "1Min");
         assert_eq!(TimeFrame::hour().to_string(), "1Hour");
         assert_eq!(TimeFrame::day().to_string(), "1Day");

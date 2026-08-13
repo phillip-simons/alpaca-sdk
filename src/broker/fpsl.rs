@@ -5,7 +5,7 @@
 //! fee; [`FpslTier`] is how that cut is set, and [`FpslLoan`] is one day of one
 //! symbol on loan.
 //!
-//! Not in alpaca-py, spec-derived, and unverified against a live response.
+//! Spec-derived, and unverified against a live response.
 //!
 //! Interest and market values are `f64` here rather than [`Decimal`], because
 //! this family sends them as JSON numbers — the same rule the market data

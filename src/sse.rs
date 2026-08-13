@@ -28,10 +28,9 @@ use crate::rest::RestConfig;
 ///
 /// **Not interchangeable with the broker's
 /// [`GetEventsRequest`](crate::broker::GetEventsRequest)**, and the difference
-/// is not cosmetic: the streams alpaca-py knows about bound their window by
-/// *date*, while every stream found in the reference sweep — admin actions, IPO
-/// events, system events, account activities, corporate actions — bounds it by
-/// *timestamp*. Sending a bare date to a route that parses RFC-3339 is how a
+/// is not cosmetic: the five older streams bound their window by *date*, while
+/// every stream found in the reference sweep — admin actions, IPO events, system
+/// events, account activities, corporate actions — bounds it by *timestamp*. Sending a bare date to a route that parses RFC-3339 is how a
 /// filter silently stops filtering.
 ///
 /// The cursor pair is a [ULID](https://github.com/ulid/spec), and `since_id`
@@ -105,7 +104,7 @@ pub struct Event {
     /// Per the SSE specification this persists: an event that sends no `id`
     /// line keeps the previous one, so this is `None` only until the server has
     /// sent a first id. That is exactly what makes it usable to resume a
-    /// dropped stream — alpaca-py discards it and yields only the data.
+    /// dropped stream, so it is surfaced rather than discarded.
     pub id: Option<String>,
     /// The event's type.
     ///
@@ -219,7 +218,7 @@ pub(crate) async fn subscribe(
 
     let mut request = http
         .get(url)
-        // alpaca-py's _get_sse_headers, verbatim.
+        // The four headers Alpaca's event streams expect on a subscription.
         .header(reqwest::header::CONNECTION, "keep-alive")
         .header(reqwest::header::CACHE_CONTROL, "no-cache")
         .header(reqwest::header::CONTENT_TYPE, "text/event-stream")

@@ -249,7 +249,8 @@ async fn trade_updates_arrive_typed() {
 
 #[tokio::test]
 async fn an_unknown_event_does_not_break_the_stream() {
-    // pydantic would reject an unfamiliar event; the catch-all keeps it usable.
+    // A stream that failed on an unfamiliar event would break the moment
+    // Alpaca added one; the catch-all keeps it usable.
     let (endpoint, _, _) = serve(Script::Send(vec![update("some_new_event")])).await;
 
     let stream = TradingStream::with_endpoint(credentials(), endpoint);

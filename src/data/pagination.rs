@@ -1,14 +1,12 @@
 //! The market data pagination loop.
 //!
-//! Ported from `RESTClient._get_marketdata`.
-//!
 //! Every historical endpoint answers with at most `page_limit` items and a
-//! `next_page_token`. alpaca-py walks the tokens and merges the pages into one
-//! map before returning, so callers never see a page; this does the same.
+//! `next_page_token`. The tokens are walked and the pages merged into one map
+//! before returning, so callers never see a page.
 //!
-//! Note this is *not* the broker API's `PaginationType`, which offers a lazy
-//! iterator mode. Market data has no such mode in alpaca-py, and inventing one
-//! here would be a different API rather than a port of this one.
+//! Note this is *not* the broker API's pagination: that one exposes the page
+//! boundary to the caller, because a broker route can page over more records
+//! than fit in memory.
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -68,7 +66,7 @@ pub(crate) struct MarketDataRequest<'a> {
 }
 
 impl<'a> MarketDataRequest<'a> {
-    /// A paginated request with alpaca-py's default page limit of 10,000.
+    /// A paginated request asking for the maximum page the API serves, 10,000.
     pub fn paged(path: &'a str) -> Self {
         Self {
             path,
@@ -109,7 +107,7 @@ impl<'a> MarketDataRequest<'a> {
 /// Fetches every page and merges them into one object.
 ///
 /// The `limit` in `query`, if present, is the caller's cap on total items across
-/// all pages, not per page — the same meaning alpaca-py gives it.
+/// all pages, not per page.
 pub(crate) async fn get_marketdata<Q: Serialize>(
     rest: &RestClient,
     request: &MarketDataRequest<'_>,
@@ -189,7 +187,8 @@ pub(crate) async fn get_marketdata<Q: Serialize>(
         }
 
         if actual_limit.is_some() {
-            // alpaca-py counts every accumulated item, across all keys.
+            // The cap counts every accumulated item, across all keys — one
+            // limit on the response, not one per symbol.
             total_items = lists
                 .values()
                 .map(|items| u32::try_from(items.len()).unwrap_or(u32::MAX))
@@ -204,9 +203,8 @@ pub(crate) async fn get_marketdata<Q: Serialize>(
         let Some(next) = next else { break };
 
         // A token we have already followed means the server is not advancing.
-        // alpaca-py loops forever here, accumulating pages until the process
-        // runs out of memory; stopping is strictly better than that, and a
-        // correctly behaving endpoint never hits this path.
+        // Following it again accumulates pages until the process runs out of
+        // memory; a correctly behaving endpoint never hits this path.
         if !seen_tokens.insert(next.clone()) {
             tracing::warn!(
                 path = request.path,

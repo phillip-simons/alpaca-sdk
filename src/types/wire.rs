@@ -5,7 +5,7 @@
 /// Alpaca introduces new enum values without a version bump, and an SDK that
 /// models them as a closed set rejects the whole payload the first time it meets
 /// one — a new order status breaking deserialization in production. That is what
-/// alpaca-py's `class X(str, Enum)` does. The generated `Unknown(String)` variant
+/// The generated `Unknown(String)` variant
 /// keeps the raw wire value instead, so an unrecognized status is inspectable
 /// rather than fatal.
 ///

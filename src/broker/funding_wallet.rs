@@ -11,7 +11,7 @@
 //! through [`RestClient::at_version`](crate::rest::RestClient::at_version) for
 //! that reason — the version is the thing this crate has been bitten by before.
 //!
-//! Not in alpaca-py, spec-derived, and unverified against a live response.
+//! Spec-derived, and unverified against a live response.
 
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;

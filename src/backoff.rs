@@ -3,8 +3,6 @@
 //! The jitter matters: Alpaca permits a single stream connection, so a fixed
 //! delay turns a stale connection being reaped into a tight reconnect/HTTP 429
 //! storm.
-//!
-//! Ported from `alpaca.common.utils.reconnect_delay`.
 
 use std::time::Duration;
 
@@ -60,7 +58,7 @@ mod tests {
     const MAX: Duration = DEFAULT_MAX_BACKOFF;
 
     #[test]
-    fn growth_curve_matches_alpaca_py() {
+    fn growth_curve_doubles_to_the_cap() {
         // 1s base, doubling, 30s cap. Values captured by running the Python
         // implementation, not derived by hand: the loop jumps straight to the cap
         // once the value reaches half the maximum, so 16 is followed by 30, not 32.

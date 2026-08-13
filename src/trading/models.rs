@@ -1,15 +1,13 @@
 //! Response models for the trading API.
 //!
-//! Ported from `alpaca/trading/models.py`.
-//!
 //! Field-for-field with the Python, with two systematic changes: money that
 //! arrives as a string is [`Decimal`] rather than `str`, and integers Alpaca
 //! sends inconsistently go through [`serde_util::int`].
 //!
-//! Unknown fields are ignored, matching pydantic's default. Alpaca returns
-//! fields absent from the Python models — `Asset` carries `last_price` and
-//! `last_close_pct_change`, orders carry `commission` — and rejecting those
-//! would break the client every time the API grows.
+//! Unknown fields are ignored rather than rejected. Alpaca adds fields without
+//! warning — `Asset` grew `last_price` and `last_close_pct_change`, orders carry
+//! a `commission` on the broker API — and failing on an unrecognised key would
+//! break every caller each time the API grows.
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use rust_decimal::Decimal;
@@ -35,8 +33,7 @@ pub struct Asset {
     pub id: Uuid,
     /// The asset class.
     ///
-    /// Sent as `class`, which is a reserved word in Python; alpaca-py uses a
-    /// pydantic alias for the same reason this uses a serde rename.
+    /// Sent on the wire as `class`, hence the rename.
     #[serde(rename = "class")]
     pub asset_class: AssetClass,
     /// The exchange the asset trades on.
@@ -242,8 +239,9 @@ pub struct Order {
     pub filled_avg_price: Option<Decimal>,
     /// The order class.
     ///
-    /// Alpaca omits this or sends `""` on some responses; both mean
-    /// [`OrderClass::Simple`], which alpaca-py patches in before validation.
+    /// Alpaca omits this or sends `""` on some responses, and both mean
+    /// [`OrderClass::Simple`] — the schema's own description says
+    /// `simple (or "")`.
     #[serde(default = "order_class_default", deserialize_with = "order_class")]
     pub order_class: OrderClass,
     /// Deprecated alias for [`Order::order_type`].
@@ -406,13 +404,13 @@ pub struct Clock {
 
 /// Market hours for a single trading day.
 ///
-/// The API sends every time as a bare string in eastern time, which alpaca-py
-/// combines with `date` into naive datetimes in its constructor; this does the
-/// same, so the fields are usable without the caller re-parsing them.
+/// The API sends every time as a bare string in eastern time. They are combined
+/// with `date` into datetimes here, so the fields are usable without the caller
+/// re-parsing them.
 ///
-/// The two session fields and `settlement_date` appear in real responses but in
-/// no alpaca-py model. They are optional here because older responses, and the
-/// captured fixtures, do not carry them.
+/// The two session fields and `settlement_date` appear in real responses and are
+/// optional here, because older responses — and the captured fixtures — do not
+/// carry them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Calendar {
     /// The trading day.
@@ -541,9 +539,8 @@ pub struct TradeActivity {
 /// An account activity, which is either a trade or something else.
 ///
 /// The account-activities endpoint returns a heterogeneous array whose element
-/// type is decided by `activity_type`. alpaca-py branches on
-/// `ActivityType.is_str_trade_activity` while parsing; this enum makes the
-/// distinction visible in the type.
+/// type is decided by `activity_type`. This enum makes that distinction visible
+/// in the type rather than leaving it to a runtime branch.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Activity {

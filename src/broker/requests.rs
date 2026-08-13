@@ -1,11 +1,8 @@
 //! Request bodies and filters unique to the broker API.
 //!
-//! Ported from `alpaca/broker/requests.py`.
-//!
 //! Routes that act on behalf of an account reuse the trading API's request
 //! types — an order submitted through `/trading/accounts/{id}/orders` takes the
-//! same body as one submitted directly — exactly as alpaca-py's broker module
-//! imports them from `alpaca.trading`. Only the types with no trading
+//! same body as one submitted directly. Only the types with no trading
 //! equivalent live here.
 
 use chrono::{DateTime, NaiveDate, Utc};
@@ -79,9 +76,9 @@ impl OrderRequest {
 
     /// Checks the rules Alpaca enforces on the order before it is sent.
     ///
-    /// Local currency orders are **not** restricted to market orders here.
-    /// alpaca-py rejects anything else, and [the LCT documentation][lct]
-    /// contradicts it: "Alpaca currently supports LCT trading for market,
+    /// Local currency orders are **not** restricted to market orders here, on
+    /// the strength of [the LCT documentation][lct]: "Alpaca currently supports
+    /// LCT trading for market,
     /// limit, stop & stop limit orders with a time in force=Day". That page
     /// also names the time-in-force constraint, which is deliberately not
     /// enforced either — it is a statement of what is supported today, and
@@ -133,8 +130,8 @@ pub struct CreateAccountRequest {
     pub enabled_assets: Option<Vec<AssetClass>>,
     /// The existing holder to attach this account to, for multi-live accounts.
     ///
-    /// Documented but absent from alpaca-py. When it is set, Alpaca takes the
-    /// holder's details from that account instead of `contact` and `identity`.
+    /// When it is set, Alpaca takes the holder's details from that account
+    /// instead of `contact` and `identity`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primary_account_holder_id: Option<String>,
 }
@@ -165,10 +162,10 @@ impl CreateAccountRequest {
 
     /// Checks the sub-fields Alpaca requires on a new account.
     ///
-    /// Taken from [the reference][createaccount], not from alpaca-py, whose
-    /// equivalent validator checks a different set: it requires `phone_number`,
-    /// which the reference does not, misses six fields that are required, and
-    /// silently drops two of its own checks to a duplicate key in a dict literal.
+    /// The required set is [the reference's][createaccount]. It is worth saying
+    /// where it came from: the obvious alternative source, another SDK's
+    /// validator, requires a field the reference does not and misses six that it
+    /// does.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] naming the first missing field.
@@ -274,10 +271,8 @@ pub struct UpdatableContact {
 
 /// Identity details on an account update.
 ///
-/// The field list is [the reference's][patchaccount]. alpaca-py's is smaller
-/// than its own docstring claims — the docstring promises `tax_id`,
-/// `tax_id_type` and the `country_of_*` fields, and the class does not declare
-/// them. The reference says they are updatable, so they are here.
+/// The field list is [the reference's][patchaccount], which includes `tax_id`,
+/// `tax_id_type` and the `country_of_*` fields.
 ///
 /// Documented as updatable but not yet modelled, because they need enums this
 /// crate does not generate: `marital_status`,
@@ -400,7 +395,7 @@ pub struct ListAccountsRequest {
     ///
     /// Sent as one comma-separated parameter. The reference types this as a
     /// single string rather than a list, so more than one value is untested
-    /// against the live API — alpaca-py models it as a list too.
+    /// against the live API.
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
@@ -428,8 +423,7 @@ pub struct ListAccountsRequest {
 ///
 /// Alpaca accepts two shapes here: bank details entered by hand, or a Plaid
 /// processor token. They are one Rust type rather than two so the client method
-/// takes one parameter, which is what alpaca-py's runtime `isinstance` check
-/// approximates.
+/// takes one parameter and the choice is checked at compile time.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum CreateACHRelationshipRequest {
@@ -539,8 +533,8 @@ impl CreateBankRequest {
     /// marks the address fields "Only for international banks, ie if
     /// `bank_code_type` = BIC", so setting them on a domestic bank is an error.
     /// It also marks all five *optional*, so an international bank missing one
-    /// is **not** rejected here — alpaca-py requires all five, which would
-    /// refuse a request Alpaca accepts.
+    /// is **not** rejected here: requiring them would refuse a request Alpaca
+    /// accepts.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if a domestic (ABA) bank carries any
@@ -592,10 +586,9 @@ pub struct BankAddress {
 
 /// The body that moves money into or out of an account.
 ///
-/// alpaca-py has two classes here, one per transfer type, each pinning
-/// `transfer_type` with a validator that rejects the other value. An enum makes
-/// the same guarantee without a runtime check: an ACH transfer cannot carry a
-/// `bank_id`, and a wire cannot carry a `relationship_id`.
+/// The two transfer types take disjoint fields, and an enum makes that a
+/// compile-time guarantee rather than a runtime check: an ACH transfer cannot
+/// carry a `bank_id`, and a wire cannot carry a `relationship_id`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum CreateTransferRequest {
@@ -727,8 +720,8 @@ pub struct GetTransfersRequest {
 ///
 /// Cash and security journals share a shape but not a set of fields: a cash
 /// journal carries an `amount` and no `symbol`/`qty`, a security journal the
-/// reverse. [`validate`](Self::validate) enforces that, as alpaca-py's model
-/// validator does. Build one with [`cash`](Self::cash) or
+/// reverse. [`validate`](Self::validate) enforces that. Build one with
+/// [`cash`](Self::cash) or
 /// [`security`](Self::security) and the right fields are set for you.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreateJournalRequest {
@@ -1058,9 +1051,8 @@ impl GetTradeDocumentsRequest {
 /// One document in an upload.
 ///
 /// W-8BEN forms take a different shape from every other document — they may be
-/// sent as structured fields rather than an encoded file — and alpaca-py raises
-/// if either class is used for the other's document type. The enum makes that
-/// mix-up unrepresentable.
+/// sent as structured fields rather than an encoded file. The enum makes using
+/// one shape for the other's document type unrepresentable.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum UploadDocument {
@@ -1118,8 +1110,7 @@ impl UploadDocumentRequest {
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if the type or sub type says W-8BEN;
-    /// those go through [`UploadW8BenDocumentRequest`], which alpaca-py also
-    /// insists on.
+    /// those go through [`UploadW8BenDocumentRequest`].
     pub fn validate(&self) -> Result<()> {
         if self.document_type == DocumentType::W8ben
             || self.document_sub_type == Some(UploadDocumentSubType::FormW8Ben)
@@ -1411,8 +1402,8 @@ pub struct GetRunsRequest {
     pub limit: Option<u32>,
     /// The page to fetch.
     ///
-    /// alpaca-py leaves this off `GetRunsRequest` and then sets it on the dict
-    /// anyway while paging, so the field has to exist here.
+    /// The reference does not list it on this route, but the route pages, and
+    /// without it a caller cannot reach the second page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page_token: Option<String>,
 }
@@ -1423,9 +1414,9 @@ pub struct GetRunsRequest {
 /// [`activity_types`](Self::activity_types) cannot both be set, which
 /// [`validate`](Self::validate) enforces.
 ///
-/// alpaca-py also rejects `date` alongside `after` or `until`. That rule is
-/// **not** reproduced: nothing in the reference or the spec says it, and this
-/// crate does not refuse requests on hearsay. See `ROADMAP.md`.
+/// `date` alongside `after` or `until` is **not** rejected. It is a plausible
+/// rule and nothing in the reference or the spec states it, and this crate does
+/// not refuse requests on a guess. See `ROADMAP.md`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GetAccountActivitiesRequest {
     /// Only this account's activities.
@@ -1486,10 +1477,10 @@ impl GetAccountActivitiesRequest {
     /// with `activity_types` parameter". That is a documented rule, so it is
     /// enforced.
     ///
-    /// alpaca-py additionally rejects `date` combined with `after` or `until`.
-    /// The reference documents no such rule, so this does not enforce it —
-    /// refusing a request Alpaca would accept is the worse of the two failures.
-    /// See `ROADMAP.md` on how the client-side rules were sorted.
+    /// `date` combined with `after` or `until` is a plausible conflict that the
+    /// reference documents no rule against, so it is not enforced — refusing a
+    /// request Alpaca would accept is the worse of the two failures. See
+    /// `ROADMAP.md` on how the client-side rules were sorted.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if both
@@ -1520,8 +1511,8 @@ impl GetAccountActivitiesRequest {
 
 /// The body of an option exercise request.
 ///
-/// Both fields of alpaca-py's `CreateOptionExerciseRequest` are optional, and
-/// it drops unset ones, so an exercise with no commission posts `{}`.
+/// Both fields are optional and unset ones are dropped, so an exercise with no
+/// commission posts `{}`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreateOptionExerciseRequest {
     /// The commission to charge the end user, in dollars.

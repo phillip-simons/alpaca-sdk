@@ -9,7 +9,7 @@
 //! equivalent is `v2`, so all three versions of the same idea are live at once —
 //! which is exactly why the version is written at the call site.
 //!
-//! Not in alpaca-py, and no captured payload exists.
+//! No captured payload exists for this route.
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};

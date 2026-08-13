@@ -1,7 +1,5 @@
 //! The trade update websocket.
 //!
-//! Ported from `alpaca/trading/stream.py`.
-//!
 //! Same reconnect discipline as the market data stream, different protocol. Four
 //! things differ on the wire, and all four are easy to get wrong by assuming the
 //! streams match:
@@ -106,7 +104,7 @@ impl TradingStream {
 
     /// Reconnect after this long without a trade update.
     ///
-    /// Off by default, matching alpaca-py. An account that simply is not trading
+    /// Off by default. An account that simply is not trading
     /// is silent for good reasons, so reconnecting on a timer would be wrong;
     /// set this only if updates are expected continuously.
     ///

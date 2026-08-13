@@ -1,11 +1,8 @@
 //! Market data models.
 //!
-//! Ported from `alpaca/data/models/`.
-//!
-//! The wire format uses single-letter keys — `t`, `o`, `h`, `l`, `c`, `v` — which
-//! alpaca-py translates through the lookup tables in `alpaca/data/mappings.py`.
-//! Here they are `#[serde(rename)]` attributes, so the whole mapping layer
-//! disappears.
+//! The wire format uses single-letter keys — `t`, `o`, `h`, `l`, `c`, `v` —
+//! which are `#[serde(rename)]` attributes here, so there is no mapping layer to
+//! keep in step with the models.
 //!
 //! Prices and sizes stay `f64` rather than becoming [`rust_decimal::Decimal`]:
 //! market data arrives as JSON numbers and is already approximate on the wire,
@@ -14,9 +11,9 @@
 //! # Symbols
 //!
 //! Responses key data by symbol at the level above the record, so the records
-//! themselves carry no symbol. alpaca-py passes it into each model's
-//! constructor; here the collection types fill it in after deserializing. A
-//! record deserialized on its own therefore has an empty `symbol`.
+//! themselves carry no symbol: the collection types fill it in after
+//! deserializing. A record deserialized on its own therefore has an empty
+//! `symbol`, which is why `ToFrame` takes the map key over the field.
 
 use std::collections::HashMap;
 
@@ -501,9 +498,8 @@ pub struct Movers {
 
 /// Multi-symbol data keyed by symbol.
 ///
-/// alpaca-py wraps these in `BarSet`, `QuoteSet`, and `TradeSet`, which support
-/// `set[symbol]` lookup and a `.df` property. In Rust the map is the natural
-/// shape, and the `polars` feature adds `.df()` through the
+/// A plain map is the natural shape, and the `polars` feature adds `.df()`
+/// through the
 /// [`ToFrame`](crate::data::ToFrame) extension trait — an alias cannot take an
 /// inherent `impl`, so the method arrives with a `use` rather than for free.
 pub type BarSet = HashMap<String, Vec<Bar>>;

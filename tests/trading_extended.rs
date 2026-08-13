@@ -1,6 +1,6 @@
-//! The trading routes alpaca-py does not implement: locates, tokenization,
-//! crypto funding, watchlists by name, the per-market calendar, activities of
-//! one type, and do-not-exercise.
+//! The trading routes with no captured payload behind them: locates,
+//! tokenization, crypto funding, watchlists by name, the per-market calendar,
+//! activities of one type, and do-not-exercise.
 //!
 //! None of these has a captured payload in any SDK, so the bodies here are the
 //! published reference's own examples. That is weaker evidence than

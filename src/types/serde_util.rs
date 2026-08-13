@@ -9,9 +9,8 @@ use serde::{Deserialize, Deserializer, de};
 ///
 /// Multi-leg order responses set `asset_id`, `symbol`, `asset_class`, and `side`
 /// to `""` rather than omitting them or sending `null`, because those fields
-/// describe a single leg and an mleg order has several. alpaca-py rewrites the
-/// empty strings to `None` in `Order.__init__` before pydantic sees them; this
-/// helper does the same at the field level.
+/// describe a single leg and an mleg order has several. An empty string is not a
+/// value, so this reads it as absent.
 ///
 /// Works for any target that parses from a string, which covers every field
 /// affected: [`uuid::Uuid`], [`String`], and the generated wire enums.
@@ -35,9 +34,8 @@ where
 /// Serde codec for integers Alpaca sends inconsistently as numbers or strings.
 ///
 /// The trading account endpoint returns `"options_approved_level": "1"` but
-/// `"daytrade_count": 0` in the same payload. alpaca-py types both `int` and
-/// relies on pydantic coercing the string; a plain `i64` here would reject the
-/// response outright.
+/// `"daytrade_count": 0` in the same payload. A plain `i64` rejects the response
+/// outright, so both forms are accepted.
 pub mod int {
     use std::fmt;
 
@@ -234,7 +232,7 @@ where
 /// Deserializes a field that may be a single string or a list of them.
 ///
 /// Trade and quote condition codes come back as a list for stocks and as a bare
-/// string for crypto. alpaca-py types this `Union[List[str], str]` and leaves
+/// string for crypto. This normalizes both to a list, rather than leaving
 /// the caller to branch; normalizing to a list here means they do not have to.
 ///
 /// # Errors

@@ -35,8 +35,8 @@ fn known_values_round_trip_through_json() {
 
 #[test]
 fn unknown_values_deserialize_instead_of_failing() {
-    // pydantic raises ValidationError here. Alpaca does add enum values, so a
-    // payload carrying one must stay usable.
+    // Alpaca adds enum values without warning, so a payload carrying one must
+    // stay usable rather than failing the whole decode.
     let decoded: Envelope = serde_json::from_str(r#"{"side":"short_exempt"}"#).unwrap();
 
     assert_eq!(decoded.side, Side::Unknown("short_exempt".to_owned()));

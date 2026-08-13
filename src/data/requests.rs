@@ -1,6 +1,4 @@
 //! Request types for the market data API.
-//!
-//! Ported from `alpaca/data/requests.py`.
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
@@ -15,8 +13,8 @@ use crate::types::{ContractType, Sort, SupportedCurrencies};
 
 /// One symbol or several.
 ///
-/// alpaca-py types this `Union[str, List[str]]` and renames it to `symbols`,
-/// comma-joined, in `NonEmptyRequest::to_request_fields`.
+/// Sent as one comma-separated `symbols` parameter either way, which is what
+/// the market data routes expect.
 ///
 /// ```
 /// # use alpaca_sdk::data::Symbols;
@@ -714,7 +712,7 @@ impl MostActivesRequest {
 
 impl Default for MostActivesRequest {
     fn default() -> Self {
-        // alpaca-py defaults to the top 10 by volume.
+        // The route's own default is the top 10 by volume.
         Self {
             top: 10,
             by: MostActivesBy::Volume,
@@ -856,7 +854,7 @@ pub struct CorporateActionsRequest {
 }
 
 impl CorporateActionsRequest {
-    /// A request with alpaca-py's defaults: 1,000 items, ascending.
+    /// A request with the route's own defaults: 1,000 items, ascending.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -910,8 +908,8 @@ mod tests {
         let request = TimeseriesRequest::new(["AAPL", "SPY"]);
         let json = serde_json::to_value(&request).unwrap();
 
-        // symbol_or_symbols is renamed to `symbols` and joined, which is what
-        // NonEmptyRequest::to_request_fields does in alpaca-py.
+        // symbol_or_symbols is renamed to `symbols` and comma-joined, and the
+        // unset fields are absent from the query rather than sent empty.
         assert_eq!(json["symbols"], serde_json::json!(["AAPL", "SPY"]));
         assert_eq!(request.symbol_or_symbols.to_string(), "AAPL,SPY");
     }
@@ -963,7 +961,7 @@ mod tests {
     }
 
     #[test]
-    fn corporate_actions_defaults_match_alpaca_py() {
+    fn corporate_actions_defaults_are_a_thousand_ascending() {
         let request = CorporateActionsRequest::new();
         assert_eq!(request.limit, Some(1000));
         assert_eq!(request.sort, Some(Sort::Asc));

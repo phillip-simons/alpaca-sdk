@@ -1,7 +1,5 @@
 //! The [historical market data](https://docs.alpaca.markets/us/docs/about-market-data-api) clients.
 //!
-//! Ported from `alpaca/data/historical/`.
-//!
 //! Six clients rather than one, because each targets a different API version:
 //! stocks on `v2`, crypto on `v1beta3`, options, news and the screener on
 //! `v1beta1`, and corporate actions on `v1`.
@@ -235,7 +233,7 @@ impl StockHistoricalDataClient {
         request: &StockSnapshotRequest,
     ) -> Result<HashMap<String, Snapshot>> {
         // The only endpoint that returns symbols at the top level with no
-        // wrapping key, which alpaca-py flags as `no_sub_key=True`.
+        // wrapping key, so there is no `bars`/`quotes` layer to unwrap.
         let merged = get_marketdata(
             &self.rest,
             &MarketDataRequest::latest("/stocks/snapshots").whole_body(),
@@ -474,8 +472,7 @@ impl StockHistoricalDataClient {
 /// Historical market data for crypto.
 ///
 /// These endpoints serve unauthenticated requests, so [`CryptoHistoricalDataClient::new`]
-/// takes no credentials. alpaca-py overrides `_validate_credentials` on this
-/// client for the same reason.
+/// takes no credentials.
 #[derive(Debug, Clone)]
 pub struct CryptoHistoricalDataClient {
     rest: RestClient,
@@ -789,7 +786,7 @@ impl OptionHistoricalDataClient {
 
 /// Foreign exchange rates.
 ///
-/// Not in alpaca-py, and not verified against a live response: the routes answer
+/// Not verified against a live response: the routes answer
 /// `403 forbidden: insufficient grants` on a plan that reaches SIP, so forex is
 /// a per-product entitlement rather than part of a data plan. The models follow
 /// the published reference; the first real payload decides whether they are
@@ -977,8 +974,8 @@ impl NewsClient {
         Ok(NewsSet {
             news: articles,
             // The merge loop follows every page, so nothing is left to resume.
-            // alpaca-py's NewsSet exposes this field but populates it the same
-            // way: it is always None once pagination has run to completion.
+            // Always None once pagination has run to completion; the field
+            // exists for the single-page shape.
             next_page_token: None,
         })
     }

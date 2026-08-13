@@ -165,7 +165,7 @@ async fn get_order_by_id_uses_the_id_in_the_path() {
 async fn get_order_by_client_id_uses_the_colon_route() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        // alpaca-py targets "/orders:by_client_order_id", a colon in the path.
+        // A colon in the path, not a sub-resource: "/orders:by_client_order_id".
         .and(path("/v2/orders:by_client_order_id"))
         .and(query_param("client_order_id", "my-order-1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(fixture(
@@ -342,7 +342,7 @@ async fn close_position_sends_qty_or_percentage() {
 
 #[tokio::test]
 async fn exercise_options_position_tolerates_a_non_json_body() {
-    // alpaca-py's own test mocks this route with a bare string rather than JSON.
+    // This route answers with a bare string rather than JSON.
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v2/positions/AAPL240119C00150000/exercise"))
@@ -615,8 +615,7 @@ async fn get_option_contracts_joins_underlying_symbols() {
     client(&server).get_option_contracts(&filter).await.unwrap();
 }
 
-/// The Penny Program filter, which the reference documents and alpaca-py does
-/// not have. `false` is as meaningful as `true` here — it selects the contracts
+/// The Penny Program filter. `false` is as meaningful as `true` here — it selects the contracts
 /// outside the programme — so it must reach the wire rather than be skipped as
 /// a default.
 #[tokio::test]

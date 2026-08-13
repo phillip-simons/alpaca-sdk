@@ -8,11 +8,9 @@ use uuid::Uuid;
 
 /// An asset identified by ticker symbol or by Alpaca's UUID.
 ///
-/// Several endpoints accept either form in the same path segment. alpaca-py types
-/// this as `Union[UUID, str]` and checks it at runtime in
-/// `validate_symbol_or_asset_id` and `validate_symbol_or_contract_id`; here the
-/// two cases are variants, so the check happens at the call site and cannot be
-/// skipped.
+/// Several endpoints accept either form in the same path segment. The two cases
+/// are variants rather than one string with a runtime check, so the caller says
+/// which they meant and the check cannot be skipped.
 ///
 /// ```
 /// # use alpaca_sdk::types::AssetIdent;
@@ -113,7 +111,7 @@ mod tests {
     }
 
     #[test]
-    fn uuid_strings_are_upcast_like_alpaca_py_does() {
+    fn a_uuid_shaped_string_is_parsed_as_an_id_not_a_symbol() {
         let ident = AssetIdent::from(UUID_STR);
 
         assert_eq!(ident.id(), Some(Uuid::parse_str(UUID_STR).unwrap()));

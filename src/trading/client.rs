@@ -1,6 +1,4 @@
 //! The [trading API](https://docs.alpaca.markets/us/docs/trading-api) client.
-//!
-//! Ported from `alpaca/trading/client.py`.
 
 use reqwest::Method;
 use uuid::Uuid;
@@ -81,7 +79,8 @@ impl TradingClient {
 
     /// The underlying transport, for routes this client does not wrap.
     ///
-    /// This is the typed replacement for alpaca-py's `raw_data=True`.
+    /// The transport is public and returns the body undecoded, so a route this
+    /// crate has not wrapped is still one call away.
     #[must_use]
     pub fn rest(&self) -> &RestClient {
         &self.rest
@@ -514,8 +513,7 @@ impl TradingClient {
 
     /// Declines to exercise an in-the-money option position at expiry.
     ///
-    /// Answers `204 No Content`, so there is nothing to return. Not in
-    /// alpaca-py.
+    /// Answers `204 No Content`, so there is nothing to return.
     ///
     /// # Errors
     /// Propagates transport and API failures.

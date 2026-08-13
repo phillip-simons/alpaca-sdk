@@ -1,17 +1,11 @@
 //! The [live market data](https://docs.alpaca.markets/us/docs/streaming-market-data) websocket.
 //!
-//! Ported from `alpaca/data/live/`.
-//!
 //! # Shape
 //!
-//! alpaca-py registers an async callback per symbol per channel and dispatches
-//! internally. Here the connection is a [`Stream`] of [`StreamMessage`], which
-//! is the idiomatic Rust equivalent, gives the caller backpressure, and lets
-//! them dispatch however they like — including into a handler map, if they want
-//! alpaca-py's shape back.
-//!
-//! Everything below the surface is a faithful port: the handshake, the subscribe
-//! payload, the staleness clock, and the reconnect rules.
+//! The connection is a [`Stream`] of [`StreamMessage`] rather than a set of
+//! registered callbacks. That gives the caller backpressure — a slow consumer
+//! slows the read rather than queueing without bound — and lets them dispatch
+//! however they like, including into a handler map.
 
 mod messages;
 mod streams;
@@ -37,11 +31,10 @@ use crate::error::{Error, Result};
 
 /// Largest subscribe payload sent in one websocket message.
 ///
-/// alpaca-py slices the encoded payload into 32 KiB fragments of a single
-/// websocket message. `tokio-tungstenite` does not expose fragmented sends, so
-/// oversized subscriptions are split into several subscribe messages instead —
-/// subscribing is additive, so the server ends in the same state, and neither
-/// approach puts a frame larger than this on the wire.
+/// A subscription larger than this is split across several subscribe messages
+/// rather than fragmented into one. Subscribing is additive, so the server ends
+/// in the same state either way, and neither approach puts a frame larger than
+/// this on the wire.
 const MAX_FRAME_SIZE: usize = 32_768;
 
 /// How long to wait for a frame before re-checking the staleness clock.
@@ -55,9 +48,9 @@ pub struct StreamConfig {
     /// How long to go without market data before treating the connection as
     /// stale and reconnecting.
     ///
-    /// `None` matches alpaca-py's default. A legitimately quiet subscription —
-    /// news, or infrequent bars — would otherwise reconnect on a timer. Set it
-    /// for subscriptions expected to be busy.
+    /// `None` by default. A legitimately quiet subscription — news, or
+    /// infrequent bars — would otherwise reconnect on a timer. Set it only for
+    /// subscriptions expected to be busy.
     pub data_timeout: Option<Duration>,
     /// Base delay for the first reconnect attempt.
     pub min_backoff: Duration,
@@ -145,8 +138,7 @@ impl SubscriptionSet {
     ///
     /// Corrections and cancel errors do not count: they arrive with the trades
     /// subscription, so a connection carrying only those would never receive
-    /// anything. alpaca-py excludes them from the same check before it opens
-    /// the socket.
+    /// anything, and the socket should not be opened for it.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         !self
@@ -228,9 +220,9 @@ enum Outcome {
 
 /// A live market data connection.
 ///
-/// Subscribe before calling [`DataStream::run`]; the socket is not opened until
-/// something is subscribed, matching alpaca-py, which spins waiting for the
-/// first subscription before connecting.
+/// Subscribe before calling [`DataStream::run`]: the socket is not opened until
+/// something is subscribed, because Alpaca permits one connection per account
+/// and an empty one would hold that slot for nothing.
 pub struct DataStream {
     config: StreamConfig,
     credentials: Credentials,
@@ -414,8 +406,8 @@ fn is_fatal(error: &Error) -> bool {
     }
 }
 
-/// alpaca-py stops the stream permanently on this one, because retrying an
-/// entitlement failure never succeeds and burns the connection slot.
+/// Retrying an entitlement failure never succeeds and burns the single
+/// connection Alpaca allows per account, so these end the stream.
 fn is_fatal_message(message: &str) -> bool {
     message.contains("insufficient subscription") || message.contains("auth failed")
 }
@@ -736,9 +728,9 @@ mod tests {
 
     #[test]
     fn a_large_subscription_splits_into_several_messages() {
-        // alpaca-py fragments one message at 32 KiB; splitting into several
-        // additive subscribes reaches the same server state without needing
-        // fragmented sends.
+        // Splitting into several additive subscribes reaches the same server
+        // state without needing fragmented sends, which tokio-tungstenite does
+        // not expose.
         let mut set = SubscriptionSet::default();
         let symbols: Vec<String> = (0..8_000).map(|i| format!("SYM{i:05}")).collect();
         set.add(Channel::Trades, symbols.clone());
@@ -844,7 +836,7 @@ mod tests {
 
     #[test]
     fn an_unmodeled_frame_keeps_its_payload() {
-        // LULD has no model in alpaca-py either; it hands back the raw dict.
+        // LULD has no captured payload, so the raw frame is what comes back.
         let frames = serde_json::json!([{"T": "l", "S": "AAPL", "u": 10.0, "d": 5.0}]);
         let payload = serde_json::to_vec(&frames).unwrap();
 
