@@ -199,3 +199,45 @@ fn every_stream_can_be_pointed_somewhere_else() {
     news.subscribe_news(["*"]);
     assert!(!news.subscriptions().is_empty());
 }
+
+// ------------------------------------------------------------ feed guards
+
+/// A `wire_enum!`'s `Unknown(String)` variant is publicly constructible, so an
+/// unrecognised feed name would otherwise be interpolated straight into the
+/// websocket endpoint URL — the same hazard the REST path encoder exists for.
+/// There is no live stream behind a feed this crate does not know, so refusing
+/// loses nothing.
+#[test]
+fn an_unknown_feed_is_refused_rather_than_put_in_the_endpoint() {
+    let creds = || Credentials::new("key", "secret").unwrap();
+
+    let crypto = CryptoDataStream::new(creds(), CryptoFeed::from("../../v2/account"));
+    assert!(
+        matches!(crypto, Err(alpaca_sdk::Error::InvalidRequest(_))),
+        "an unknown crypto feed must not reach the endpoint URL"
+    );
+
+    let options = OptionDataStream::new(creds(), OptionsFeed::from("../../v2/account"));
+    assert!(
+        matches!(options, Err(alpaca_sdk::Error::InvalidRequest(_))),
+        "an unknown options feed must not reach the endpoint URL"
+    );
+
+    // And a stock feed that is known but has no live stream is refused too.
+    assert!(StockDataStream::new(creds(), DataFeed::Otc).is_err());
+}
+
+/// The known feeds still build. This is the half that would catch
+/// `known_feed` over-refusing, and — with the test above — pins that the
+/// `is_unknown` dispatch inside the `as_unknown!` macro resolves to the
+/// inherent method rather than recursing into itself.
+#[test]
+fn the_known_feeds_still_construct() {
+    let creds = || Credentials::new("key", "secret").unwrap();
+
+    assert!(CryptoDataStream::new(creds(), CryptoFeed::Us).is_ok());
+    assert!(OptionDataStream::new(creds(), OptionsFeed::Opra).is_ok());
+    assert!(OptionDataStream::new(creds(), OptionsFeed::Indicative).is_ok());
+    assert!(StockDataStream::new(creds(), DataFeed::Iex).is_ok());
+    assert!(StockDataStream::new(creds(), DataFeed::Sip).is_ok());
+}

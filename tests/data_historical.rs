@@ -734,14 +734,26 @@ fn dividend(symbol: &str, ex_date: &str) -> serde_json::Value {
 }
 
 /// `limit` caps the total across all pages, and the corporate-actions endpoint
-/// serves 1,000 per page — so a default of 1,000 stopped the walk after page
-/// one and threw away the `next_page_token`, silently truncating a year of
-/// dividends with no error.
+/// serves 1,000 per page — so a default of 1,000 filled the cap with page one
+/// and ended the walk there, discarding a `next_page_token` the request type has
+/// no field to send back.
+///
+/// Page one therefore has to be **full**. An earlier version of this test served
+/// a single dividend on page one, which left 999 of the cap unspent and followed
+/// the token whatever the default was — so it passed against the bug it was
+/// named for.
 #[tokio::test]
 async fn corporate_actions_walk_past_the_first_full_page_by_default() {
+    // The endpoint's own page size, and the value the default `limit` used to be.
+    const PAGE: usize = 1000;
+
+    let full_page: Vec<serde_json::Value> = (0..PAGE)
+        .map(|i| dividend(&format!("SYM{i}"), "2024-01-02"))
+        .collect();
+
     let server = MockServer::start().await;
 
-    // Page one: full, and pointing at a second page.
+    // Page two, reached only if the walk did not stop at the cap.
     Mock::given(method("GET"))
         .and(path("/v1/corporate-actions"))
         .and(query_param("page_token", "page2"))
@@ -756,7 +768,7 @@ async fn corporate_actions_walk_past_the_first_full_page_by_default() {
     Mock::given(method("GET"))
         .and(path("/v1/corporate-actions"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "corporate_actions": {"cash_dividends": [dividend("AAPL", "2024-01-02")]},
+            "corporate_actions": {"cash_dividends": full_page},
             "next_page_token": "page2"
         })))
         .expect(1)
@@ -772,8 +784,8 @@ async fn corporate_actions_walk_past_the_first_full_page_by_default() {
 
     assert_eq!(
         actions.cash_dividends.len(),
-        2,
-        "the second page was not fetched: {actions:?}"
+        PAGE + 1,
+        "the second page was not fetched: the walk stopped at the first full page"
     );
 }
 

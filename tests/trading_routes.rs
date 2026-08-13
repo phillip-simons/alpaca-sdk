@@ -937,6 +937,11 @@ async fn get_all_orders_respects_max_items() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/v2/orders"))
+        // The cap is also sent as `limit`, so a small `max_items` does not pull
+        // a full 500-order page off the wire to hand back ten. Without this
+        // matcher the mock answers whatever it is asked for, and deleting the
+        // narrowing would leave the test green.
+        .and(query_param("limit", "10"))
         .respond_with(ResponseTemplate::new(200).set_body_json(page))
         // One request: the cap is reached inside the first page.
         .expect(1)

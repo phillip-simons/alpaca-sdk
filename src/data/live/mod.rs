@@ -70,7 +70,13 @@ pub struct StreamConfig {
     /// `None` by default. A legitimately quiet subscription — news, or
     /// infrequent bars — would otherwise reconnect on a timer. Set it only for
     /// subscriptions expected to be busy.
-    pub data_timeout: Option<Duration>,
+    ///
+    /// Private, and set through [`StreamConfig::data_timeout`], for the same
+    /// reason as the two backoff knobs: a validator that a field assignment can
+    /// step around is not a validator. Zero here makes the staleness deadline
+    /// elapse on the first pass of every session, so each connection reconnects
+    /// immediately.
+    data_timeout: Option<Duration>,
     /// Base delay for the first reconnect attempt.
     ///
     /// Private, and set through [`StreamConfig::backoff`], because zero is a
@@ -147,6 +153,12 @@ impl StreamConfig {
         self.min_backoff = min;
         self.max_backoff = max;
         Ok(self)
+    }
+
+    /// How long the stream tolerates silence before reconnecting.
+    #[must_use]
+    pub fn data_timeout_after(&self) -> Option<Duration> {
+        self.data_timeout
     }
 
     /// The base delay for the first reconnect attempt.
