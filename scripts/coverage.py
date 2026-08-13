@@ -12,6 +12,16 @@ crate targets are set per client and per stream, and reconstructing them
 statically would report noise. Both sides of every match are printed so a
 version mismatch is visible rather than assumed away.
 
+Routes the crate deliberately does not implement live in `SKIP` below, with the
+reason. Without that list the report can never converge: a route we have decided
+against looks exactly like one nobody has got to yet, and "not implemented"
+never reaches zero. A gap with an entry in `SKIP` is a decision; a gap without
+one is work.
+
+If `specs/reference.json` is present — `just reference` writes it — every route
+is annotated with what Alpaca's published reference says about it. The specs
+list what exists; only the reference says what is still current.
+
 Usage:
     python3 scripts/coverage.py <specs-dir> [--out COVERAGE.md]
 """
@@ -19,12 +29,33 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import pathlib
 import re
 import sys
 from collections import defaultdict
 
 METHODS = {"get", "post", "put", "patch", "delete", "head", "options"}
+
+# Spec routes this crate will not implement, and why. Keyed by (method, path)
+# exactly as the spec writes it, so a spec revision that moves a path makes the
+# entry stop matching and the route reappear as a gap — which is the correct
+# failure: the decision was made about a route at a path.
+SKIP: dict[tuple[str, str], str] = {
+    ("get", "/v1/events/transfers/status"): (
+        "Legacy, and closed to new broker partners. The crate calls "
+        "`/v2/events/funding/status`, which covers banks and wallets too. "
+        "Migrated in Phase 6.5; see ROADMAP.md."
+    ),
+    ("post", "/v2/wallets/transfers"): (
+        "Deprecated 2026-07-09, sunset 2026-10-09, and the reference's own "
+        "replacement is the Alpaca web application rather than another route. "
+        "The read side of crypto funding is implemented; only the withdrawal "
+        "is skipped. The broker equivalent "
+        "(`POST /v1/accounts/{account_id}/wallets/transfers`) is not "
+        "deprecated and is implemented."
+    ),
+}
 
 # Version segments Alpaca uses. Stripped from both sides before matching.
 VERSION = re.compile(r"^/(v\d+(?:beta\d*)?)(?=/)")
@@ -133,6 +164,33 @@ def crate_routes(src: pathlib.Path) -> dict[tuple[str, str], list[str]]:
     return routes
 
 
+def reference_index(path: pathlib.Path) -> dict[tuple[str, str], list[dict]]:
+    """What the published reference says, keyed the same way the specs are.
+
+    Absent when `just reference` has not been run; the report degrades to the
+    specs alone rather than failing.
+    """
+    if not path.is_file():
+        return {}
+    index: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for row in json.loads(path.read_text()):
+        index[(row["method"], normalize(row["path"]))].append(row)
+    return index
+
+
+def flagged(reference: dict[tuple[str, str], list[dict]], key: tuple[str, str]) -> str:
+    """A short note if the reference has flagged any page for this route."""
+    notes = []
+    for row in reference.get(key, []):
+        if row["sunset"]:
+            notes.append(f"sunset {row['sunset']}")
+        elif row["deprecated"]:
+            notes.append("deprecated")
+        elif row["legacy"]:
+            notes.append("legacy")
+    return f" — reference: {', '.join(sorted(set(notes)))}" if notes else ""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("specs", type=pathlib.Path)
@@ -152,6 +210,7 @@ def main() -> int:
     routes = crate_routes(args.src)
     implemented = set(routes)
     matched: set[tuple[str, str]] = set()
+    reference = reference_index(args.specs / "reference.json")
 
     lines = [
         "# Route coverage",
@@ -164,13 +223,24 @@ def main() -> int:
         "version. The event streams are the known case where that distinction bit:",
         "see ROADMAP.md.",
         "",
+        "**Not implemented** is work outstanding. **Deliberately skipped** is a",
+        "decision, recorded with its reason in `SKIP` in the script — a route we",
+        "have chosen against must not keep reading as a gap.",
+        "",
     ]
+    if not reference:
+        lines += [
+            "> `specs/reference.json` is absent, so nothing here is annotated with",
+            "> what Alpaca's published reference says. Run `just reference`.",
+            "",
+        ]
 
     totals = []
     rotting: list[tuple[str, str]] = []
+    all_skipped: list[tuple[str, str, str]] = []
     for surface in surfaces:
         operations, deprecated = spec_operations(args.specs / f"{surface}.yaml")
-        covered, gaps = [], []
+        covered, gaps, skipped = [], [], []
         for method, path in sorted(operations, key=lambda o: (o[1], o[0])):
             key = (method, normalize(path))
             if key in implemented:
@@ -178,24 +248,25 @@ def main() -> int:
                 covered.append((method, path))
                 if (method, path) in deprecated:
                     rotting.append((method, path))
+            elif (method, path) in SKIP:
+                skipped.append((method, path))
+                all_skipped.append((surface, method, path))
             else:
                 gaps.append((method, path))
 
-        totals.append((surface, len(covered), len(operations)))
+        totals.append((surface, len(covered), len(operations), len(skipped)))
         pct = 100 * len(covered) // len(operations) if operations else 0
-        lines += [
-            f"## {surface} — {len(covered)}/{len(operations)} ({pct}%)",
-            "",
-            "### Not implemented",
-            "",
-        ]
+        heading = f"## {surface} — {len(covered)}/{len(operations)} ({pct}%)"
+        if skipped:
+            heading += f", {len(skipped)} deliberately skipped"
+        lines += [heading, "", "### Not implemented", ""]
         if gaps:
             group: dict[str, list[str]] = defaultdict(list)
             for method, path in gaps:
                 # Group by the first meaningful segment, so related gaps sit together.
                 stripped = VERSION.sub("", path)
                 group[stripped.split("/")[1] if "/" in stripped[1:] else stripped].append(
-                    f"`{method.upper():6}` `{path}`"
+                    f"`{method.upper():6}` `{path}`{flagged(reference, (method, normalize(path)))}"
                 )
             for head in sorted(group):
                 lines.append(f"**{head}**")
@@ -203,6 +274,20 @@ def main() -> int:
                 lines.append("")
         else:
             lines += ["Nothing.", ""]
+
+    lines += ["## Deliberately skipped", ""]
+    if all_skipped:
+        lines += [
+            "Routes the spec documents that this crate will not call. Each reason",
+            "lives in `SKIP` in `scripts/coverage.py`, so the decision is in the",
+            "same place as the check.",
+            "",
+        ]
+        for surface, method, path in all_skipped:
+            lines += [f"- `{method.upper():6}` `{path}` ({surface})", f"  - {SKIP[(method, path)]}"]
+        lines.append("")
+    else:
+        lines += ["Nothing.", ""]
 
     lines += ["## Implemented, and marked deprecated by the spec", ""]
     if rotting:
@@ -212,7 +297,9 @@ def main() -> int:
             "so each of these wants a replacement found before it is needed.",
             "",
         ]
-        lines += [f"- `{m.upper():6}` `{p}`" for m, p in rotting]
+        lines += [
+            f"- `{m.upper():6}` `{p}`{flagged(reference, (m, normalize(p)))}" for m, p in rotting
+        ]
         lines.append("")
     else:
         lines += ["Nothing.", ""]
@@ -233,8 +320,9 @@ def main() -> int:
         lines += ["Nothing.", ""]
 
     args.out.write_text("\n".join(lines))
-    for surface, covered, total in totals:
-        print(f"{surface:9} {covered:3}/{total:<3} implemented")
+    for surface, covered, total, skipped in totals:
+        note = f"  ({skipped} skipped)" if skipped else ""
+        print(f"{surface:9} {covered:3}/{total:<3} implemented{note}")
     print(f"{'deprecated':9} {len(rotting):3}     implemented routes the spec flags")
     print(f"{'unmatched':9} {len(unmatched):3}     crate routes not found in any spec")
     print(f"wrote {args.out}")

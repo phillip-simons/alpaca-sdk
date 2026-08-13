@@ -8,7 +8,11 @@ so a ✅ means the route is called, not that it is called at the right
 version. The event streams are the known case where that distinction bit:
 see ROADMAP.md.
 
-## trading — 30/57 (52%)
+**Not implemented** is work outstanding. **Deliberately skipped** is a
+decision, recorded with its reason in `SKIP` in the script — a route we
+have chosen against must not keep reading as a gap.
+
+## trading — 30/57 (52%), 1 deliberately skipped
 
 ### Not implemented
 
@@ -55,7 +59,6 @@ see ROADMAP.md.
 **wallets**
 - `GET   ` `/v2/wallets/fees/estimate`
 - `GET   ` `/v2/wallets/transfers`
-- `POST  ` `/v2/wallets/transfers`
 - `GET   ` `/v2/wallets/transfers/{transfer_id}`
 - `GET   ` `/v2/wallets/whitelists`
 - `POST  ` `/v2/wallets/whitelists`
@@ -91,7 +94,7 @@ see ROADMAP.md.
 - `GET   ` `/v2/stocks/{symbol}/trades`
 - `GET   ` `/v2/stocks/{symbol}/trades/latest`
 
-## broker — 74/154 (48%)
+## broker — 74/154 (48%), 1 deliberately skipped
 
 ### Not implemented
 
@@ -154,7 +157,6 @@ see ROADMAP.md.
 - `POST  ` `/v1beta/demo/banking/funding`
 
 **events**
-- `GET   ` `/v1/events/transfers/status`
 - `GET   ` `/v2/events/admin-actions`
 - `GET   ` `/v2/events/ipos`
 - `GET   ` `/v2/events/system`
@@ -213,17 +215,28 @@ see ROADMAP.md.
 **wallets**
 - `GET   ` `/v1/wallets/fees/estimate`
 
+## Deliberately skipped
+
+Routes the spec documents that this crate will not call. Each reason
+lives in `SKIP` in `scripts/coverage.py`, so the decision is in the
+same place as the check.
+
+- `POST  ` `/v2/wallets/transfers` (trading)
+  - Deprecated 2026-07-09, sunset 2026-10-09, and the reference's own replacement is the Alpaca web application rather than another route. The read side of crypto funding is implemented; only the withdrawal is skipped. The broker equivalent (`POST /v1/accounts/{account_id}/wallets/transfers`) is not deprecated and is implemented.
+- `GET   ` `/v1/events/transfers/status` (broker)
+  - Legacy, and closed to new broker partners. The crate calls `/v2/events/funding/status`, which covers banks and wallets too. Migrated in Phase 6.5; see ROADMAP.md.
+
 ## Implemented, and marked deprecated by the spec
 
 Routes this crate calls that Alpaca has flagged. Deprecated is not
 gone — but `/v1/events/trades` was flagged before it was switched off,
 so each of these wants a replacement found before it is needed.
 
-- `GET   ` `/v2/corporate_actions/announcements`
-- `GET   ` `/v2/corporate_actions/announcements/{id}`
-- `GET   ` `/v1/accounts/positions`
-- `GET   ` `/v1/corporate_actions/announcements`
-- `GET   ` `/v1/corporate_actions/announcements/{id}`
+- `GET   ` `/v2/corporate_actions/announcements` — reference: deprecated
+- `GET   ` `/v2/corporate_actions/announcements/{id}` — reference: deprecated
+- `GET   ` `/v1/accounts/positions` — reference: deprecated
+- `GET   ` `/v1/corporate_actions/announcements` — reference: deprecated
+- `GET   ` `/v1/corporate_actions/announcements/{id}` — reference: deprecated
 
 ## Called by the crate but not in any spec
 

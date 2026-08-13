@@ -148,7 +148,21 @@ specs:
     done
     @echo "specs downloaded to specs/"
 
+# Index Alpaca's published API reference into specs/reference.json.
+#
+# The specs say what exists; only the reference says what is still current, and
+# it is the source that caught three event streams pointing at retired routes.
+# Every reference page has a `.md` twin embedding its own OpenAPI fragment.
+#
+# ~250 pages, so it takes a minute. Cached under specs/reference/.
+reference:
+    python3 scripts/reference.py
+
 # Regenerate COVERAGE.md: which documented routes this crate implements.
+#
+# Reads specs/reference.json when it is there, to annotate each route with what
+# the reference says about it. Run `just reference` first, or accept the specs
+# alone — the report says which it got.
 coverage: specs
     python3 scripts/coverage.py specs --out COVERAGE.md
 

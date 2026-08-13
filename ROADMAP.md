@@ -192,32 +192,43 @@ curl -s https://docs.alpaca.markets/us/llms.txt          # every doc page, group
 curl -s https://docs.alpaca.markets/us/reference/<slug>.md   # one endpoint, as markdown
 ```
 
-Every reference page has a `.md` twin at the same slug, carrying the method,
-path, parameters, and — the part that matters — the deprecation notes. Work the
-index group by group against `src/`, and for each endpoint record one of: ported,
-gap, or deliberately skipped.
+Every reference page has a `.md` twin at the same slug, and the twin is better
+than markdown: it embeds a **one-operation OpenAPI document** carrying the
+versioned path, the `operationId`, which of the three APIs it belongs to, and
+the deprecation flags. That makes the reference machine-readable after all.
 
-**Surface areas the index shows that the lists below do not mention at all.**
-Surfaced by one read of `llms.txt`, not yet checked against the port or costed:
+**Done, and automated.** `just reference` fetches all 256 pages and writes
+`specs/reference.json`; `just coverage` reads it and annotates every route with
+what the reference says. Re-run it rather than re-reading the site.
 
-- **Broker JIT** — reports, daily limits, ledgers, ledger balances, settlements
-  (7 routes)
-- **Broker funding wallets** — create, batch create, transfers, recipient banks,
-  withdrawals (11 routes)
-- **Broker instant funding** (3 routes)
-- **Options approval** — request options trading for an account, list approval
-  requests (2 routes, BETA)
-- **Order estimation** — `/v1/trading/accounts/{id}/orders/estimation`
-- **Trading limits** — `/v1/account/trading/limits`
-- **W-8BEN download** — a separate route from the document download we have
-- **Asset entry requirements**
-- **A single activity event by ULID** — `getaccountactivityevent`
-- **More SSE streams than alpaca-py knows about** — admin actions, funding
-  status, system events, IPO events, activities, corporate actions
-- **OAuth token issuance**
+### The reconciliation, done
 
-Confirmed already covered, so the reference is not all gaps: news, market movers,
-most actives, tokenisation, locates.
+All 123 gaps were joined against the reference. **122 of them are documented
+there**, at the version the spec gives, and are real work rather than spec
+noise. The exception is `POST /v1/jit/settlements`, which the spec has and the
+reference does not list — the same footing as the two undocumented routes above,
+so it is implemented with the same warning in its rustdoc.
+
+**Alpaca flags exactly eight routes across the whole reference**, and the crate's
+position on each is now settled:
+
+| Route | Flag | Position |
+|---|---|---|
+| `GET /v1/events/transfers/status` | deprecated + legacy | **skipped** — we call `/v2/events/funding/status` |
+| `POST /v2/wallets/transfers` | sunset 2026-10-09 | **skipped** — the replacement is the web app, not a route |
+| `GET /v1/events/journals/status` | legacy | already migrated to `/v2` in Phase 6 |
+| `GET /v{1,2}/corporate_actions/announcements{,/{id}}` (4) | deprecated | implemented; the replacement `/v1/corporate-actions` is too |
+| `GET /v1/accounts/positions` | deprecated | implemented; no replacement documented |
+
+Everything else in the reference is current. The two skips are recorded in
+`SKIP` in `scripts/coverage.py` with their reasons, so a skipped route reads as
+a decision rather than as an unfilled gap, and "not implemented" can reach zero.
+
+**The single-symbol market data routes are not legacy.** `/v2/stocks/{symbol}/bars`
+and its seven siblings looked like aliases the multi-symbol routes had replaced.
+The reference documents them as current, with their own pages and their own
+response shape — unwrapped, with `symbol` beside the array rather than as the
+map key. They are ported as separate methods returning the unwrapped shape.
 
 ### What the first pass already found and fixed
 
@@ -589,6 +600,8 @@ rather than only alpaca-py's.
 just              # = just check: fmt, clippy, rustdoc, test, feature combos
 just ci           # + msrv, cargo-deny
 just live         # the #[ignore]d tests against the real paper API
+just reference    # index the published API reference into specs/reference.json
+just coverage     # regenerate COVERAGE.md from the specs and that index
 just regen        # re-run both generators against ../alpaca-py
 just pinned       # is the generated code stale vs. the local alpaca-py?
 just hooks        # install the pre-commit credential guard (once per clone)
