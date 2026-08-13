@@ -185,6 +185,39 @@ async fn every_stream_has_its_own_path() {
     assert_eq!(events.len(), 2);
 }
 
+/// Two filters unique to the non-trading-activity stream. `EventVersion::query`
+/// builds the query by hand rather than through serde, so a field added to
+/// `GetEventsRequest` without a line there would compile, serialize in
+/// isolation, and never reach the wire.
+#[tokio::test]
+async fn the_nta_stream_sends_its_own_two_filters() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/events/nta"))
+        .and(query_param(
+            "group_id",
+            "9b6c7c1a-9eb2-4d4a-8a3a-1bf4c1d5cbaa",
+        ))
+        .and(query_param("include_preprocessing", "true"))
+        .respond_with(stream_response())
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let filter = GetEventsRequest {
+        group_id: Some("9b6c7c1a-9eb2-4d4a-8a3a-1bf4c1d5cbaa".parse().unwrap()),
+        include_preprocessing: Some(true),
+        ..GetEventsRequest::default()
+    };
+
+    drop(
+        client(&server)
+            .get_non_trading_activity_events(Some(&filter))
+            .await
+            .unwrap(),
+    );
+}
+
 #[tokio::test]
 async fn the_subscription_sends_the_sse_headers_and_the_filter() {
     let server = MockServer::start().await;

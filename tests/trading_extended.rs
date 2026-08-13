@@ -12,12 +12,12 @@
 #![cfg(feature = "trading")]
 
 use alpaca_sdk::trading::{
-    CreateLocateRequest, CreateWhitelistedAddressRequest, CryptoChain, GetLocateQuotesRequest,
-    GetLocatesRequest, LocateStatus, Market, MintTokenRequest, TokenizationIssuer,
-    TokenizationNetwork, TokenizationStatus, TradingClient, UpdateWatchlistRequest,
-    WhitelistStatus,
+    ActivityCategory, ActivityType, CreateLocateRequest, CreateWhitelistedAddressRequest,
+    CryptoChain, GetAccountActivitiesRequest, GetLocateQuotesRequest, GetLocatesRequest,
+    LocateStatus, Market, MintTokenRequest, TokenizationIssuer, TokenizationNetwork,
+    TokenizationStatus, TradingClient, UpdateWatchlistRequest, WhitelistStatus,
 };
-use alpaca_sdk::types::AssetIdent;
+use alpaca_sdk::types::{AssetIdent, Sort};
 use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 
 fn fixture(name: &str) -> serde_json::Value {
@@ -243,11 +243,66 @@ async fn activities_of_one_type_move_the_type_into_the_path() {
         .await;
 
     let activities = client(&server)
-        .get_account_activities_by_type(&alpaca_sdk::trading::ActivityType::Fill, &[])
+        .get_account_activities_by_type(&alpaca_sdk::trading::ActivityType::Fill, None)
         .await
         .unwrap();
 
     assert_eq!(activities.len(), 1);
+}
+
+/// These filters were reachable before — the method took a raw `&[(&str,
+/// String)]` — but not nameable, which is why `just parameters` reported them
+/// missing. The broker's equivalent route has had a typed request all along.
+#[tokio::test]
+async fn account_activities_send_their_typed_filters() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v2/account/activities"))
+        .and(query_param("activity_types", "FILL,DIV"))
+        .and(query_param("page_size", "50"))
+        .and(query_param("direction", "asc"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let filter = GetAccountActivitiesRequest {
+        activity_types: Some(vec![ActivityType::Fill, ActivityType::Div]),
+        page_size: Some(50),
+        direction: Some(Sort::Asc),
+        ..GetAccountActivitiesRequest::default()
+    };
+
+    client(&server)
+        .get_account_activities(Some(&filter))
+        .await
+        .unwrap();
+}
+
+/// "Cannot be used with `activity_types` parameter" is the reference's own
+/// wording, so it is a rule and not a guess. Rejected before the request is
+/// sent, like the broker's copy of the same filter.
+#[tokio::test]
+async fn activity_types_and_category_cannot_be_combined() {
+    let server = MockServer::start().await;
+
+    let filter = GetAccountActivitiesRequest {
+        activity_types: Some(vec![ActivityType::Fill]),
+        category: Some(ActivityCategory::TradeActivity),
+        ..GetAccountActivitiesRequest::default()
+    };
+
+    let error = client(&server)
+        .get_account_activities(Some(&filter))
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(error, alpaca_sdk::Error::InvalidRequest(_)),
+        "{error:?}"
+    );
+    // Nothing was sent: the mock server saw no request at all.
+    assert!(server.received_requests().await.unwrap().is_empty());
 }
 
 // -------------------------------------------------------------------- dne

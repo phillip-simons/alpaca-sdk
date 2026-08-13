@@ -108,8 +108,8 @@ fn page_limit(configured: &Option<u32>, max_items: Option<usize>, collected: usi
 /// // a key pair for you.
 /// let client = BrokerClient::new(&Credentials::from_env()?, true)?;
 ///
-/// let accounts = client.get_all_accounts_positions().await?;
-/// println!("{} accounts hold positions", accounts.positions.len());
+/// let accounts = client.list_accounts(None).await?;
+/// println!("{} accounts", accounts.len());
 /// # Ok(())
 /// # }
 /// ```
@@ -271,8 +271,21 @@ impl BrokerClient {
         note = "Alpaca deprecated this route; use `BrokerClient::get_eod_positions`, which calls the \
                 /v1/reporting/eod/positions route Alpaca names as its replacement"
     )]
-    pub async fn get_all_accounts_positions(&self) -> Result<AllAccountsPositions> {
-        self.rest.get("/accounts/positions", &Empty).await
+    pub async fn get_all_accounts_positions(
+        &self,
+        page: Option<u32>,
+    ) -> Result<AllAccountsPositions> {
+        // The only parameter the route takes, and it is not cosmetic: without
+        // it a caller with more accounts than fit on one page cannot reach the
+        // rest of them.
+        match page {
+            Some(page) => {
+                self.rest
+                    .get("/accounts/positions", &[("page", page.to_string())])
+                    .await
+            }
+            None => self.rest.get("/accounts/positions", &Empty).await,
+        }
     }
 
     // ----------------------------------------------------------- funding
@@ -1853,17 +1866,26 @@ impl BrokerClient {
     ///
     /// The narrowed counterpart to
     /// [`get_account_activities`](Self::get_account_activities): the type moves
-    /// from the query string into the path.
+    /// from the query string into the path, so `activity_types` has nothing
+    /// left to say here.
     ///
     /// # Errors
-    /// Propagates transport, API, and decoding failures.
+    /// Returns [`crate::Error::InvalidRequest`] if the filter combines
+    /// `activity_types` with `category`. Otherwise propagates transport, API,
+    /// and decoding failures.
     pub async fn get_account_activities_by_type(
         &self,
         activity_type: &crate::trading::ActivityType,
-        query: &[(&str, String)],
+        filter: Option<&GetAccountActivitiesRequest>,
     ) -> Result<Vec<Activity>> {
         let path = format!("/accounts/activities/{activity_type}");
-        self.rest.get(&path, query).await
+        match filter {
+            Some(filter) => {
+                filter.validate()?;
+                self.rest.get(&path, filter).await
+            }
+            None => self.rest.get(&path, &Empty).await,
+        }
     }
 
     // --------------------------------------------------- fixed income

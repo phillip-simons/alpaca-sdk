@@ -615,6 +615,28 @@ async fn get_option_contracts_joins_underlying_symbols() {
     client(&server).get_option_contracts(&filter).await.unwrap();
 }
 
+/// The Penny Program filter, which the reference documents and alpaca-py does
+/// not have. `false` is as meaningful as `true` here — it selects the contracts
+/// outside the programme — so it must reach the wire rather than be skipped as
+/// a default.
+#[tokio::test]
+async fn get_option_contracts_sends_the_penny_program_filter() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v2/options/contracts"))
+        .and(query_param("ppind", "false"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture(
+            "trading/test_option_routes__test_get_option_contracts__01.json",
+        )))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let mut filter = GetOptionContractsRequest::new(vec!["AAPL".to_owned()]);
+    filter.ppind = Some(false);
+    client(&server).get_option_contracts(&filter).await.unwrap();
+}
+
 #[tokio::test]
 async fn get_option_contract_by_symbol() {
     let server = expect(

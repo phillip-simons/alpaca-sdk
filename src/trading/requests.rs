@@ -29,8 +29,9 @@ use uuid::Uuid;
 
 use crate::error::{Error, Result};
 use crate::trading::enums::{
-    AssetClass, AssetExchange, AssetStatus, CorporateActionDateType, CorporateActionType,
-    ExerciseStyle, OrderClass, OrderSide, OrderType, PositionIntent, QueryOrderStatus, TimeInForce,
+    ActivityCategory, ActivityType, AssetClass, AssetExchange, AssetStatus,
+    CorporateActionDateType, CorporateActionType, ExerciseStyle, OrderClass, OrderSide, OrderType,
+    PositionIntent, QueryOrderStatus, TimeInForce,
 };
 use crate::types::{ContractType, Sort};
 
@@ -706,6 +707,114 @@ pub struct GetOrdersRequest {
     /// Only orders placed after this one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after_order_id: Option<Uuid>,
+    /// Only orders for more than this quantity.
+    ///
+    /// **Documented on the broker route only** —
+    /// `GET /v1/trading/accounts/{account_id}/orders`. The trading API's own
+    /// reference page does not list it, so sending it to
+    /// [`TradingClient::get_orders`](crate::trading::TradingClient::get_orders)
+    /// is asking for undefined behaviour rather than a documented filter. It
+    /// lives here because the broker route takes this same request type.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
+    pub qty_above: Option<Decimal>,
+    /// Only orders for less than this quantity. Broker route only, like
+    /// [`qty_above`](Self::qty_above).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
+    pub qty_below: Option<Decimal>,
+    /// Only orders carrying this subtag. Broker route only, like
+    /// [`qty_above`](Self::qty_above).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subtag: Option<String>,
+}
+
+/// Filters for listing account activities.
+///
+/// The broker API documents the same filters plus an `account_id`, and carries
+/// [its own copy](crate::broker::GetAccountActivitiesRequest) for that reason.
+/// The two cannot share a struct the way `broker::Order` shares
+/// `trading::Order`: that works by `#[serde(flatten)]`, and a flattened struct
+/// cannot be serialized into a query string — `serde_urlencoded` rejects it at
+/// runtime, with no compile error to warn anyone.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GetAccountActivitiesRequest {
+    /// Only activities of these kinds.
+    ///
+    /// Sent as one comma-separated parameter.
+    ///
+    /// Not accepted by
+    /// [`get_account_activities_by_type`](crate::trading::TradingClient::get_account_activities_by_type),
+    /// where the one type being asked for is in the path instead.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "crate::types::serde_util::comma_separated"
+    )]
+    pub activity_types: Option<Vec<ActivityType>>,
+    /// Only trade activities, or only non-trade ones.
+    ///
+    /// The coarse counterpart to [`activity_types`](Self::activity_types), and
+    /// **mutually exclusive with it** — the reference says so in as many words:
+    /// "Cannot be used with `activity_types` parameter". [`validate`] enforces
+    /// that.
+    ///
+    /// [`validate`]: Self::validate
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<ActivityCategory>,
+    /// Only activities belonging to one order.
+    ///
+    /// The way to fetch the fills that made up a completed order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order_id: Option<Uuid>,
+    /// Only activities created on this date.
+    ///
+    /// The reference is specific that this is `created_at` and not the
+    /// settlement date: a fee for a Monday trade is typically created on the
+    /// Tuesday, in UTC.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<DateTime<Utc>>,
+    /// Only activities created before this time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<DateTime<Utc>>,
+    /// Only activities created after this time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after: Option<DateTime<Utc>>,
+    /// Which way to sort. Defaults to descending.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<Sort>,
+    /// How many activities to return per page. Defaults to 100, and capped
+    /// there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_size: Option<u32>,
+    /// Where to resume from: the `id` of the last activity already seen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_token: Option<String>,
+}
+
+impl GetAccountActivitiesRequest {
+    /// Rejects the one combination the reference forbids.
+    ///
+    /// `category` and `activity_types` cannot be sent together: "Cannot be used
+    /// with `activity_types` parameter". That is a documented rule, so it is
+    /// enforced — the same rule, and the same enforcement, as the broker's copy.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if both are set.
+    pub fn validate(&self) -> Result<()> {
+        if self.category.is_some() && self.activity_types.is_some() {
+            return Err(Error::InvalidRequest(
+                "activity_types and category cannot be combined".to_owned(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// Filters for fetching one order.
@@ -981,6 +1090,12 @@ pub struct GetOptionContractsRequest {
     /// Documented by the reference and absent from alpaca-py.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_deliverables: Option<bool>,
+    /// Only contracts in — or only contracts outside — the Penny Program.
+    ///
+    /// The Penny Program Indicator: `true` selects contracts eligible for penny
+    /// price increments. Documented by the reference and absent from alpaca-py.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ppind: Option<bool>,
     /// Only contracts struck at or above this price.
     #[serde(
         default,

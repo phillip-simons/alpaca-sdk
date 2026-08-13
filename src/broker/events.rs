@@ -16,6 +16,7 @@
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// One event from a broker event stream.
 ///
@@ -65,6 +66,19 @@ pub struct GetEventsRequest {
     /// Alpaca requires the lower bound whenever this is set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub until_id: Option<String>,
+    /// Only activities sharing this sibling-relationship id.
+    ///
+    /// **Documented on the non-trading-activity stream only.** The other four
+    /// streams do not list it, so it is sent whenever it is set and ignored by
+    /// whatever receives it — setting it for another stream is neither
+    /// meaningful nor an error.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<Uuid>,
+    /// Whether to include activities that are still being preprocessed.
+    ///
+    /// Non-trading-activity stream only, like [`group_id`](Self::group_id).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub include_preprocessing: Option<bool>,
 }
 
 impl GetEventsRequest {
@@ -150,6 +164,17 @@ impl EventVersion {
         }
         if let Some(until_id) = &filter.until_id {
             query.push((until_key, until_id.clone()));
+        }
+
+        // NTA-only, and this method does not know which stream it is building
+        // for — only which version. Both v1 streams pass through here. Sending
+        // an unrecognised query parameter is harmless; silently dropping one the
+        // caller set would not be.
+        if let Some(group_id) = filter.group_id {
+            query.push(("group_id", group_id.to_string()));
+        }
+        if let Some(include_preprocessing) = filter.include_preprocessing {
+            query.push(("include_preprocessing", include_preprocessing.to_string()));
         }
         query
     }

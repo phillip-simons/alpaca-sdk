@@ -841,20 +841,34 @@ and reading does not survive contact with 251 routes.
   to a different struct. False positives cost a minute; a false negative costs a
   parameter nobody notices for a year.
 
-  **It found twelve on its first run**, and they are real:
+  **It found twelve on its first run. All twelve are closed**, and
+  `just parameters` now reports no gaps:
 
-  | Route | Missing |
-  |---|---|
-  | `GET /v1/accounts/positions` | `page` — the call passes `&Empty` |
-  | `GET /v1/events/nta` | `group_id`, `include_preprocessing` — NTA-only, and `GetEventsRequest` is shared across all five streams |
-  | `GET /v1/options/contracts`, `GET /v2/options/contracts` | `ppind` |
-  | `GET /v1/trading/accounts/{account_id}/orders` | `qty_above`, `qty_below`, `subtag` — broker-only extras on a trading-shaped request |
-  | `GET /v2/account/activities`, `…/{activity_type}` | `activity_types`, `category`, `page_size` |
+  | Route | Was missing | Now |
+  |---|---|---|
+  | `GET /v1/accounts/positions` | `page` — the call passed `&Empty` | `get_all_accounts_positions(page)` |
+  | `GET /v1/events/nta` | `group_id`, `include_preprocessing` | Two fields on `GetEventsRequest`, documented NTA-only |
+  | `GET /v1/options/contracts`, `GET /v2/options/contracts` | `ppind` | One field on `GetOptionContractsRequest` — both routes are the same call site |
+  | `GET /v1/trading/accounts/{account_id}/orders` | `qty_above`, `qty_below`, `subtag` | Three fields on the shared `GetOrdersRequest`, documented broker-only |
+  | `GET /v2/account/activities`, `…/{activity_type}` | `activity_types`, `category`, `page_size` | A new `trading::GetAccountActivitiesRequest` |
 
-  The last row is the interesting one. Those two methods take a free-form
-  `&[(&str, String)]` query, so the parameters *can* be sent — they are just not
-  named anywhere, and the broker's equivalent route has a typed request with a
-  `page_size` field. That asymmetry is the gap, not the parameters.
+  Three things the fixing taught that the finding did not:
+
+  - **`GetEventsRequest` is not serialized by serde.** `EventVersion::query`
+    assembles the query by hand, because the ULID cursor is spelled differently
+    per API version. A field added to the struct with the right serde attributes
+    compiles, serializes correctly in isolation, and never reaches the wire.
+  - **The activities request could not be shared the way the models are.**
+    `broker::Order` extends `trading::Order` by `#[serde(flatten)]`; a query
+    struct cannot, because `serde_urlencoded` rejects a flattened struct at
+    runtime with no compile error to warn anyone. The broker keeps its own copy,
+    which differs only by `account_id`.
+  - **The check has a false negative, and it showed up immediately.**
+    `GET /v1/accounts/activities/{activity_type}` also took a free-form query
+    and was never reported, because the check widens a route to its whole module
+    and `page_size` was already named there by the *other* broker request type.
+    It is typed now too. That is the documented limitation behaving exactly as
+    documented, which is the argument for having written it down.
 - **Enum drift is measured now** — `just enums-drift`, backed by
   `scripts/enum_drift.py`. It reads the checked-in `enums.rs` files rather than
   regenerating them, which is why it is a separate script and not a step in
@@ -907,10 +921,17 @@ What is left before tagging it is a release, not a decision:
   out under a version that is allowed to make it and be lived with for a while.
   `1.0` is then a promise about a surface that has been used, rather than one
   published the same day it changed.
-- **Twelve missing parameters and the enum gaps are now on a list** rather than
-  in someone's memory. None of them break a caller — an absent parameter is one
-  a caller cannot set, and an unknown enum value degrades to `Unknown(String)` —
-  so they are 1.x work, not 1.0 blockers.
+- **The twelve missing parameters are closed.** Fixing them was itself
+  breaking, which is the argument for doing it now: two client methods changed
+  signature and five request structs gained fields, and none of those structs is
+  `#[non_exhaustive]`. The enum gaps remain a list — an unknown value degrades to
+  `Unknown(String)`, so they are 1.x work.
+- **The request structs are the same class of decision as `RestConfig`.** None
+  of the 46 is `#[non_exhaustive]`, so every one of them is one documented
+  parameter away from a breaking change — which is exactly what just happened,
+  five times. Marking them costs the `..Default::default()` literals the tests
+  lean on, so it is a real ergonomic trade rather than a free win, and it stops
+  being available at 1.0.
 
 **`just semver` cannot help yet, and it is worth knowing why before relying on
 it.** Run against this phase's changes it reports "no semver update required"

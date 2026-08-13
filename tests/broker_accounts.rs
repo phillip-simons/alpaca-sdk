@@ -189,7 +189,33 @@ async fn all_accounts_positions_is_keyed_by_account() {
         .await;
 
     #[allow(deprecated)]
-    let positions = client(&server).get_all_accounts_positions().await.unwrap();
+    let positions = client(&server)
+        .get_all_accounts_positions(None)
+        .await
+        .unwrap();
+    assert!(!positions.positions.is_empty());
+}
+
+/// The route's only parameter, and not a cosmetic one: without it a partner
+/// with more accounts than fit on a page cannot reach the rest of them.
+#[tokio::test]
+async fn all_accounts_positions_can_ask_for_a_later_page() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/accounts/positions"))
+        .and(query_param("page", "3"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture(
+            "broker/test_trading_routes__test_get_all_accounts_positions__01.json",
+        )))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    #[allow(deprecated)]
+    let positions = client(&server)
+        .get_all_accounts_positions(Some(3))
+        .await
+        .unwrap();
     assert!(!positions.positions.is_empty());
 }
 

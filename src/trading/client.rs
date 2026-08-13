@@ -22,7 +22,7 @@ use crate::trading::models::{
     Position, TradeAccount, Watchlist,
 };
 use crate::trading::requests::{
-    CancelOrderResponse, ClosePositionRequest, CreateWatchlistRequest,
+    CancelOrderResponse, ClosePositionRequest, CreateWatchlistRequest, GetAccountActivitiesRequest,
     GetCorporateAnnouncementsRequest, GetOptionContractsRequest, GetOrderByIdRequest,
     GetOrdersRequest, GetPortfolioHistoryRequest, OrderRequest, ReplaceOrderRequest,
     UpdateWatchlistRequest,
@@ -294,14 +294,25 @@ impl TradingClient {
         }
     }
 
-    /// Lists account activities, optionally filtered by query parameters.
+    /// Lists account activities, optionally filtered.
     ///
     /// The endpoint returns a heterogeneous array; see [`Activity`].
     ///
     /// # Errors
-    /// Propagates transport, API, and decoding failures.
-    pub async fn get_account_activities(&self, query: &[(&str, String)]) -> Result<Vec<Activity>> {
-        self.rest.get("/account/activities", query).await
+    /// Returns [`crate::Error::InvalidRequest`] if the filter combines
+    /// `activity_types` with `category`, which the reference forbids.
+    /// Otherwise propagates transport, API, and decoding failures.
+    pub async fn get_account_activities(
+        &self,
+        filter: Option<&GetAccountActivitiesRequest>,
+    ) -> Result<Vec<Activity>> {
+        match filter {
+            Some(filter) => {
+                filter.validate()?;
+                self.rest.get("/account/activities", filter).await
+            }
+            None => self.rest.get("/account/activities", &Empty).await,
+        }
     }
 
     // ------------------------------------------------------------- assets
@@ -522,15 +533,28 @@ impl TradingClient {
     /// from the query string into the path, which is the only way to ask for
     /// exactly one kind.
     ///
+    /// The reference documents neither `activity_types` nor `category` here —
+    /// the one type being asked for is in the path. Setting either is not
+    /// rejected, because the reference states no rule against it and a guess is
+    /// not a rule; it is simply undefined what Alpaca does with it.
+    ///
     /// # Errors
-    /// Propagates transport, API, and decoding failures.
+    /// Returns [`crate::Error::InvalidRequest`] if the filter combines
+    /// `activity_types` with `category`. Otherwise propagates transport, API,
+    /// and decoding failures.
     pub async fn get_account_activities_by_type(
         &self,
         activity_type: &ActivityType,
-        query: &[(&str, String)],
+        filter: Option<&GetAccountActivitiesRequest>,
     ) -> Result<Vec<Activity>> {
         let path = format!("/account/activities/{activity_type}");
-        self.rest.get(&path, query).await
+        match filter {
+            Some(filter) => {
+                filter.validate()?;
+                self.rest.get(&path, filter).await
+            }
+            None => self.rest.get(&path, &Empty).await,
+        }
     }
 
     // ---------------------------------------------------- watchlists by name

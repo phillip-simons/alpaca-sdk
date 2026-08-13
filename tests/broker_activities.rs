@@ -124,6 +124,34 @@ async fn date_with_after_is_alpacas_to_reject_not_ours() {
         .unwrap();
 }
 
+/// The by-type route took a raw `&[(&str, String)]` until the parameter check
+/// prompted a look at its sibling. It was never *reported* missing anything —
+/// the check widens each route to its whole module, and `page_size` was already
+/// named there by the other request type. A demonstrated false negative, and the
+/// reason that limitation is written down rather than assumed away.
+#[tokio::test]
+async fn activities_of_one_type_take_the_same_typed_filter() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/accounts/activities/FILL"))
+        .and(query_param("page_size", "25"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture(ACTIVITIES)))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let filter = GetAccountActivitiesRequest {
+        page_size: Some(25),
+        ..Default::default()
+    };
+
+    let activities = client(&server)
+        .get_account_activities_by_type(&ActivityType::Fill, Some(&filter))
+        .await
+        .unwrap();
+    assert_eq!(activities.len(), 5);
+}
+
 fn activity(id: &str) -> serde_json::Value {
     json!({
         "id": id,

@@ -170,6 +170,38 @@ async fn get_orders_for_account_sends_its_filter() {
         .unwrap();
 }
 
+/// Three filters the broker route documents and the trading one does not. They
+/// live on the shared `GetOrdersRequest` because the broker route takes that
+/// type; this is the test that proves they reach the wire from the side that
+/// documents them.
+#[tokio::test]
+async fn get_orders_for_account_sends_the_broker_only_filters() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/trading/accounts/{ACCOUNT_ID}/orders")))
+        // Quantities are Decimal here and strings on the wire, like every other
+        // quantity this crate sends.
+        .and(query_param("qty_above", "1.5"))
+        .and(query_param("qty_below", "100"))
+        .and(query_param("subtag", "desk-7"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let filter = GetOrdersRequest {
+        qty_above: Some("1.5".parse().unwrap()),
+        qty_below: Some("100".parse().unwrap()),
+        subtag: Some("desk-7".to_owned()),
+        ..Default::default()
+    };
+
+    client(&server)
+        .get_orders_for_account(account_id(), Some(&filter))
+        .await
+        .unwrap();
+}
+
 #[tokio::test]
 async fn get_order_for_account_by_id_passes_nested() {
     let server = MockServer::start().await;
