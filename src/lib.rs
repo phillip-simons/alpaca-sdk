@@ -73,6 +73,39 @@ pub mod trading;
 #[cfg_attr(docsrs, doc(cfg(feature = "polars")))]
 pub use polars;
 
+/// The `rust_decimal` this crate was built against.
+///
+/// Re-exported for the same reason as [`polars`]: every price, quantity and
+/// balance in this crate is a `rust_decimal::Decimal`, and a caller who depends
+/// on a different `rust_decimal` version gets two incompatible `Decimal` types
+/// with the same name and an error that does not explain itself. Reach for this
+/// one, or match the version in `Cargo.toml`.
+///
+/// It is also the way to the rest of that crate without declaring the
+/// dependency twice — `RoundingStrategy` for the rounding modes, and the
+/// conversions:
+///
+/// ```
+/// use alpaca_sdk::Decimal;
+///
+/// let limit: Decimal = "185.50".parse().unwrap();
+/// assert_eq!(limit.to_string(), "185.50");
+/// ```
+///
+/// The `dec!` literal macro is **not** reachable through this re-export: it sits
+/// behind `rust_decimal`'s `macros` feature, which is off here because it costs
+/// a proc-macro dependency the crate itself does not use. A caller who wants it
+/// depends on `rust_decimal` with that feature directly, and cargo unifies the
+/// two — the same arrangement `polars` and its `lazy` feature already have.
+pub use rust_decimal;
+
+/// The numeric type for every price, quantity and balance this crate exchanges.
+///
+/// Alpaca sends these as strings; reading one as an `f64` loses precision on the
+/// one class of field where it is least acceptable. Market data floats that
+/// arrive as JSON numbers stay `f64` and are not this type.
+pub use rust_decimal::Decimal;
+
 pub use auth::Credentials;
 pub use config::{BaseUrl, RetryBackoff, RetryConfig};
 pub use error::{ApiError, Error, Result};

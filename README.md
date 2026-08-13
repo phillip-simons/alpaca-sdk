@@ -57,12 +57,10 @@ of them.
 
 ```rust,no_run
 use alpaca_sdk::trading::{OrderAmount, OrderRequest, OrderSide, TimeInForce, TradingClient};
-use alpaca_sdk::Credentials;
+use alpaca_sdk::{Credentials, Decimal, Result};
 
-// `Box<dyn Error>` because parsing a `Decimal` fails with `rust_decimal`'s own
-// error type, which is not one of this crate's.
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     let client = TradingClient::new(&Credentials::from_env()?, true)?;
 
     // Prices and quantities are `Decimal`, never `f64` — Alpaca sends them as
@@ -70,9 +68,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let order = OrderRequest::limit(
         "AAPL",
         OrderSide::Buy,
-        OrderAmount::Qty("1".parse()?),
+        OrderAmount::Qty(Decimal::ONE),
         TimeInForce::Day,
-        "185.50".parse()?,
+        Decimal::new(18550, 2), // 185.50
     );
 
     let placed = client.submit_order(&order).await?;
@@ -157,9 +155,13 @@ deadlocks as soon as the caller is slower than the socket's read buffer.
 
 The decisions a caller actually runs into, and why each one is the way it is.
 
-- **Money that crosses the wire as a string is `rust_decimal::Decimal`.**
-  Market data floats that arrive as JSON numbers stay `f64`. Reading a string
-  price as a float loses precision on the one field where it matters.
+- **Money that crosses the wire as a string is `Decimal`.** Market data floats
+  that arrive as JSON numbers stay `f64`. Reading a string price as a float
+  loses precision on the one field where it matters. The crate re-exports both
+  the type and `rust_decimal` itself, as `alpaca_sdk::Decimal` and
+  `alpaca_sdk::rust_decimal` — reach for those rather than adding the dependency
+  separately, or a version mismatch gives you two incompatible `Decimal` types
+  with the same name.
 - **Unknown enum values deserialize into `Unknown` rather than failing.** Alpaca
   adds values without warning, and a new order status should cost you a match
   arm rather than a decode error in production.
