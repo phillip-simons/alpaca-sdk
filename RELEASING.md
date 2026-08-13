@@ -51,14 +51,27 @@ $EDITOR CHANGELOG.md   # promote the heading to `## [0.1.0] — 2026-08-13`
 # 2. Prove it locally first. This is what CI will run again.
 just publish-dry
 
-# 3. Commit, tag, push. The tag must match Cargo.toml or the job fails
-#    before publishing anything.
+# 3. The version bump goes through a pull request like anything else.
+#    `main` is protected and admins are not exempt, so this cannot be
+#    pushed directly.
+git checkout -b release-0.1.0
 git add Cargo.toml Cargo.lock CHANGELOG.md
 git commit -m "release 0.1.0"
-git push origin main
+git push -u origin release-0.1.0
+gh pr create --fill
+gh pr merge --rebase          # after the 9 required checks go green
+
+# 4. Tag the merged commit on main. Tags are not covered by branch
+#    protection, and this is what triggers the release workflow. The tag
+#    must match Cargo.toml or the job fails before publishing anything.
+git checkout main && git pull
 git tag v0.1.0
 git push origin v0.1.0
 ```
+
+**Merge with `--rebase` or `--squash`, not a merge commit.** `main` requires
+linear history, and merge commits are disabled on the repository to stop the UI
+offering a button that protection would then reject.
 
 **Write the notes as the change is made, not at tag time.** Inside `0.x`,
 `cargo-semver-checks` has nothing to assert — every bump is permitted to break —
@@ -105,3 +118,11 @@ packaging dry run. Then:
 - `polars` needs Rust 1.95 while the crate declares 1.88. It is off by default,
   so it does not set the floor, and `cargo publish` verifies with default
   features.
+- **Branch protection does not cover tags.** `main` requires a pull request and
+  nine green checks, admins included, but `git push origin v0.1.0` goes straight
+  through — which is what makes step 4 work. It also means the tag is the one
+  unguarded step in the release, and the reason `verify` re-checks that the tag
+  matches `Cargo.toml` before anything is published.
+- **In a genuine emergency**, protection can be lifted at Settings → Branches
+  rather than worked around. Turning it off deliberately and turning it back on
+  leaves a record; a permanent admin exemption does not.
