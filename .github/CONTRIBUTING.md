@@ -77,8 +77,11 @@ doing when it found it.
 
 - **One concern per pull request.** A bug fix and a refactor in the same diff
   take twice as long to review and cannot be reverted independently.
-- **`just check` must pass**, and CI will confirm it across Linux, macOS and
-  Windows, every feature combination, and the MSRV.
+- **`just check` must pass**, and CI will confirm it on Linux, across every
+  feature combination and the MSRV. macOS and Windows are tested in the release
+  workflow rather than per commit, so a platform-specific failure surfaces at
+  release time — worth knowing if you are touching anything filesystem- or
+  time-related.
 - **New behaviour needs a test.** For a route, that means a `wiremock` test
   asserting the method, the version segment and the path — routing is the
   failure this crate has actually shipped.

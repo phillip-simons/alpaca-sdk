@@ -60,9 +60,28 @@ jobs:
       - name: What would be uploaded
         run: cargo package --list --all-features
 
+  # The platforms routine CI no longer runs on every commit.
+  #
+  # Runs in parallel with `verify`, and `publish` waits for both — so a failure
+  # on either shows up before the approval prompt rather than after it.
+  cross-platform:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # `--locked` because a release must test the dependency versions it is
+      # about to publish, not whatever resolves today.
+      - run: cargo test --all-features --locked
+
   publish:
     name: publish
-    needs: verify
+    needs: [verify, cross-platform]
     runs-on: ubuntu-latest
     # Gated: the job waits here for a reviewer, and the same environment name is
     # part of the trust configuration on crates.io.

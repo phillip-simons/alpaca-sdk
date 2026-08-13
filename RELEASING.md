@@ -98,12 +98,19 @@ permanent for that version.
 
 `verify` runs `just publish-dry`, which is `just ci` — fmt, clippy, rustdoc,
 tests, feature combinations, MSRV, cargo-deny — plus `cargo-semver-checks` and a
-packaging dry run. Then:
+packaging dry run, all on Linux. Then:
 
 - the tag matches `Cargo.toml`;
 - the tarball's file list is printed for review.
 
-`publish` runs only after `verify` passes and you approve.
+`cross-platform` runs the test suite on macOS and Windows, in parallel with
+`verify`. **This is the only place those two platforms are tested.** Routine CI
+runs Linux alone, because Windows was most of the wall-clock of every commit and
+was catching a class of bug that has not appeared yet; paying it once per release
+keeps the coverage without the loop. A failure there stops the release before
+the approval prompt, not after.
+
+`publish` runs only after both pass and you approve.
 
 ## Notes
 
