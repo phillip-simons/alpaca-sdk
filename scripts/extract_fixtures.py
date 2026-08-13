@@ -9,6 +9,13 @@ preserved" a verified claim rather than an asserted one.
 Each `reqmock.<method>(url, text="...")` call becomes a fixture file plus an
 index entry recording the method, URL, and originating test.
 
+Bodies are copied verbatim, including their mistakes. Eleven payloads carry
+`"symbol": "AAPL`"` — a stray backtick that is a typo in alpaca-py's own test
+files at the pinned commit, not something Alpaca sends. Reproducing it is
+correct: a captured payload earns its place by being a faithful copy of its
+source, and one tidied up by hand is a weaker record. `UPSTREAM_SYMBOL_TYPO` in
+`tests/trading_routes.rs` names it so it does not read as a live symbol.
+
 Usage:
     python3 scripts/extract_fixtures.py /path/to/alpaca-py
 """
