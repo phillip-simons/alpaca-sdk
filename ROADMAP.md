@@ -651,12 +651,12 @@ checking caught by luck.
 Read the version numbers as the constraint. `0.x` may break anything; `1.0`
 may not. Everything below is sorted by whether it survives that line.
 
-### The two features that did not exist
+### ✅ The two features that did not exist
 
 `blocking` and `polars` were declared in `Cargo.toml`, listed in the `lib.rs`
 feature table, and implemented nowhere — the crate claiming something untrue on
 docs.rs, not a gap in a plan. The decision was to build both rather than drop
-the claims.
+the claims, and both are built. The feature table is now true.
 
 **`polars` is built.** `.df()` arrives as the [`ToFrame`] extension trait in
 `src/data/frame.rs`, over `BarSet`, `QuoteSet`, `TradeSet`, `AuctionSet`,
@@ -688,11 +688,26 @@ What the sketch did not anticipate:
   frame with the right numbers under the wrong types is worse than no frame:
   the arithmetic still works and the joins silently do not.
 
-**`blocking` is not built yet.** It has one trap worth naming in the code: a
-synchronous façade built on `Handle::block_on` panics when called from inside an
-async context, which is exactly what a caller experimenting in an async `main`
-will do. Owning a runtime avoids the panic and costs a thread; detecting the
-async context and returning an error beats documenting the panic.
+**`blocking` is built**, as `blocking::Blocking<C>` — one generic wrapper that
+owns a runtime, rather than a synchronous copy of every method. That was the
+decision worth making carefully: mirroring 251 routes would double the surface
+that has to stay correct, and the copy would drift from the original the first
+time a route was added to one and not the other. The wrapper reaches every route
+the day it is added, and there is nothing to keep in sync. The cost is one
+closure at the call site: `client.call(|client| client.get_account())?`.
+
+The trap named here was real and there were **two** of them, not one:
+
+- `block_on` inside an async context panics. `call` checks for an ambient
+  runtime and returns an error instead. This is the one that was written down.
+- **Dropping a runtime inside an async context also panics**, and it is the
+  easier of the two to hit, because it needs no call at all — constructing a
+  `Blocking` in an async fn and letting it fall out of scope is enough. The
+  runtime is shut down in the background on drop, which is allowed everywhere.
+  Both have a test; the second one found the bug rather than confirming it.
+
+Streams stay async, deliberately. A blocking iterator over a live market data
+feed deadlocks as soon as the caller is slower than the socket's read buffer.
 
 [`ToFrame`]: https://docs.rs/alpaca-sdk/latest/alpaca_sdk/data/trait.ToFrame.html
 

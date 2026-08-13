@@ -28,7 +28,7 @@
 //! | `trading` | yes | The trading REST client and trade-update stream |
 //! | `data` | yes | Historical and live market data |
 //! | `broker` | no | The broker API, including its SSE event streams |
-//! | `blocking` | no | A synchronous façade over the async clients |
+//! | `blocking` | no | A synchronous façade over the async clients, via [`blocking::Blocking`] |
 //! | `polars` | no | `DataFrame` conversion for market data collections, via [`data::ToFrame`]. Implies `data` |
 //! | `rustls-tls` | yes | TLS via rustls |
 //! | `native-tls` | no | TLS via the platform library |
@@ -40,6 +40,9 @@
 
 pub mod auth;
 pub mod backoff;
+#[cfg(feature = "blocking")]
+#[cfg_attr(docsrs, doc(cfg(feature = "blocking")))]
+pub mod blocking;
 pub mod config;
 pub mod error;
 pub mod rest;

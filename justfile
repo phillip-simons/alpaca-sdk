@@ -64,6 +64,10 @@ features:
     # frame conversion is for the market data collections and the feature would
     # otherwise compile all of polars and expose nothing.
     cargo check --no-default-features --features polars,rustls-tls
+    # `blocking` alone. It is generic over the client rather than a mirrored API,
+    # so it compiles without any surface enabled — which is worth knowing stays
+    # true, since a mirrored one would not.
+    cargo check --no-default-features --features blocking,rustls-tls
     cargo check --no-default-features --features trading,data,broker,blocking,polars,native-tls
 
 # Build against the MSRV. Needs `rustup toolchain install 1.88.0`.
