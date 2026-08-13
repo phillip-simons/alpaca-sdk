@@ -23,6 +23,7 @@ use crate::broker::models::{
     Agreement, Contact, Disclosures, Identity, RebalancingCondition, TrustedContact, W8BenDocument,
     Weight,
 };
+use crate::broker::onboarding::ActivityCategory;
 use crate::error::{Error, Result};
 use crate::trading::ActivityType;
 use crate::trading::{AccountStatus, AssetClass};
@@ -1418,8 +1419,13 @@ pub struct GetRunsRequest {
 
 /// Filters for listing account activities across accounts.
 ///
-/// Note `date` cannot be combined with `after` or `until`;
-/// [`validate`](Self::validate) enforces that, as alpaca-py does.
+/// One documented exclusivity: [`category`](Self::category) and
+/// [`activity_types`](Self::activity_types) cannot both be set, which
+/// [`validate`](Self::validate) enforces.
+///
+/// alpaca-py also rejects `date` alongside `after` or `until`. That rule is
+/// **not** reproduced: nothing in the reference or the spec says it, and this
+/// crate does not refuse requests on hearsay. See `ROADMAP.md`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GetAccountActivitiesRequest {
     /// Only this account's activities.
@@ -1434,6 +1440,21 @@ pub struct GetAccountActivitiesRequest {
         serialize_with = "crate::types::serde_util::comma_separated"
     )]
     pub activity_types: Option<Vec<ActivityType>>,
+    /// Only trade activities, or only non-trade ones.
+    ///
+    /// The coarse counterpart to [`activity_types`](Self::activity_types), and
+    /// **mutually exclusive with it** — the reference says so in as many words:
+    /// "Cannot be used with `activity_types` parameter". [`validate`] enforces
+    /// that.
+    ///
+    /// [`validate`]: Self::validate
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<ActivityCategory>,
+    /// Only activities belonging to one order.
+    ///
+    /// The way to fetch the fills that made up a completed order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order_id: Option<Uuid>,
     /// Only activities on this date.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date: Option<DateTime<Utc>>,
@@ -1459,20 +1480,41 @@ pub struct GetAccountActivitiesRequest {
 }
 
 impl GetAccountActivitiesRequest {
-    /// Always succeeds. Kept so the client's call sites read the same as the
-    /// other request types, and so a rule can be added here if one is ever
-    /// documented.
+    /// Rejects the one combination the reference forbids.
     ///
-    /// alpaca-py rejects `date` combined with `after` or `until`. The reference
-    /// documents no such rule — the one exclusivity it *does* document is
-    /// between `category` and `activity_types`, neither of which this type
-    /// carries yet. Guessing at the first while missing the second is worse
-    /// than letting Alpaca answer.
+    /// `category` and `activity_types` cannot be sent together: "Cannot be used
+    /// with `activity_types` parameter". That is a documented rule, so it is
+    /// enforced.
+    ///
+    /// alpaca-py additionally rejects `date` combined with `after` or `until`.
+    /// The reference documents no such rule, so this does not enforce it —
+    /// refusing a request Alpaca would accept is the worse of the two failures.
+    /// See `ROADMAP.md` on how the client-side rules were sorted.
     ///
     /// # Errors
-    /// Never.
+    /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if both
+    /// `category` and `activity_types` are set.
     pub fn validate(&self) -> Result<()> {
+        if self.category.is_some() && self.activity_types.is_some() {
+            return Err(crate::Error::InvalidRequest(
+                "category cannot be combined with activity_types".to_owned(),
+            ));
+        }
         Ok(())
+    }
+
+    /// Only activities in this category.
+    #[must_use]
+    pub fn category(mut self, category: ActivityCategory) -> Self {
+        self.category = Some(category);
+        self
+    }
+
+    /// Only activities belonging to this order.
+    #[must_use]
+    pub fn order_id(mut self, order_id: Uuid) -> Self {
+        self.order_id = Some(order_id);
+        self
     }
 }
 

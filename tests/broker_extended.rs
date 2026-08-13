@@ -490,3 +490,37 @@ async fn the_brokers_per_market_calendar_is_v2_where_tradings_is_v3() {
 
     assert_eq!(calendar.market.acronym, "LSE");
 }
+
+// ------------------------------------------------------ activity filters
+
+#[tokio::test]
+async fn category_and_activity_types_cannot_both_be_set() {
+    // The one exclusivity the reference documents on this route: "Cannot be
+    // used with `activity_types` parameter". A documented rule, so it is
+    // enforced — unlike alpaca-py's date/after/until rule, which nothing
+    // documents and this crate does not reproduce.
+    use alpaca_sdk::broker::{ActivityCategory, GetAccountActivitiesRequest};
+    use alpaca_sdk::trading::ActivityType;
+
+    let both = GetAccountActivitiesRequest {
+        category: Some(ActivityCategory::TradeActivity),
+        activity_types: Some(vec![ActivityType::Fill]),
+        ..GetAccountActivitiesRequest::default()
+    };
+    assert!(both.validate().is_err());
+
+    let one = GetAccountActivitiesRequest::default().category(ActivityCategory::NonTradeActivity);
+    assert!(one.validate().is_ok());
+
+    // And the rule this crate declines to enforce still reaches the server, in
+    // the same shape as the `expect(0)` tests on the retired event streams.
+    let dated = GetAccountActivitiesRequest {
+        date: Some("2026-01-02T00:00:00Z".parse().unwrap()),
+        after: Some("2026-01-01T00:00:00Z".parse().unwrap()),
+        ..GetAccountActivitiesRequest::default()
+    };
+    assert!(
+        dated.validate().is_ok(),
+        "alpaca-py's rule is not reinstated"
+    );
+}

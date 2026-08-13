@@ -14,7 +14,7 @@ Written to be picked up cold.
 | 4 — Live market data | ✅ | msgpack websocket, 4 streams, reconnect machine |
 | 5 — Trade updates | ✅ | JSON websocket, single channel |
 | 6 — Broker | ✅ | 75 routes, 20 models, 4 pagination schemes, 5 SSE streams |
-| **6.5 — Exceed alpaca-py** | **⬜** | API gaps; see below |
+| 6.5 — Exceed alpaca-py | ✅ | 251/253 spec routes, 2 deliberate skips |
 | 7 — Polish | ⬜ | polars, blocking façade, docs, migration guide, 1.0 |
 
 Ported against alpaca-py `cc4cb3b`. `just pinned` reports drift against a local
@@ -45,8 +45,8 @@ Everything else has been checked against something real.
 All 76 of alpaca-py's broker routes are ported, bar one: `delete_account`, which
 alpaca-py deprecates and forwards to `close_account`. One route, one method.
 
-The broker spec has **154 operations**; alpaca-py has 76. The remaining 78 are
-Phase 6.5's business.
+The broker spec has **154 operations**; alpaca-py has 76. The remaining 78 were
+Phase 6.5's business, and are now done — 153 implemented and one skipped.
 
 **Count the routes, not the sections.** This section once claimed accounts and
 trading-on-behalf were finished while 16 order, asset, announcement and
@@ -142,21 +142,41 @@ is the least complete of Alpaca's five official SDKs for market data. Evidence:
 the OpenAPI specs carry 18 trading routes it lacks, and diffing the C#, Node, Go
 and Java clients found ~25 more non-broker gaps.
 
-### Where coverage actually stands
+### Where coverage stands — done
 
 `just coverage` diffs every route this crate calls against the OpenAPI specs and
-writes `COVERAGE.md`. As of the first run:
+writes `COVERAGE.md`. **Every documented route is now either implemented or
+recorded as a deliberate skip.**
 
-| Surface | Implemented | Spec operations |
-|---|---|---|
-| trading | 30 | 57 |
-| data | 26 | 42 |
-| broker | 74 | 154 |
-| **total** | **130** | **253** |
+| Surface | Implemented | Skipped | Spec operations |
+|---|---|---|---|
+| trading | 56 | 1 | 57 |
+| data | 42 | 0 | 42 |
+| broker | 153 | 1 | 154 |
+| **total** | **251** | **2** | **253** |
 
-Two independent numbers corroborate the extraction: broker's 154 operations is
-the count this file already carried, and data's 26 is exactly the method count
-Phase 3 landed.
+It started at 130 of 253. Two independent numbers corroborated the extraction at
+the time: broker's 154 operations is the count this file already carried, and
+data's 26 was exactly the method count Phase 3 landed.
+
+**The scanner under-reported, and fixing it was worth four routes.** A route
+whose path is bound to a local first — because it interpolates an id, or two
+calls share it — was read by the binding alone and recorded as a GET whatever
+method actually used it. `PATCH /v2/orders/{id}`, `DELETE /v2/positions/{id}`
+and their broker equivalents had been implemented since phases 2 and 6 and were
+being reported as gaps. `scripts/coverage.py` now walks each file in source
+order so the call decides the method. The guard that a looser matcher has not
+started *inventing* routes is the "called by the crate but not in any spec"
+section, which still lists exactly the two known ones.
+
+**What the counts still do not prove.** A ✅ means the route is called, not that
+it is called at the right version — precisely the distinction the event streams
+got wrong, and one the matcher cannot check because the version lives in the
+client rather than in the path literal. What stands in for it:
+`RestClient::at_version` puts the version at the call site, and every route
+whose version differs from its client's has a test asserting the segment it
+requests. Nor do the counts say anything about *parameter* coverage; see
+"Also open".
 
 **Two routes this crate calls appear in no spec and in no reference page:**
 
@@ -259,7 +279,7 @@ non-trading-activity stream takes.
 This is what porting an SDK rather than reading the API costs, and it is the
 reason the reconciliation above is Phase 6.5's first job rather than its last.
 
-### The coverage checklist
+### The coverage checklist — every group is covered
 
 `alpacahq/alpaca-java` is **generated from the OpenAPI specs**, vendors them at
 `specs/{broker,data,trading}/openapi.yaml`, and runs an `openapi-drift.yml` CI
@@ -267,18 +287,32 @@ job to catch the spec moving under it. That makes its API-group list the closest
 thing to an authoritative statement of what the API *is* — better than alpaca-py,
 which is hand-written and demonstrably stale.
 
-Its groups, with where this crate stands:
+Every group is now implemented. What each of the eighteen that were missing
+turned into, so the mapping from group to module survives:
 
-| Surface | Covered | Not covered |
-|---|---|---|
-| **broker** (25) | Accounts, Assets, Calendar, CorporateActions, Documents, Events, Funding, Journals, Kyc, PortfolioHistory, Rebalancing, Trading, Watchlist | CashInterest, CountryInfo, CryptoFunding, FpslProgram, FundingWallets, InstantFunding, Ipo, Ira, Logos, OAuth, Reporting, Tokenization |
-| **data** (8) | CorporateActions, Crypto, News, Option, Screener, Stock | Forex, Logos |
-| **trading** (15) | AccountActivities, AccountConfigurations, Accounts, Assets, Calendar, Clock, CorporateActions, Orders, PortfolioHistory, Positions, Watchlists | CryptoFunding, Events, Locates, Tokenization |
+| Group | Where it landed |
+|---|---|
+| CashInterest, Reporting | `broker/reporting.rs` |
+| CountryInfo, Ira, options approval, Onfido, trading limits, order estimation | `broker/onboarding.rs` |
+| CryptoFunding | `trading/wallets.rs`, reused by the broker client |
+| FpslProgram | `broker/fpsl.rs` |
+| FundingWallets | `broker/funding_wallet.rs` |
+| InstantFunding, JIT | `broker/instant_funding.rs`, `broker/jit.rs`, `broker/settlements.rs` |
+| Ipo | `broker/ipos.rs` |
+| OAuth | `broker/oauth.rs` |
+| Tokenization | `trading/tokenization.rs`, reused by the broker client |
+| Logos | `types/logo.rs` — both surfaces document the route |
+| Forex | `data/historical.rs` (`ForexDataClient`) |
+| Locates | `trading/locates.rs` |
+| Events | the SSE streams, now in `src/sse.rs` |
 
-Six of those were in neither the route lists below nor the reference sweep:
-**CashInterest, CountryInfo, FpslProgram** (fully-paid securities lending),
-**Ipo, Ira, Reporting**. Diff against the vendored YAML directly — it is a file,
-not a website.
+**Fixed income was the only group with real payloads behind it.** `just harvest`
+had already pulled the Go SDK's `us_corporates` and `us_treasuries` responses
+into `fixtures/go/`, and parsing them found a divergence the spec would never
+have shown: the captured corporate bond **omits `fractionable`, which the spec
+marks required**. The field defaults rather than being required, because a
+required-field model would reject the only real corporate bond anyone has
+captured. Third time rule zero has paid.
 
 ### What building the account requests from the reference changed
 
@@ -353,6 +387,7 @@ port of anything else should sort its rules the same way before enforcing them.
 | Bank: address fields only on a BIC bank | "Only for international banks, ie if bank_code_type = BIC" |
 | Journals: `amount` ↔ JNLC, `symbol`+`qty` ↔ JNLS | "Required if entry_type = JNLC" / "= JNLS" |
 | Account creation: the fifteen required fields | `createaccount` schema |
+| Activities: `category` xor `activity_types` | "Cannot be used with `activity_types` parameter" |
 
 **Contradicted by the reference — removed.**
 
@@ -374,7 +409,9 @@ refuse a request that would have worked.
 - The ten-document cap on an upload. Alpaca documents a 10MB ceiling on each
   document's contents and no count at all. `DOCUMENT_UPLOAD_LIMIT` is still
   exported for a caller who wants alpaca-py's behaviour.
-- `date` alongside `after`/`until` on account activities.
+- `date` alongside `after`/`until` on account activities. There is now a test
+  asserting this combination still *reaches* the server, so a re-port from
+  alpaca-py cannot quietly reinstate the rule.
 
 **Coherence rules — kept without needing the reference.**
 
@@ -389,9 +426,15 @@ Each removed rule has a test asserting the request now *reaches* the server, the
 same shape as the `expect(0)` test on the retired event streams: a re-port from
 alpaca-py cannot quietly reinstate a stale rule.
 
-**Found while checking, not yet done:** the reference documents that `category`
-and `activity_types` are mutually exclusive on account activities. This crate has
-no `category` field, so it implements neither the field nor its rule.
+**Found while checking, now done:** the reference documents that `category` and
+`activity_types` are mutually exclusive on account activities. The crate had
+neither the field nor the rule; it now has both, along with `order_id` — the way
+to fetch the fills that made up one order — which was also missing.
+
+One doc comment was found asserting a rule the code no longer had: it claimed
+`validate` rejected `date` alongside `after`/`until`, which had been removed as
+undocumented. A stale comment about a rule is worse than no comment, because the
+next reader trusts it. Fixed.
 
 ### Documentation: cite the API, not the Python SDK
 
@@ -479,9 +522,14 @@ GET-only market-data routes.
 Half the harvest is routes already implemented, so `tests/harvested_go.rs`
 deserializes those through the real `Bar`, `Trade` and `Quote` models: a second
 SDK's authors, writing down the same API independently, and the models read
-their payloads. The rest are placed and parsed but await their models. Nothing
-lands unread — the account-list fixture that sat unparsed for months is the
-reason that rule exists.
+their payloads. Nothing lands unread — the account-list fixture that sat unparsed
+for months is the reason that rule exists.
+
+**The rest now have models, and reading them paid.** `tests/data_meta.rs` parses
+the auction payloads and `tests/broker_extended.rs` the fixed income ones. The
+corporate bond immediately contradicted the spec: it omits `fractionable`, which
+the spec marks required, so the field defaults rather than being required. A
+model built from the spec alone would have rejected it.
 
 ### The original plan for harvesting
 
@@ -536,12 +584,34 @@ is already dead, which is the pattern this whole section exists to get ahead of.
 - `/v2/wallets/*` (7 routes), `/v2/tokenization/*` (4 routes)
 - `/v2beta1/events/activities`
 
-**Follow-on worth doing properly:** `meta/conditions` and `meta/exchanges` are the
-official decoder for the single-letter exchange codes and the opaque
-`conditions: Vec<String>` on trades and quotes. Worth a lookup helper, not just
-a raw map.
+**Follow-on, done:** `meta/conditions` and `meta/exchanges` are the official
+decoder for the single-letter exchange codes and the opaque
+`conditions: Vec<String>` on trades and quotes, so they return
+[`Codes`](../src/data/meta.rs) rather than a raw map. `Codes::name` takes the
+code verbatim and `Codes::names` maps a whole `conditions` list, degrading per
+code where the table has fallen behind the tape. The wrapper exists for one
+reason: `" "` is `"Regular Sale"`, a bare `HashMap` invites `.trim()` at the call
+site, and the ordinary case is the one that would break. There is a test that
+only that distinction passes.
 
 ## Also open
+
+- **Parameter coverage is not route coverage, and nothing measures it.**
+  `just coverage` compares paths and methods; it says nothing about whether a
+  request type carries every parameter its route accepts. Checking three routes
+  by hand while auditing the doc rules found four missing parameters —
+  `asset_class`, `before_order_id` and `after_order_id` on `GET /v2/orders`, and
+  `show_deliverables` on the option contracts route — all now added. Three
+  routes out of 251 is not a sample anyone should generalize from. A parameter
+  diff, driven by `specs/reference.json`, is the natural next thing for
+  `scripts/coverage.py` to grow.
+- **The doc-rule audit is partly done.** The ~40 comments that attribute a rule
+  to alpaca-py rather than to Alpaca were sorted and the enforced ones checked;
+  that turned up one comment describing a rule the code no longer had, and the
+  missing `category` field and its documented exclusivity. The comments that
+  merely *describe* alpaca-py's defaults — page sizes, sort directions — are not
+  yet each checked against the reference. They are not load-bearing for
+  correctness, which is why they were left last.
 
 - **Enum drift.** Of 71 generated enums, only 7 of the 19 with a same-named spec
   schema agree exactly. Missing values land in `Unknown(String)` — degrading, not
@@ -558,6 +628,20 @@ a raw map.
   spec. First real payload wins; treat a decode failure there as expected work,
   not a regression. Note `CIPPhoto.face_comparison` reads Alpaca's
   `face_comparision`, which is a typo on the wire and so is load-bearing.
+- **The 69 broker routes added in phase 6.5 have never met a real response.**
+  Instant funding, JIT, FPSL, funding wallets, IPOs, reporting, OAuth,
+  tokenization and the crypto wallets are spec-and-reference derived, exactly as
+  CIP is, and for the same reason: no broker sandbox key. Their tests use the
+  reference's own examples and say so. Treat a first-payload decode failure as
+  expected work. Fixed income is the exception — it has Go-harvested payloads,
+  and they already corrected the spec once.
+- **The wire vocabularies do not line up across families**, and each divergence
+  is a separate type rather than a shared one: `COMPLETE` (funding wallets)
+  against `COMPLETED` (instant funding), `incoming` against `INCOMING`,
+  `checking` against `CHECKING`, `ASC` against `asc`. Each pair has a test
+  naming both, because the temptation to unify them is exactly what would break
+  decoding. `parnter_fee` is Alpaca's own typo and is load-bearing, like
+  `face_comparision`.
 - **`BrokerClient` carries a second `reqwest::Client`**, only for the document
   download: that route answers `301` to a presigned storage URL, and
   `RestClient` refuses redirects on purpose. The second client follows them and

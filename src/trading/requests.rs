@@ -687,6 +687,25 @@ pub struct GetOrdersRequest {
         serialize_with = "crate::types::serde_util::comma_separated"
     )]
     pub symbols: Option<Vec<String>>,
+    /// Only orders in these asset classes.
+    ///
+    /// Documented by the reference and absent from alpaca-py.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "crate::types::serde_util::comma_separated"
+    )]
+    pub asset_class: Option<Vec<AssetClass>>,
+    /// Only orders placed before this one.
+    ///
+    /// The id-based cursor, which is steadier than
+    /// [`until`](Self::until) when several orders share a timestamp.
+    /// Documented by the reference and absent from alpaca-py.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_order_id: Option<Uuid>,
+    /// Only orders placed after this one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_order_id: Option<Uuid>,
 }
 
 /// Filters for fetching one order.
@@ -957,6 +976,11 @@ pub struct GetOptionContractsRequest {
     /// Only contracts with this exercise style.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<ExerciseStyle>,
+    /// Whether to include each contract's deliverables.
+    ///
+    /// Documented by the reference and absent from alpaca-py.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_deliverables: Option<bool>,
     /// Only contracts struck at or above this price.
     #[serde(
         default,

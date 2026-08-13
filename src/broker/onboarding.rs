@@ -54,6 +54,21 @@ wire_enum! {
 }
 
 wire_enum! {
+    /// The coarse split of account activities.
+    ///
+    /// Trade activities are fills; everything else — dividends, fees, journals,
+    /// transfers — is a non-trade activity. The same split
+    /// [`Activity`](crate::trading::Activity) makes in the response, offered as
+    /// a filter on the request.
+    pub enum ActivityCategory {
+        /// Fills.
+        TradeActivity => "trade_activity",
+        /// Everything else.
+        NonTradeActivity => "non_trade_activity",
+    }
+}
+
+wire_enum! {
     /// How risky Alpaca considers a country.
     pub enum RiskRating {
         /// Low risk.
