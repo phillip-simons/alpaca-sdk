@@ -18,6 +18,25 @@ use rust_decimal::Decimal;
 use serde_json::json;
 use uuid::Uuid;
 use wiremock::matchers::{body_json, method, path, query_param};
+
+/// The symbol as eleven captured fixtures spell it, trailing backtick and all.
+///
+/// **This is a typo in alpaca-py's own test files**, which those payloads were
+/// extracted from — it is present at the pinned commit `cc4cb3b` in
+/// `tests/trading/trading_client/test_order_routes.py` and two of its
+/// neighbours. Alpaca does not send it, and no route accepts it.
+///
+/// It is asserted verbatim rather than corrected, for the same reason the
+/// fixtures are not hand-edited: a captured payload is worth having because it
+/// is a faithful copy of its source, and one edited to look tidier is a weaker
+/// record than one that is odd in exactly the way the source is. The typo is
+/// also harmless here — the field is a `String` either way, and what these tests
+/// prove is that the symbol is decoded and reaches the model, which any string
+/// demonstrates.
+///
+/// Named so that it reads as a known quirk rather than as a live symbol, and so
+/// that grepping for it finds this explanation.
+const UPSTREAM_SYMBOL_TYPO: &str = "AAPL`";
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const ORDER_ID: &str = "61e69015-8549-4bfd-b9c3-01e75843f47d";
@@ -81,7 +100,7 @@ async fn submit_order_posts_the_serialized_body() {
     );
     let response = client(&server).submit_order(&order).await.unwrap();
 
-    assert_eq!(response.symbol.as_deref(), Some("AAPL`"));
+    assert_eq!(response.symbol.as_deref(), Some(UPSTREAM_SYMBOL_TYPO));
 }
 
 #[tokio::test]
