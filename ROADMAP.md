@@ -841,14 +841,34 @@ and reading does not survive contact with 251 routes.
   `&[(&str, String)]` query, so the parameters *can* be sent — they are just not
   named anywhere, and the broker's equivalent route has a typed request with a
   `page_size` field. That asymmetry is the gap, not the parameters.
-- **Enum drift.** Of 71 generated enums, only 7 of the 19 with a same-named spec
-  schema agree exactly. Unknown values degrade to `Unknown(String)` rather than
-  breaking, so this is a quality item and not a bug. Add the cross-check to
-  `scripts/gen_enums.py`. Do **not** remove values the spec lacks — they may be
-  deprecated and still served. `Exchange` is not drift: the spec's same-named
-  schema is venue names and alpaca-py's is tape codes. One case needs a live
-  response rather than a diff: `TaxIdType::ARG_AR_CUIT` against the spec's
-  `ARG_AG_CUIT`, where one of the two is a typo.
+- **Enum drift is measured now** — `just enums-drift`, backed by
+  `scripts/enum_drift.py`. It reads the checked-in `enums.rs` files rather than
+  regenerating them, which is why it is a separate script and not a step in
+  `gen_enums.py` as this section originally asked: `gen_enums.py` needs an
+  alpaca-py checkout to run at all, and a check that can only run during a
+  regeneration is a check that runs once a year. The generated files are what
+  ships, and reading them also catches a hand edit that should not be there.
+
+  It confirms the count this section quoted from a manual survey — 7 of the 19
+  with a same-named schema agree exactly — and names the rest. The report has
+  two halves, and only one is work:
+
+  - **In the spec, not in the crate.** A value no caller can name. Nine enums:
+    `AccountStatus` is missing `ACCOUNT_CLOSED_PENDING`, `ActivityType` twelve
+    values, `AssetClass` six, `OrderSide` seven (`sell_short`, `cross`,
+    `buy_minus` and friends), `JournalStatus` one, and `OrderClass` the **empty
+    string** — which Alpaca documents as a synonym for `simple` in the schema's
+    own description, so it is a real wire value and not a parsing artifact.
+  - **In the crate, not in the spec.** Reported quietly and never to be acted
+    on. alpaca-py carries values Alpaca still serves and has stopped
+    documenting; deleting one turns a working match arm into an `Unknown`.
+
+  Two entries are decisions rather than findings, and both live in the script so
+  the report converges. `Exchange` is not drift: the spec's same-named schema is
+  venue names and alpaca-py's is the tape codes the data API actually sends —
+  different vocabularies, same word. `TaxIdType::ARG_AR_CUIT` against the spec's
+  `ARG_AG_CUIT` is a typo in one of the two, and no diff can say which; the
+  report prints the pair with what would settle it.
 
 ### What 1.0 itself needs
 

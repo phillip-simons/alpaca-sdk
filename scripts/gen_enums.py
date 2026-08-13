@@ -8,6 +8,12 @@ alpaca-py uses — are carried across as rustdoc.
 Generated files are overwritten on every run. Hand-written `impl` blocks belong
 in the sibling `enums_ext.rs`, which this script never touches.
 
+These enums come from alpaca-py, which is not the API. `scripts/enum_drift.py`
+diffs the generated files against the same-named schemas in `specs/` and reports
+where the two disagree; it is a separate script rather than a step here because
+this one needs an alpaca-py checkout and that one does not, and a check that can
+only run during a regeneration is a check that runs once a year.
+
 KNOWN GAP: nothing currently proves the checked-in `enums.rs` files still match
 what this script produces — a hand edit to a generated file would survive, since
 `tests/enum_parity.rs` is generated from the same parse. Closing it needs an

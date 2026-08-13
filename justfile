@@ -174,6 +174,13 @@ reference:
 coverage: specs
     python3 scripts/coverage.py specs --out COVERAGE.md
 
+# Where the generated enums and the same-named spec schemas disagree.
+#
+# A quality report, not a gate: an unknown value deserializes into
+# `Unknown(String)` rather than failing. Needs `just specs`.
+enums-drift:
+    python3 scripts/enum_drift.py
+
 # Which documented query parameters this crate never sends.
 #
 # `just coverage` compares paths and methods; a route can be implemented,
