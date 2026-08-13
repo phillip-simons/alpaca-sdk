@@ -259,11 +259,17 @@ impl BrokerClient {
 
     /// Positions held across every account, as of the last market close.
     ///
+    /// **Deprecated by Alpaca.** Use
+    /// [`get_eod_positions`](Self::get_eod_positions), which calls the
+    /// `/v1/reporting/eod/positions` route Alpaca names as the replacement.
+    /// No sunset date is published, so this still answers.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     #[deprecated(
         since = "0.1.0",
-        note = "Alpaca deprecated this route; it says to use GET /v1/reporting/eod/positions instead, which this crate does not wrap yet"
+        note = "Alpaca deprecated this route; use `BrokerClient::get_eod_positions`, which calls the \
+                /v1/reporting/eod/positions route Alpaca names as its replacement"
     )]
     pub async fn get_all_accounts_positions(&self) -> Result<AllAccountsPositions> {
         self.rest.get("/accounts/positions", &Empty).await
@@ -1745,7 +1751,8 @@ impl BrokerClient {
     /// days, or an API error if Alpaca rejects the request.
     #[deprecated(
         since = "0.1.0",
-        note = "Alpaca deprecated this route; use the corporate actions market data endpoint instead"
+        note = "Alpaca deprecated this route; use `CorporateActionsClient::get_corporate_actions` \
+                (the /v1/corporate-actions market data route) instead. No sunset date is published"
     )]
     pub async fn get_corporate_announcements(
         &self,
@@ -1763,7 +1770,8 @@ impl BrokerClient {
     /// Propagates transport, API, and decoding failures.
     #[deprecated(
         since = "0.1.0",
-        note = "Alpaca deprecated this route; use the corporate actions market data endpoint instead"
+        note = "Alpaca deprecated this route; use `CorporateActionsClient::get_corporate_actions` \
+                (the /v1/corporate-actions market data route) instead. No sunset date is published"
     )]
     pub async fn get_corporate_announcement_by_id(
         &self,

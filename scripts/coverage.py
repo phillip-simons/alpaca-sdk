@@ -173,14 +173,48 @@ CALL_PATTERNS = [
     (RAW_GET, "get"),
 ]
 
+# A route Alpaca has flagged should reach a caller as a compiler warning, not
+# only as a row in this file. These find the methods that carry one.
+DEPRECATED_ATTR = re.compile(r"#\[deprecated\b")
+FN_DECL = re.compile(r"\bpub\s+(?:async\s+)?fn\s")
 
-def crate_routes(src: pathlib.Path) -> dict[tuple[str, str], list[str]]:
-    """Every route the crate calls, as {(method, normalized path): [sources]}."""
+
+def deprecated_fn_starts(text: str) -> list[int]:
+    """The offset of every `pub fn` that a `#[deprecated]` attribute precedes.
+
+    The attribute always sits immediately above its item, so the first function
+    declaration after it is the one it applies to.
+    """
+    fns = [m.start() for m in FN_DECL.finditer(text)]
+    marked = []
+    for attr in DEPRECATED_ATTR.finditer(text):
+        following = [start for start in fns if start > attr.start()]
+        if following:
+            marked.append(following[0])
+    return marked
+
+
+def crate_routes(
+    src: pathlib.Path,
+) -> tuple[dict[tuple[str, str], list[str]], set[tuple[str, str]]]:
+    """Every route the crate calls, and which are called from deprecated methods.
+
+    Returns `({(method, normalized path): [sources]}, {deprecated routes})`. The
+    second is what lets this file check that a route Alpaca has flagged actually
+    warns at the call site.
+    """
     routes: dict[tuple[str, str], list[str]] = defaultdict(list)
+    from_deprecated: set[tuple[str, str]] = set()
 
     for rs in sorted(src.rglob("*.rs")):
         text = rs.read_text()
         where = str(rs.relative_to(src.parent))
+        fn_starts = [m.start() for m in FN_DECL.finditer(text)]
+        marked_fns = set(deprecated_fn_starts(text))
+
+        def enclosing_fn_is_deprecated(offset: int) -> bool:
+            before = [start for start in fn_starts if start < offset]
+            return bool(before) and before[-1] in marked_fns
 
         # Everything of interest, in source order, so a `path` binding is known
         # by the time the call that uses it is read.
@@ -194,7 +228,7 @@ def crate_routes(src: pathlib.Path) -> dict[tuple[str, str], list[str]]:
         bound: str | None = None
         bindings: list[str] = []
         seen_here: set[str] = set()
-        for _, kind, match in events:
+        for offset, kind, match in events:
             if kind == "binding":
                 bound = match.group(1)
                 bindings.append(bound)
@@ -211,8 +245,11 @@ def crate_routes(src: pathlib.Path) -> dict[tuple[str, str], list[str]]:
             else:
                 continue
             method = fixed_method or match.group(1).lower()
-            routes[(method, normalize(path))].append(where)
+            key = (method, normalize(path))
+            routes[key].append(where)
             seen_here.add(normalize(path))
+            if enclosing_fn_is_deprecated(offset):
+                from_deprecated.add(key)
 
         # A `path` binding no call above accounted for was handed to a private
         # helper — `latest_for_symbol`, say — which this cannot follow. Every
@@ -224,7 +261,7 @@ def crate_routes(src: pathlib.Path) -> dict[tuple[str, str], list[str]]:
             if normalize(path) not in seen_here:
                 routes[("get", normalize(path))].append(where)
 
-    return routes
+    return routes, from_deprecated
 
 
 def reference_index(path: pathlib.Path) -> dict[tuple[str, str], list[dict]]:
@@ -270,7 +307,7 @@ def main() -> int:
         )
         return 1
 
-    routes = crate_routes(args.src)
+    routes, from_deprecated = crate_routes(args.src)
     implemented = set(routes)
     matched: set[tuple[str, str]] = set()
     reference = reference_index(args.specs / "reference.json")
@@ -353,16 +390,25 @@ def main() -> int:
         lines += ["Nothing.", ""]
 
     lines += ["## Implemented, and marked deprecated by the spec", ""]
+    unwarned: list[tuple[str, str]] = []
     if rotting:
         lines += [
             "Routes this crate calls that Alpaca has flagged. Deprecated is not",
             "gone — but `/v1/events/trades` was flagged before it was switched off,",
             "so each of these wants a replacement found before it is needed.",
             "",
+            "**⚠️ warns** means the method carrying the route is `#[deprecated]`, so a",
+            "caller finds out from the compiler rather than from this file. A route",
+            "Alpaca has flagged and the crate has not is the row to act on.",
+            "",
         ]
-        lines += [
-            f"- `{m.upper():6}` `{p}`{flagged(reference, (m, normalize(p)))}" for m, p in rotting
-        ]
+        for method, path in rotting:
+            key = (method, normalize(path))
+            warns = key in from_deprecated
+            if not warns:
+                unwarned.append((method, path))
+            mark = "⚠️ warns" if warns else "**no `#[deprecated]` on the method**"
+            lines.append(f"- `{method.upper():6}` `{path}` — {mark}{flagged(reference, key)}")
         lines.append("")
     else:
         lines += ["Nothing.", ""]
@@ -387,6 +433,14 @@ def main() -> int:
         note = f"  ({skipped} skipped)" if skipped else ""
         print(f"{surface:9} {covered:3}/{total:<3} implemented{note}")
     print(f"{'deprecated':9} {len(rotting):3}     implemented routes the spec flags")
+    if unwarned:
+        # Loud, because the whole point of the attribute is that a caller does
+        # not have to read this file to learn a route is going away.
+        print(
+            f"{'':9} {len(unwarned):3}     of those carry no `#[deprecated]`: "
+            + ", ".join(f"{m.upper()} {p}" for m, p in unwarned),
+            file=sys.stderr,
+        )
     print(f"{'unmatched':9} {len(unmatched):3}     crate routes not found in any spec")
     print(f"wrote {args.out}")
     return 0

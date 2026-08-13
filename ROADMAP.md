@@ -389,6 +389,26 @@ different reason than forex and logos**, and the distinction is worth keeping,
 because a 404 is also what a wrong path looks like. Re-running the capture
 against a live or entitled key is what would separate the two.
 
+### Deprecated routes warn at the call site, and that is now checked
+
+The five routes Alpaca has flagged and this crate still calls carry
+`#[deprecated]`, so a caller learns from the compiler rather than from
+`COVERAGE.md`. `just coverage` now verifies it: it finds each route's enclosing
+method and reports whether that method is marked, printing the unmarked ones to
+stderr. The check was confirmed by removing an attribute and watching it fail,
+because a check nobody has seen fail is not a check.
+
+**Only one route in the whole reference carries a sunset date** —
+`POST /v2/wallets/transfers`, 2026-10-09 — and it is the one deliberately
+skipped, so no function can carry that date. The other five are deprecated with
+no sunset published, which their notes say. If Alpaca ever adds one, it lands in
+`specs/reference.json` on the next `just reference` and `COVERAGE.md` prints it
+beside the route.
+
+One note was stale: `get_all_accounts_positions` said its replacement
+"this crate does not wrap yet". Phase 6.5 wrapped it — the note now names
+`BrokerClient::get_eod_positions`.
+
 **Two findings worth keeping:**
 
 - **`/v2/stocks/meta/conditions/{tick_type}` requires a `tape` parameter** and

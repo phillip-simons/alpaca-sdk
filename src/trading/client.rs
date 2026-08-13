@@ -444,7 +444,8 @@ impl TradingClient {
     /// days, or an API error if Alpaca rejects the request.
     #[deprecated(
         since = "0.1.0",
-        note = "Alpaca deprecated this route; use the corporate actions market data endpoint instead"
+        note = "Alpaca deprecated this route; use `CorporateActionsClient::get_corporate_actions` \
+                (the /v1/corporate-actions market data route) instead. No sunset date is published"
     )]
     pub async fn get_corporate_announcements(
         &self,
@@ -462,7 +463,8 @@ impl TradingClient {
     /// Propagates transport, API, and decoding failures.
     #[deprecated(
         since = "0.1.0",
-        note = "Alpaca deprecated this route; use the corporate actions market data endpoint instead"
+        note = "Alpaca deprecated this route; use `CorporateActionsClient::get_corporate_actions` \
+                (the /v1/corporate-actions market data route) instead. No sunset date is published"
     )]
     pub async fn get_corporate_announcement_by_id(
         &self,

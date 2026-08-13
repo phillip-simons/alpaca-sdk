@@ -47,11 +47,15 @@ Routes this crate calls that Alpaca has flagged. Deprecated is not
 gone — but `/v1/events/trades` was flagged before it was switched off,
 so each of these wants a replacement found before it is needed.
 
-- `GET   ` `/v2/corporate_actions/announcements` — reference: deprecated
-- `GET   ` `/v2/corporate_actions/announcements/{id}` — reference: deprecated
-- `GET   ` `/v1/accounts/positions` — reference: deprecated
-- `GET   ` `/v1/corporate_actions/announcements` — reference: deprecated
-- `GET   ` `/v1/corporate_actions/announcements/{id}` — reference: deprecated
+**⚠️ warns** means the method carrying the route is `#[deprecated]`, so a
+caller finds out from the compiler rather than from this file. A route
+Alpaca has flagged and the crate has not is the row to act on.
+
+- `GET   ` `/v2/corporate_actions/announcements` — ⚠️ warns — reference: deprecated
+- `GET   ` `/v2/corporate_actions/announcements/{id}` — ⚠️ warns — reference: deprecated
+- `GET   ` `/v1/accounts/positions` — ⚠️ warns — reference: deprecated
+- `GET   ` `/v1/corporate_actions/announcements` — ⚠️ warns — reference: deprecated
+- `GET   ` `/v1/corporate_actions/announcements/{id}` — ⚠️ warns — reference: deprecated
 
 ## Called by the crate but not in any spec
 
