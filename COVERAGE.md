@@ -64,37 +64,14 @@ have chosen against must not keep reading as a gap.
 - `POST  ` `/v2/wallets/whitelists`
 - `DELETE` `/v2/wallets/whitelists/{whitelisted_address_id}`
 
-## data — 26/42 (61%)
+## data — 41/42 (97%)
 
 ### Not implemented
 
 **events**
 - `GET   ` `/v1beta1/events/corporate-actions`
 
-**forex**
-- `GET   ` `/v1beta1/forex/latest/rates`
-- `GET   ` `/v1beta1/forex/rates`
-
-**logos**
-- `GET   ` `/v1beta1/logos/{symbol}`
-
-**options**
-- `GET   ` `/v1beta1/options/meta/conditions/{ticktype}`
-
-**stocks**
-- `GET   ` `/v2/stocks/auctions`
-- `GET   ` `/v2/stocks/meta/conditions/{ticktype}`
-- `GET   ` `/v2/stocks/meta/exchanges`
-- `GET   ` `/v2/stocks/{symbol}/auctions`
-- `GET   ` `/v2/stocks/{symbol}/bars`
-- `GET   ` `/v2/stocks/{symbol}/bars/latest`
-- `GET   ` `/v2/stocks/{symbol}/quotes`
-- `GET   ` `/v2/stocks/{symbol}/quotes/latest`
-- `GET   ` `/v2/stocks/{symbol}/snapshot`
-- `GET   ` `/v2/stocks/{symbol}/trades`
-- `GET   ` `/v2/stocks/{symbol}/trades/latest`
-
-## broker — 74/154 (48%), 1 deliberately skipped
+## broker — 75/154 (48%), 1 deliberately skipped
 
 ### Not implemented
 
@@ -184,9 +161,6 @@ have chosen against must not keep reading as a gap.
 - `GET   ` `/v1/jit/settlements`
 - `POST  ` `/v1/jit/settlements`
 - `GET   ` `/v1/jit/settlements/{settlement_id}`
-
-**logos**
-- `GET   ` `/v1beta1/logos/{symbol}`
 
 **oauth**
 - `POST  ` `/v1/oauth/authorize`

@@ -223,6 +223,83 @@ pub struct TradeCorrection {
     pub tape: String,
 }
 
+/// One auction print: the opening or closing cross on one exchange.
+///
+/// `s` is absent on some prints, which is why the size is optional while the
+/// price is not — the spec marks `t`, `x`, `p` and `c` required and `s` not.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Auction {
+    /// When the auction printed.
+    #[serde(rename = "t", with = "crate::types::timestamp")]
+    pub timestamp: DateTime<Utc>,
+    /// Exchange the auction ran on.
+    ///
+    /// A single-letter code; [`Codes`](crate::data::Codes) from
+    /// `/v2/stocks/meta/exchanges` turns it into a name.
+    #[serde(rename = "x")]
+    pub exchange: String,
+    /// The auction price.
+    #[serde(rename = "p")]
+    pub price: f64,
+    /// The auction size.
+    #[serde(rename = "s", default)]
+    pub size: Option<f64>,
+    /// The condition flag marking this print as an auction.
+    ///
+    /// One code, not a list — unlike [`Trade::conditions`].
+    #[serde(rename = "c")]
+    pub condition: String,
+}
+
+/// One day's opening and closing auctions for a symbol.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DailyAuctions {
+    /// The symbol these auctions are for, filled in from the response key.
+    #[serde(default, skip_deserializing)]
+    pub symbol: String,
+    /// The session date.
+    #[serde(rename = "d")]
+    pub date: chrono::NaiveDate,
+    /// Opening auctions.
+    #[serde(rename = "o", default)]
+    pub opening: Vec<Auction>,
+    /// Closing auctions.
+    ///
+    /// Every price / exchange / condition triplet appears once, at its earliest
+    /// timestamp.
+    #[serde(rename = "c", default)]
+    pub closing: Vec<Auction>,
+}
+
+/// Multi-symbol auctions keyed by symbol.
+pub type AuctionSet = HashMap<String, Vec<DailyAuctions>>;
+
+/// One foreign exchange rate at a point in time.
+///
+/// Every field is a JSON number, so the prices are `f64` like the rest of market
+/// data rather than [`Decimal`](rust_decimal::Decimal).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ForexRate {
+    /// The currency pair this rate is for, filled in from the response key.
+    #[serde(default, skip_deserializing)]
+    pub currency_pair: String,
+    /// When the rate was observed.
+    #[serde(rename = "t", with = "crate::types::timestamp")]
+    pub timestamp: DateTime<Utc>,
+    /// The last bid price in the timeframe.
+    #[serde(rename = "bp")]
+    pub bid_price: f64,
+    /// The last mid price in the timeframe.
+    #[serde(rename = "mp")]
+    pub mid_price: f64,
+    /// The last ask price in the timeframe.
+    #[serde(rename = "ap")]
+    pub ask_price: f64,
+}
+
+/// Multi-pair forex rates keyed by currency pair.
+pub type ForexRateSet = HashMap<String, Vec<ForexRate>>;
+
 /// One price level in an orderbook.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OrderbookQuote {
@@ -460,7 +537,16 @@ impl_with_symbol!(
     TradeCancel,
     TradeCorrection,
     Orderbook,
+    DailyAuctions,
 );
+
+impl WithSymbol for ForexRate {
+    fn set_symbol(&mut self, symbol: &str) {
+        // Forex keys by currency pair rather than by symbol; the mechanism is
+        // the same one, so the field is named for what it holds.
+        self.currency_pair = symbol.to_owned();
+    }
+}
 
 impl WithSymbol for Snapshot {
     fn set_symbol(&mut self, symbol: &str) {

@@ -230,6 +230,22 @@ impl RestClient {
         )
     }
 
+    /// Issues a `GET` and returns the response body as bytes.
+    ///
+    /// For the routes that answer with something other than JSON. The logo
+    /// endpoint is the only one in this crate: it serves `image/png`, and
+    /// putting it through [`RestClient::get`] would try to parse a PNG as JSON.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn get_bytes<Q>(&self, path: &str, query: &Q) -> Result<Vec<u8>>
+    where
+        Q: Serialize + ?Sized,
+    {
+        let request = self.http.get(self.url(path)).query(query);
+        self.execute_bytes(request, path).await
+    }
+
     /// Issues a request and returns the raw response body without deserializing.
     ///
     /// # Errors
@@ -282,9 +298,33 @@ impl RestClient {
         self.execute(request, path).await
     }
 
+    /// Runs the retry loop and reads the successful body as text.
+    async fn execute(&self, request: RequestBuilder, path: &str) -> Result<String> {
+        self.execute_response(request, path)
+            .await?
+            .text()
+            .await
+            .map_err(Error::Transport)
+    }
+
+    /// Runs the retry loop and reads the successful body as bytes.
+    async fn execute_bytes(&self, request: RequestBuilder, path: &str) -> Result<Vec<u8>> {
+        Ok(self
+            .execute_response(request, path)
+            .await?
+            .bytes()
+            .await
+            .map_err(Error::Transport)?
+            .to_vec())
+    }
+
     /// The retry loop. Deliberately non-generic so it is compiled once rather
     /// than per request type.
-    async fn execute(&self, request: RequestBuilder, path: &str) -> Result<String> {
+    async fn execute_response(
+        &self,
+        request: RequestBuilder,
+        path: &str,
+    ) -> Result<reqwest::Response> {
         let retry = &self.config.retry;
         // `attempts` counts retries *after* the first request, so a value of 3
         // means up to 4 requests in total.
@@ -307,7 +347,7 @@ impl RestClient {
             let status = response.status().as_u16();
 
             if response.status().is_success() {
-                return response.text().await.map_err(Error::Transport);
+                return Ok(response);
             }
 
             let body = response.text().await.unwrap_or_default();

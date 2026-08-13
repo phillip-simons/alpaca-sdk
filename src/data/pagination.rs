@@ -23,6 +23,7 @@ use crate::rest::RestClient;
 /// A response carries exactly one. Anything else means the shape changed and
 /// guessing would silently return the wrong data.
 const DATA_KEYS: &[&str] = &[
+    "auctions",
     "bar",
     "bars",
     "corporate_actions",
@@ -31,6 +32,7 @@ const DATA_KEYS: &[&str] = &[
     "orderbooks",
     "quote",
     "quotes",
+    "rates",
     "snapshot",
     "snapshots",
     "trade",
@@ -249,11 +251,9 @@ fn entries(response: &Value, unwrap: Unwrap, path: &str) -> Result<Vec<(String, 
         ))),
         [key] => {
             let value = object[*key].clone();
-            // News is the one payload kept under its key rather than unwrapped,
-            // because it is a bare list with no symbol to key it by.
-            if *key == "news" {
-                return Ok(vec![("news".to_owned(), value)]);
-            }
+            // A payload that is already a list stays under its key: news, which
+            // has no symbol to key it by, and the single-symbol market data
+            // routes, which name the symbol in a sibling field instead.
             match value {
                 Value::Object(inner) => Ok(inner.into_iter().collect()),
                 other => Ok(vec![((*key).to_owned(), other)]),

@@ -317,6 +317,7 @@ timeseries_delegates!(StockBarsRequest);
 timeseries_delegates!(CryptoBarsRequest);
 timeseries_delegates!(OptionBarsRequest);
 timeseries_delegates!(StockTimeseriesRequest);
+timeseries_delegates!(StockAuctionsRequest);
 
 /// A request for the most recent stock data.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -470,6 +471,254 @@ impl OptionChainRequest {
     #[must_use]
     pub fn feed(mut self, feed: OptionsFeed) -> Self {
         self.feed = Some(feed);
+        self
+    }
+}
+
+/// Historical auctions for stocks.
+///
+/// Only the `sip` feed serves auctions; the reference says so in as many words,
+/// and the field is left open rather than fixed so a future feed does not need a
+/// crate release.
+///
+/// See <https://docs.alpaca.markets/us/reference/stockauctions-1>.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StockAuctionsRequest {
+    /// The shared time series filters.
+    #[serde(flatten)]
+    pub base: TimeseriesRequest,
+    /// Which data feed to read from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feed: Option<DataFeed>,
+    /// The as-of date for symbol mapping.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asof: Option<String>,
+}
+
+impl StockAuctionsRequest {
+    /// Auctions for `symbols`.
+    pub fn new(symbols: impl Into<Symbols>) -> Self {
+        Self {
+            base: TimeseriesRequest::new(symbols),
+            feed: None,
+            asof: None,
+        }
+    }
+
+    /// Sets the data feed.
+    #[must_use]
+    pub fn feed(mut self, feed: DataFeed) -> Self {
+        self.feed = Some(feed);
+        self
+    }
+}
+
+/// A request against one of the single-symbol market data routes.
+///
+/// The symbol goes in the path, so the `symbols` parameter its multi-symbol
+/// sibling sends is absent here rather than empty.
+///
+/// See <https://docs.alpaca.markets/us/reference/stockbarsingle-1>.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SingleSymbolRequest {
+    /// The earliest timestamp to return.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<DateTime<Utc>>,
+    /// The latest timestamp to return.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<DateTime<Utc>>,
+    /// Maximum number of items across all pages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    /// The bar interval. Only the bars routes take one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeframe: Option<TimeFrame>,
+    /// How corporate actions are reflected in prices. Bars only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adjustment: Option<Adjustment>,
+    /// Which data feed to read from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feed: Option<DataFeed>,
+    /// The as-of date for symbol mapping.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asof: Option<String>,
+    /// The currency to denominate prices in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub currency: Option<SupportedCurrencies>,
+    /// Chronological ordering of the response.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sort: Option<Sort>,
+}
+
+impl SingleSymbolRequest {
+    /// A request with no filters.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Restricts the window to `start` onwards.
+    #[must_use]
+    pub fn start(mut self, start: DateTime<Utc>) -> Self {
+        self.start = Some(start);
+        self
+    }
+
+    /// Restricts the window to before `end`.
+    #[must_use]
+    pub fn end(mut self, end: DateTime<Utc>) -> Self {
+        self.end = Some(end);
+        self
+    }
+
+    /// Caps the total number of items returned across all pages.
+    #[must_use]
+    pub fn limit(mut self, limit: u32) -> Self {
+        self.limit = Some(limit);
+        self
+    }
+
+    /// Sets the bar interval.
+    #[must_use]
+    pub fn timeframe(mut self, timeframe: TimeFrame) -> Self {
+        self.timeframe = Some(timeframe);
+        self
+    }
+
+    /// Sets the corporate action adjustment.
+    #[must_use]
+    pub fn adjustment(mut self, adjustment: Adjustment) -> Self {
+        self.adjustment = Some(adjustment);
+        self
+    }
+
+    /// Sets the data feed.
+    #[must_use]
+    pub fn feed(mut self, feed: DataFeed) -> Self {
+        self.feed = Some(feed);
+        self
+    }
+
+    /// Sets the chronological ordering.
+    #[must_use]
+    pub fn sort(mut self, sort: Sort) -> Self {
+        self.sort = Some(sort);
+        self
+    }
+
+    /// Sets the denominating currency.
+    #[must_use]
+    pub fn currency(mut self, currency: SupportedCurrencies) -> Self {
+        self.currency = Some(currency);
+        self
+    }
+}
+
+/// Historical forex rates for currency pairs.
+///
+/// See <https://docs.alpaca.markets/us/reference/rates-1>.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ForexRatesRequest {
+    /// The pairs to query, sent as one comma-separated parameter.
+    ///
+    /// Pairs are six-letter concatenations such as `USDJPY`, not the slashed
+    /// form the crypto routes use.
+    #[serde(rename = "currency_pairs")]
+    pub currency_pairs: Symbols,
+    /// The snapshot frequency.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeframe: Option<TimeFrame>,
+    /// The earliest timestamp to return.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<DateTime<Utc>>,
+    /// The latest timestamp to return.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<DateTime<Utc>>,
+    /// Maximum number of rates across all pages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    /// Chronological ordering of the response.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sort: Option<Sort>,
+}
+
+impl ForexRatesRequest {
+    /// Rates for `currency_pairs`.
+    pub fn new(currency_pairs: impl Into<Symbols>) -> Self {
+        Self {
+            currency_pairs: currency_pairs.into(),
+            timeframe: None,
+            start: None,
+            end: None,
+            limit: None,
+            sort: None,
+        }
+    }
+
+    /// Sets the snapshot frequency.
+    #[must_use]
+    pub fn timeframe(mut self, timeframe: TimeFrame) -> Self {
+        self.timeframe = Some(timeframe);
+        self
+    }
+
+    /// Restricts the window.
+    #[must_use]
+    pub fn between(mut self, start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
+        self.start = Some(start);
+        self.end = Some(end);
+        self
+    }
+
+    /// Caps the total number of rates returned.
+    #[must_use]
+    pub fn limit(mut self, limit: u32) -> Self {
+        self.limit = Some(limit);
+        self
+    }
+}
+
+/// The latest forex rates for currency pairs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ForexLatestRatesRequest {
+    /// The pairs to query.
+    #[serde(rename = "currency_pairs")]
+    pub currency_pairs: Symbols,
+}
+
+impl ForexLatestRatesRequest {
+    /// The latest rates for `currency_pairs`.
+    pub fn new(currency_pairs: impl Into<Symbols>) -> Self {
+        Self {
+            currency_pairs: currency_pairs.into(),
+        }
+    }
+}
+
+/// A request for a company logo.
+///
+/// See <https://docs.alpaca.markets/us/reference/logos-5>.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogoRequest {
+    /// Whether to answer with a generated placeholder when no logo exists.
+    ///
+    /// Alpaca defaults this to `true`, so an unset request never 404s — it
+    /// returns an image either way. Set it to `false` to tell the two apart.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placeholder: Option<bool>,
+}
+
+impl LogoRequest {
+    /// A request taking Alpaca's default: a placeholder when no logo exists.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Whether a placeholder is acceptable.
+    #[must_use]
+    pub fn placeholder(mut self, placeholder: bool) -> Self {
+        self.placeholder = Some(placeholder);
         self
     }
 }

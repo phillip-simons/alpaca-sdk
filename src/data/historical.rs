@@ -15,16 +15,18 @@ use crate::auth::Credentials;
 use crate::config::BaseUrl;
 use crate::data::corporate_actions::CorporateActions;
 use crate::data::enums::CryptoFeed;
+use crate::data::meta::{Codes, Tape, TapeQuery, TickType};
 use crate::data::models::{
-    Bar, BarSet, MostActives, Movers, News, NewsSet, OptionsSnapshot, Orderbook, Quote, QuoteSet,
-    Snapshot, Trade, TradeSet, WithSymbol,
+    AuctionSet, Bar, BarSet, DailyAuctions, ForexRate, ForexRateSet, MostActives, Movers, News,
+    NewsSet, OptionsSnapshot, Orderbook, Quote, QuoteSet, Snapshot, Trade, TradeSet, WithSymbol,
 };
 use crate::data::pagination::{MarketDataRequest, get_marketdata};
 use crate::data::requests::{
     CorporateActionsRequest, CryptoBarsRequest, CryptoLatestRequest, CryptoSnapshotRequest,
-    MarketMoversRequest, MostActivesRequest, NewsRequest, OptionBarsRequest, OptionChainRequest,
-    OptionLatestRequest, OptionSnapshotRequest, StockBarsRequest, StockLatestRequest,
-    StockSnapshotRequest, StockTimeseriesRequest, TimeseriesRequest,
+    ForexLatestRatesRequest, ForexRatesRequest, LogoRequest, MarketMoversRequest,
+    MostActivesRequest, NewsRequest, OptionBarsRequest, OptionChainRequest, OptionLatestRequest,
+    OptionSnapshotRequest, SingleSymbolRequest, StockAuctionsRequest, StockBarsRequest,
+    StockLatestRequest, StockSnapshotRequest, StockTimeseriesRequest, TimeseriesRequest,
 };
 use crate::error::{Error, Result};
 use crate::rest::{Empty, RestClient, RestConfig};
@@ -51,6 +53,28 @@ where
     }
 
     Ok(sets)
+}
+
+/// Deserializes one single-symbol payload: a bare list under `key`, with the
+/// symbol beside it rather than above it.
+///
+/// The multi-symbol routes key their records by symbol and the record carries
+/// none; these name the symbol in a sibling field. Both end up with the symbol
+/// filled in, so the models are shared.
+fn into_single<T>(mut merged: Map<String, Value>, key: &str, symbol: &str) -> Result<Vec<T>>
+where
+    T: DeserializeOwned + WithSymbol,
+{
+    let records = merged.remove(key).unwrap_or(Value::Array(Vec::new()));
+    let mut records: Vec<T> = serde_json::from_value(records).map_err(|source| Error::Decode {
+        path: key.to_owned(),
+        body: String::new(),
+        source,
+    })?;
+    for record in &mut records {
+        record.set_symbol(symbol);
+    }
+    Ok(records)
 }
 
 /// Deserializes a merged payload into a map of symbol to a single record.
@@ -217,6 +241,231 @@ impl StockHistoricalDataClient {
         )
         .await?;
         into_latest(merged)
+    }
+
+    /// Historical opening and closing auctions, keyed by symbol.
+    ///
+    /// Only the `sip` feed serves auctions.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_stock_auctions(&self, request: &StockAuctionsRequest) -> Result<AuctionSet> {
+        let merged = get_marketdata(
+            &self.rest,
+            &MarketDataRequest::paged("/stocks/auctions"),
+            request,
+        )
+        .await?;
+        into_sets(merged)
+    }
+
+    /// Historical bars for one symbol.
+    ///
+    /// The single-symbol routes are not aliases of their multi-symbol siblings:
+    /// they answer with a bare list and the symbol beside it rather than a map
+    /// keyed by symbol. Prefer [`get_stock_bars`](Self::get_stock_bars) when
+    /// asking about more than one symbol — it is one request rather than *n*.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_stock_bars_for_symbol(
+        &self,
+        symbol: &str,
+        request: &SingleSymbolRequest,
+    ) -> Result<Vec<Bar>> {
+        let path = format!("/stocks/{symbol}/bars");
+        let merged = get_marketdata(
+            &self.rest,
+            &MarketDataRequest::paged(&path).whole_body(),
+            request,
+        )
+        .await?;
+        into_single(merged, "bars", symbol)
+    }
+
+    /// Historical quotes for one symbol.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_stock_quotes_for_symbol(
+        &self,
+        symbol: &str,
+        request: &SingleSymbolRequest,
+    ) -> Result<Vec<Quote>> {
+        let path = format!("/stocks/{symbol}/quotes");
+        let merged = get_marketdata(
+            &self.rest,
+            &MarketDataRequest::paged(&path).whole_body(),
+            request,
+        )
+        .await?;
+        into_single(merged, "quotes", symbol)
+    }
+
+    /// Historical trades for one symbol.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_stock_trades_for_symbol(
+        &self,
+        symbol: &str,
+        request: &SingleSymbolRequest,
+    ) -> Result<Vec<Trade>> {
+        let path = format!("/stocks/{symbol}/trades");
+        let merged = get_marketdata(
+            &self.rest,
+            &MarketDataRequest::paged(&path).whole_body(),
+            request,
+        )
+        .await?;
+        into_single(merged, "trades", symbol)
+    }
+
+    /// Historical auctions for one symbol.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_stock_auctions_for_symbol(
+        &self,
+        symbol: &str,
+        request: &SingleSymbolRequest,
+    ) -> Result<Vec<DailyAuctions>> {
+        let path = format!("/stocks/{symbol}/auctions");
+        let merged = get_marketdata(
+            &self.rest,
+            &MarketDataRequest::paged(&path).whole_body(),
+            request,
+        )
+        .await?;
+        into_single(merged, "auctions", symbol)
+    }
+
+    /// The latest bar for one symbol.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_stock_latest_bar_for_symbol(
+        &self,
+        symbol: &str,
+        request: &SingleSymbolRequest,
+    ) -> Result<Bar> {
+        let path = format!("/stocks/{symbol}/bars/latest");
+        self.latest_for_symbol(&path, "bar", symbol, request).await
+    }
+
+    /// The latest quote for one symbol.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_stock_latest_quote_for_symbol(
+        &self,
+        symbol: &str,
+        request: &SingleSymbolRequest,
+    ) -> Result<Quote> {
+        let path = format!("/stocks/{symbol}/quotes/latest");
+        self.latest_for_symbol(&path, "quote", symbol, request)
+            .await
+    }
+
+    /// The latest trade for one symbol.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_stock_latest_trade_for_symbol(
+        &self,
+        symbol: &str,
+        request: &SingleSymbolRequest,
+    ) -> Result<Trade> {
+        let path = format!("/stocks/{symbol}/trades/latest");
+        self.latest_for_symbol(&path, "trade", symbol, request)
+            .await
+    }
+
+    /// A snapshot for one symbol.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_stock_snapshot_for_symbol(
+        &self,
+        symbol: &str,
+        request: &SingleSymbolRequest,
+    ) -> Result<Snapshot> {
+        // No wrapping key at all on this one, unlike its three siblings: the
+        // snapshot's fields are the response body.
+        let path = format!("/stocks/{symbol}/snapshot");
+        let merged = get_marketdata(
+            &self.rest,
+            &MarketDataRequest::latest(&path).whole_body(),
+            request,
+        )
+        .await?;
+
+        let mut snapshot: Snapshot =
+            serde_json::from_value(Value::Object(merged)).map_err(|source| Error::Decode {
+                path,
+                body: String::new(),
+                source,
+            })?;
+        snapshot.set_symbol(symbol);
+        Ok(snapshot)
+    }
+
+    /// The shared body of the three single-symbol "latest" routes: one record
+    /// under a singular key, with the symbol beside it.
+    async fn latest_for_symbol<T>(
+        &self,
+        path: &str,
+        key: &str,
+        symbol: &str,
+        request: &SingleSymbolRequest,
+    ) -> Result<T>
+    where
+        T: DeserializeOwned + WithSymbol,
+    {
+        let mut merged = get_marketdata(
+            &self.rest,
+            &MarketDataRequest::latest(path).whole_body(),
+            request,
+        )
+        .await?;
+
+        let record = merged.remove(key).ok_or_else(|| {
+            Error::InvalidRequest(format!("{path}: the response carried no `{key}`"))
+        })?;
+        let mut record: T = serde_json::from_value(record).map_err(|source| Error::Decode {
+            path: path.to_owned(),
+            body: String::new(),
+            source,
+        })?;
+        record.set_symbol(symbol);
+        Ok(record)
+    }
+
+    /// The mapping from stock exchange codes to exchange names.
+    ///
+    /// The decoder for [`Trade::exchange`] and [`Quote::bid_exchange`].
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_stock_exchange_codes(&self) -> Result<Codes> {
+        self.rest.get("/stocks/meta/exchanges", &Empty).await
+    }
+
+    /// The mapping from stock condition codes to condition names.
+    ///
+    /// The decoder for [`Trade::conditions`]. `tape` is required — the route
+    /// answers `400` without it, which is a live-capture finding rather than
+    /// something any other SDK records.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_stock_condition_codes(
+        &self,
+        tick_type: &TickType,
+        tape: Tape,
+    ) -> Result<Codes> {
+        let path = format!("/stocks/meta/conditions/{tick_type}");
+        self.rest.get(&path, &TapeQuery { tape }).await
     }
 }
 
@@ -522,6 +771,145 @@ impl OptionHistoricalDataClient {
     /// Propagates transport, API, and decoding failures.
     pub async fn get_option_exchange_codes(&self) -> Result<HashMap<String, String>> {
         self.rest.get("/options/meta/exchanges", &Empty).await
+    }
+
+    /// The mapping from option condition codes to condition names.
+    ///
+    /// Unlike the stock equivalent this takes no `tape`, and rejects one.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_option_condition_codes(&self, tick_type: &TickType) -> Result<Codes> {
+        let path = format!("/options/meta/conditions/{tick_type}");
+        self.rest.get(&path, &Empty).await
+    }
+}
+
+/// Foreign exchange rates.
+///
+/// Not in alpaca-py, and not verified against a live response: the routes answer
+/// `403 forbidden: insufficient grants` on a plan that reaches SIP, so forex is
+/// a per-product entitlement rather than part of a data plan. The models follow
+/// the published reference; the first real payload decides whether they are
+/// right. See ROADMAP.md.
+///
+/// See <https://docs.alpaca.markets/us/reference/rates-1>.
+#[derive(Debug, Clone)]
+pub struct ForexDataClient {
+    rest: RestClient,
+}
+
+impl ForexDataClient {
+    /// A client for the forex API.
+    ///
+    /// # Errors
+    /// Returns an error if the credentials cannot be encoded as headers.
+    pub fn new(credentials: &Credentials) -> Result<Self> {
+        Self::with_config(
+            credentials,
+            RestConfig::from(BaseUrl::Data).api_version("v1beta1"),
+        )
+    }
+
+    /// A client with a custom endpoint, retry policy, or timeout.
+    ///
+    /// # Errors
+    /// Returns an error if the credentials cannot be encoded as headers.
+    pub fn with_config(credentials: &Credentials, config: RestConfig) -> Result<Self> {
+        Ok(Self {
+            rest: RestClient::new(credentials, config)?,
+        })
+    }
+
+    /// The underlying transport.
+    #[must_use]
+    pub fn rest(&self) -> &RestClient {
+        &self.rest
+    }
+
+    /// Historical rates, keyed by currency pair.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_forex_rates(&self, request: &ForexRatesRequest) -> Result<ForexRateSet> {
+        let merged = get_marketdata(
+            &self.rest,
+            &MarketDataRequest::paged_with_limit("/forex/rates", 1000),
+            request,
+        )
+        .await?;
+        into_sets(merged)
+    }
+
+    /// The latest rate for each currency pair.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_forex_latest_rates(
+        &self,
+        request: &ForexLatestRatesRequest,
+    ) -> Result<HashMap<String, ForexRate>> {
+        let merged = get_marketdata(
+            &self.rest,
+            &MarketDataRequest::latest("/forex/latest/rates"),
+            request,
+        )
+        .await?;
+        into_latest(merged)
+    }
+}
+
+/// Company logos.
+///
+/// The one route in this crate that answers with an image rather than JSON, so
+/// it returns the PNG bytes. Like forex, it is unverified: a plan that reaches
+/// SIP still answers `403 Subscription does not permit querying logos`.
+///
+/// See <https://docs.alpaca.markets/us/reference/logos-5>.
+#[derive(Debug, Clone)]
+pub struct LogoClient {
+    rest: RestClient,
+}
+
+impl LogoClient {
+    /// A client for the logo API.
+    ///
+    /// # Errors
+    /// Returns an error if the credentials cannot be encoded as headers.
+    pub fn new(credentials: &Credentials) -> Result<Self> {
+        Self::with_config(
+            credentials,
+            RestConfig::from(BaseUrl::Data).api_version("v1beta1"),
+        )
+    }
+
+    /// A client with a custom endpoint, retry policy, or timeout.
+    ///
+    /// # Errors
+    /// Returns an error if the credentials cannot be encoded as headers.
+    pub fn with_config(credentials: &Credentials, config: RestConfig) -> Result<Self> {
+        Ok(Self {
+            rest: RestClient::new(credentials, config)?,
+        })
+    }
+
+    /// The underlying transport.
+    #[must_use]
+    pub fn rest(&self) -> &RestClient {
+        &self.rest
+    }
+
+    /// The company logo for `symbol`, as PNG bytes.
+    ///
+    /// Alpaca serves a generated placeholder when it has no logo, so an empty
+    /// result means the request failed rather than that no logo exists. Set
+    /// [`LogoRequest::placeholder`] to `false` to tell the two apart.
+    ///
+    /// # Errors
+    /// Propagates transport and API failures.
+    pub async fn get_logo(&self, symbol: &str, request: &LogoRequest) -> Result<Vec<u8>> {
+        let path = format!("/logos/{symbol}");
+        self.rest.get_bytes(&path, request).await
     }
 }
 
