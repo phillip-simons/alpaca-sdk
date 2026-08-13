@@ -55,10 +55,11 @@ pub enum Error {
     /// the SSE event streams — because the failures are the same shape and a
     /// caller matching on them is not usually asking which one broke.
     ///
-    /// The line these failures used to be reported on was
-    /// [`InvalidRequest`](Self::InvalidRequest), which was a lie in both
-    /// directions: nothing about the request was invalid, and the failure
-    /// happened long after the request was accepted.
+    /// The boundary against [`InvalidRequest`](Self::InvalidRequest) is *where*
+    /// the failure happened, not what caused it. Anything the crate determines
+    /// locally before a socket is opened — an empty subscription set, a
+    /// non-positive timeout, an unrecognised feed — stays `InvalidRequest`.
+    /// Everything that fails on the wire is this.
     ///
     /// A stream error is not necessarily the end of the stream. The market data
     /// stream reconnects from most of them and stops on the two that never

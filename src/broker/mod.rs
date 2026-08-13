@@ -5,11 +5,13 @@
 //!
 //! # What is verified, and what is not
 //!
-//! The routes added in phase 6 are checked against captured payloads. Those
-//! added in phase 6.5 — instant funding, JIT,
-//! FPSL, funding wallets, IPOs, reporting, OAuth, tokenization and the crypto
-//! wallets — came from the published reference and the vendored specs, and have
-//! never met a real response, because this account has no broker sandbox key.
+//! The core of this API — accounts, funding, journals, documents, rebalancing,
+//! trading on behalf of an account — is checked against captured payloads.
+//!
+//! Instant funding, JIT, FPSL, funding wallets, IPOs, reporting, OAuth,
+//! tokenization and the crypto wallets are not. Those came from the published
+//! reference and the vendored specs, and have never met a real response, because
+//! this account has no broker sandbox key.
 //!
 //! That is not a reason to distrust them so much as a reason to expect the first
 //! live payload to correct something. Treat a decode failure on one of these as

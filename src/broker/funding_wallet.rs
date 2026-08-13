@@ -374,8 +374,9 @@ impl CreateRecipientBankRequest {
     ///
     /// Which of `iban`, `bic_swift` and `routing_code` a given country needs is
     /// Alpaca's business: the reference marks all three optional, and enforcing
-    /// a combination here would refuse requests it accepts. That is the same
-    /// finding the phase 6.5 audit recorded about international bank addresses.
+    /// a combination here would refuse requests it accepts. That is the rule
+    /// throughout this crate — a documented constraint is checked locally, an
+    /// undocumented one is left to the server.
     pub fn new(
         account_number: impl Into<String>,
         bank_name: impl Into<String>,

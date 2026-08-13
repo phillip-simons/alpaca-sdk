@@ -1,8 +1,17 @@
-//! Exponential backoff with equal jitter for websocket reconnects.
+//! Exponential backoff with equal jitter, shared by the stream reconnect and
+//! the REST retry.
 //!
-//! The jitter matters: Alpaca permits a single stream connection, so a fixed
-//! delay turns a stale connection being reaped into a tight reconnect/HTTP 429
-//! storm.
+//! One curve serves both on purpose. The reconnect had it first; the REST path
+//! waited a flat interval that contradicted [Alpaca's own rate-limit
+//! guidance][rate-limits], and now calls [`reconnect_delay`] through
+//! [`RetryBackoff::Exponential`](crate::RetryBackoff::Exponential).
+//!
+//! The jitter matters in both places, for the same reason. Alpaca rate-limits
+//! per account and permits a single stream connection, so a fixed delay turns
+//! one 429 — or one stale connection being reaped — into a burst of retries that
+//! arrive together and collide again. Spreading them is what breaks the cycle.
+//!
+//! [rate-limits]: https://docs.alpaca.markets/us/docs/broker-api-rate-limits
 
 use std::time::Duration;
 
@@ -59,9 +68,11 @@ mod tests {
 
     #[test]
     fn growth_curve_doubles_to_the_cap() {
-        // 1s base, doubling, 30s cap. Values captured by running the Python
-        // implementation, not derived by hand: the loop jumps straight to the cap
-        // once the value reaches half the maximum, so 16 is followed by 30, not 32.
+        // 1s base, doubling, 30s cap. The tail is the part worth pinning: the
+        // loop jumps straight to the ceiling once the value reaches half the
+        // maximum, so 16 is followed by 30, not 32. Doubling to 32 and then
+        // clamping would give the same answer here and a different one for any
+        // other ceiling.
         let expected = [1.0, 1.0, 2.0, 4.0, 8.0, 16.0, 30.0, 30.0, 30.0];
         for (retries, want) in expected.into_iter().enumerate() {
             #[allow(clippy::cast_possible_truncation)]
