@@ -5,8 +5,9 @@ vendors. Do not edit by hand — run `just coverage`.
 
 Paths are compared with the version segment and parameter names removed,
 so a ✅ means the route is called, not that it is called at the right
-version. The event streams are the known case where that distinction bit:
-see ROADMAP.md.
+version. The event streams are the known case where that distinction
+bit: three of them pointed at routes Alpaca had retired, and every model
+behind them was correct.
 
 **Not implemented** is work outstanding. **Deliberately skipped** is a
 decision, recorded with its reason in `SKIP` in the script — a route we
@@ -39,7 +40,7 @@ same place as the check.
 - `POST  ` `/v2/wallets/transfers` (trading)
   - Deprecated 2026-07-09, sunset 2026-10-09, and the reference's own replacement is the Alpaca web application rather than another route. The read side of crypto funding is implemented; only the withdrawal is skipped. The broker equivalent (`POST /v1/accounts/{account_id}/wallets/transfers`) is not deprecated and is implemented.
 - `GET   ` `/v1/events/transfers/status` (broker)
-  - Legacy, and closed to new broker partners. The crate calls `/v2/events/funding/status`, which covers banks and wallets too. Migrated in Phase 6.5; see ROADMAP.md.
+  - Legacy, and closed to new broker partners. The crate calls `/v2/events/funding/status`, which covers banks and wallets too.
 
 ## Implemented, and marked deprecated by the spec
 

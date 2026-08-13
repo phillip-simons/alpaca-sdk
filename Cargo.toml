@@ -14,7 +14,11 @@ categories = ["api-bindings", "finance"]
 # `fixtures/` is deliberately included: `tests/` ships too, and every one of
 # those tests reads a captured payload out of it at runtime. Shipping tests
 # that cannot run would be worse than shipping neither. It costs 135KB.
-exclude = [".github/"]
+#
+# What is excluded is what cannot work, or has no meaning, outside a clone:
+# `scripts/` needs other SDKs' checkouts and downloaded specs, `RELEASING.md`
+# describes publishing this crate, and `.github/` is CI.
+exclude = [".github/", "scripts/", "RELEASING.md"]
 
 [features]
 default = ["trading", "data", "rustls-tls"]

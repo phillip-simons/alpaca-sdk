@@ -8,7 +8,7 @@
 //!
 //! Unverified: a data plan that reaches SIP still answers
 //! `403 Subscription does not permit querying logos`, so logos are a separate
-//! entitlement. See `ROADMAP.md`.
+//! entitlement rather than part of a data plan.
 
 use serde::{Deserialize, Serialize};
 

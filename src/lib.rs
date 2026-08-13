@@ -21,8 +21,8 @@
 //! looked healthy, and had been switched off.
 //!
 //! `just coverage`, `just parameters` and `just enums-drift` diff this crate
-//! against those sources and are checked into `COVERAGE.md` and `ROADMAP.md`
-//! rather than trusted to memory.
+//! against those sources, and `COVERAGE.md` is checked in rather than trusted
+//! to memory.
 //!
 //! # Feature flags
 //!

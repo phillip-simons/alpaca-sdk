@@ -116,13 +116,13 @@ fn the_refusals_are_kept_as_findings() {
         .collect();
     assert!(
         !refused.is_empty(),
-        "if everything now succeeds, the roadmap's account of the grants is stale"
+        "if everything now succeeds, the README's account of the grants is stale"
     );
 
     for name in ["forex_latest_rates", "indices_latest_values", "logos_aapl"] {
         assert_eq!(
             routes[name]["status"], "refused",
-            "{name} was refused when captured; if that changed, update the roadmap"
+            "{name} was refused when captured; if that changed, update the README"
         );
         assert_eq!(routes[name]["http_status"], 403);
     }

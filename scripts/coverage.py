@@ -44,8 +44,7 @@ METHODS = {"get", "post", "put", "patch", "delete", "head", "options"}
 SKIP: dict[tuple[str, str], str] = {
     ("get", "/v1/events/transfers/status"): (
         "Legacy, and closed to new broker partners. The crate calls "
-        "`/v2/events/funding/status`, which covers banks and wallets too. "
-        "Migrated in Phase 6.5; see ROADMAP.md."
+        "`/v2/events/funding/status`, which covers banks and wallets too."
     ),
     ("post", "/v2/wallets/transfers"): (
         "Deprecated 2026-07-09, sunset 2026-10-09, and the reference's own "
@@ -320,8 +319,9 @@ def main() -> int:
         "",
         "Paths are compared with the version segment and parameter names removed,",
         "so a ✅ means the route is called, not that it is called at the right",
-        "version. The event streams are the known case where that distinction bit:",
-        "see ROADMAP.md.",
+        "version. The event streams are the known case where that distinction",
+        "bit: three of them pointed at routes Alpaca had retired, and every model",
+        "behind them was correct.",
         "",
         "**Not implemented** is work outstanding. **Deliberately skipped** is a",
         "decision, recorded with its reason in `SKIP` in the script — a route we",

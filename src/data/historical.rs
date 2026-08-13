@@ -797,7 +797,7 @@ impl OptionHistoricalDataClient {
 /// `403 forbidden: insufficient grants` on a plan that reaches SIP, so forex is
 /// a per-product entitlement rather than part of a data plan. The models follow
 /// the published reference; the first real payload decides whether they are
-/// right. See ROADMAP.md.
+/// right.
 ///
 /// See <https://docs.alpaca.markets/us/reference/rates-1>.
 #[derive(Debug, Clone)]

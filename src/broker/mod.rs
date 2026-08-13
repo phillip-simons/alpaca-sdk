@@ -9,8 +9,7 @@
 //! added in phase 6.5 — instant funding, JIT,
 //! FPSL, funding wallets, IPOs, reporting, OAuth, tokenization and the crypto
 //! wallets — came from the published reference and the vendored specs, and have
-//! never met a real response. This account has no broker sandbox key; see
-//! `ROADMAP.md`.
+//! never met a real response, because this account has no broker sandbox key.
 //!
 //! That is not a reason to distrust them so much as a reason to expect the first
 //! live payload to correct something. Treat a decode failure on one of these as

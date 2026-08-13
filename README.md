@@ -27,8 +27,15 @@ responses at every step.
 | Trade update stream | ✅ |
 | Broker API | ✅ |
 
-See [ROADMAP.md](ROADMAP.md) for what is left, how the port is verified, and the
-conventions that keep it honest.
+Route coverage is tracked in [COVERAGE.md](COVERAGE.md): 251 of the 253 routes
+the specs document, with two deliberate skips, each recorded with its reason.
+
+**What is not verified against a live server.** The broker routes have never met
+a real response — this account has no broker sandbox key — and forex, indices and
+logos answer `403 insufficient grants` on a plan that reaches SIP, so they are
+per-product entitlements. Those models follow the published reference and the
+vendored specs. Treat a decode failure on a first real payload there as expected
+work rather than a regression.
 
 ## What the types look like
 
@@ -71,8 +78,7 @@ and only the published reference says whether a route is still current — three
 event streams were in the specs, looked healthy, and had been switched off.
 
 `just coverage`, `just parameters` and `just enums-drift` diff this crate
-against those sources; the results live in [COVERAGE.md](COVERAGE.md) and
-[ROADMAP.md](ROADMAP.md).
+against those sources; the route results live in [COVERAGE.md](COVERAGE.md).
 
 ## Minimum supported Rust version
 

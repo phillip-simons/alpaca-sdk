@@ -2132,9 +2132,9 @@ impl BrokerClient {
     /// Settles a day's JIT obligation.
     ///
     /// **Documented by the spec and not by the reference**, which is the same
-    /// footing the two undocumented routes in `ROADMAP.md` stand on. It is
-    /// implemented rather than left out — undocumented is not absent — but a
-    /// live sandbox is what would confirm it.
+    /// footing as the other routes this crate calls on the spec's word alone.
+    /// It is implemented rather than left out — undocumented is not absent —
+    /// but a live sandbox is what would confirm it.
     ///
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if the settlement names no

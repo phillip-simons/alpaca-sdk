@@ -9,7 +9,7 @@ has flagged the route deprecated, legacy, or given it a sunset date.
 
 That is the one thing the vendored specs cannot tell you. `/v1/events/trades`
 was in the spec, looked healthy from the crate's side, and had been switched
-off; the reference said so. See ROADMAP.md.
+off; the reference said so.
 
 Usage:
     python3 scripts/reference.py [--out specs/reference.json] [--cache specs/reference]

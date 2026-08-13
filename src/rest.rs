@@ -181,8 +181,8 @@ impl RestClient {
     ///
     /// Writing that at the call site is deliberate. A version buried in a
     /// client constructor is the mistake that shipped three event streams
-    /// pointing at routes Alpaca had retired — see ROADMAP.md — and this way
-    /// the version sits next to the path it belongs to.
+    /// pointing at routes Alpaca had retired; this way the version sits next to
+    /// the path it belongs to.
     ///
     /// Cheap: the underlying HTTP client is shared, not rebuilt.
     #[must_use]

@@ -1440,7 +1440,7 @@ pub struct GetRunsRequest {
 ///
 /// `date` alongside `after` or `until` is **not** rejected. It is a plausible
 /// rule and nothing in the reference or the spec states it, and this crate does
-/// not refuse requests on a guess. See `ROADMAP.md`.
+/// not refuse requests on a guess.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct GetAccountActivitiesRequest {
@@ -1504,8 +1504,9 @@ impl GetAccountActivitiesRequest {
     ///
     /// `date` combined with `after` or `until` is a plausible conflict that the
     /// reference documents no rule against, so it is not enforced — refusing a
-    /// request Alpaca would accept is the worse of the two failures. See
-    /// `ROADMAP.md` on how the client-side rules were sorted.
+    /// request Alpaca would accept is the worse of the two failures. That is the
+    /// rule throughout: a documented constraint is enforced here, an undocumented
+    /// one is left to the server.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if both
