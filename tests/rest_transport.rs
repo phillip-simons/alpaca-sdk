@@ -3,9 +3,9 @@
 //!
 //! Each assertion pins a behavior ported from `alpaca/common/rest.py`.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use alpaca_sdk::{Credentials, Error, RestClient, RestConfig, RetryConfig};
+use alpaca_sdk::{Credentials, Error, RestClient, RestConfig, RetryBackoff, RetryConfig};
 use serde::Deserialize;
 use serde_json::json;
 use wiremock::matchers::{body_json, header, method, path, query_param};
@@ -186,6 +186,46 @@ async fn issues_four_requests_before_giving_up() {
         }
         other => panic!("expected RetriesExhausted, got {other:?}"),
     }
+}
+
+/// The one test here that actually sleeps, because it is the only way to tell a
+/// growing delay from a flat one from outside the crate.
+///
+/// Four retries at a 40ms base: exponential waits at least
+/// `20 + 40 + 80 + 160 = 300ms` — the jitter window is `[capped / 2, capped]`,
+/// so that is the floor, not the expectation — where a flat 40ms would total
+/// 160ms. The two ranges do not overlap, so the assertion cannot pass under the
+/// old behaviour.
+#[tokio::test]
+async fn the_delay_between_retries_grows() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v2/account"))
+        .respond_with(ResponseTemplate::new(429))
+        .expect(5)
+        .mount(&server)
+        .await;
+
+    let retry = RetryConfig::default()
+        .attempts(4)
+        .wait(Duration::from_millis(40))
+        .backoff(RetryBackoff::Exponential {
+            max: Duration::from_secs(30),
+        });
+
+    let started = Instant::now();
+    let err = client(&server, retry)
+        .get::<Account, _>("/account", &())
+        .await
+        .unwrap_err();
+    let elapsed = started.elapsed();
+
+    assert!(matches!(err, Error::RetriesExhausted { .. }), "{err:?}");
+    assert!(
+        elapsed >= Duration::from_millis(280),
+        "waited {elapsed:?}, which is flat-wait territory, not exponential"
+    );
 }
 
 #[tokio::test]

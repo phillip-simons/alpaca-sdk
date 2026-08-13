@@ -59,7 +59,7 @@ pub mod data;
 pub mod trading;
 
 pub use auth::Credentials;
-pub use config::{BaseUrl, RetryConfig};
+pub use config::{BaseUrl, RetryBackoff, RetryConfig};
 pub use error::{ApiError, Error, Result};
 pub use rest::{RestClient, RestConfig};
 #[cfg(feature = "_sse")]

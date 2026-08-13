@@ -423,14 +423,18 @@ impl RestClient {
             };
             current = next;
 
+            // `attempt` is also the number of consecutive failures so far, which
+            // is what the backoff curve is indexed by.
+            let delay = retry.delay(attempt);
             tracing::debug!(
                 path,
                 status,
                 attempt,
                 total_attempts,
+                delay_ms = delay.as_millis(),
                 "retryable response, backing off"
             );
-            tokio::time::sleep(retry.wait).await;
+            tokio::time::sleep(delay).await;
         }
 
         // `total_attempts` is at least 1, so the loop always returns.

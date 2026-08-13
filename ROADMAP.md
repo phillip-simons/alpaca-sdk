@@ -71,12 +71,10 @@ diff <(grep -oE '^    def [a-z_0-9]+' ../alpaca-py/alpaca/broker/client.py \
   this port does not, on the grounds that editing a server's own numbers on the
   way in is worse than the divergence. A `percent` assigned directly to the
   field is likewise not rounded.
-- **The REST retry ignores Alpaca's own advice** — flat 3 seconds where the
-  rate-limit page asks for exponential backoff with jitter. Carried to
-  "Phase 7". It no longer *has* to happen before 1.0: `RetryConfig` is
-  `#[non_exhaustive]` now, so a wait strategy can be added rather than swapped
-  in. It still changes behaviour under load, which is a release-notes problem
-  rather than a version-number one.
+- ~~**The REST retry ignores Alpaca's own advice**~~ — fixed in phase 7. It
+  waited a flat 3 seconds where the rate-limit page asks for exponential backoff
+  with jitter; it now calls the same `backoff.rs` curve the stream reconnect
+  uses.
 - **`Error` has no variant for a stream that breaks mid-flight**, so both the
   SSE and websocket paths call it `InvalidRequest`. Also carried to "Phase 7",
   where it turns out to be additive rather than breaking.
@@ -703,16 +701,30 @@ That is the general lesson and not a one-off. Any public struct a caller is
 expected to build is one field away from a breaking change for as long as it is
 exhaustive; `RestConfig` is the other one, and has the same window.
 
-**The retry default contradicts Alpaca's own documentation.** `RetryConfig`
-waits a flat 3 seconds, three times, on 429 and 504 — inherited from alpaca-py.
-The [rate-limit page][rate-limits] says to retry "using exponential backoff",
-doubling from ~1s with jitter. `backoff.rs` already implements
-exponential-with-jitter as `capped_delay`, for stream reconnects; the REST path
-simply does not call it. This is not a missing capability, it is two subsystems
-disagreeing, and the one that is wrong is the one Alpaca wrote about.
+**The retry default no longer contradicts Alpaca's own documentation** — done.
+It waited a flat 3 seconds, three times, on 429 and 504, inherited from
+alpaca-py, where the [rate-limit page][rate-limits] says to retry "using
+exponential backoff". This was never a missing capability: `backoff.rs` had
+`reconnect_delay` — doubling from 1s to a 30s cap with equal jitter — and the
+REST path simply did not call it. Two subsystems disagreeing, and the one that
+was wrong is the one Alpaca wrote about.
 
-It changes how every caller behaves under load, so it wants a release of its
-own with the change in the notes — not a drive-by.
+The strategy arrived as a new `RetryBackoff` field rather than as a replacement
+for `wait`, which is exactly what the `#[non_exhaustive]` change above bought.
+`RetryBackoff::Flat` keeps alpaca-py's behaviour available by name. The default
+`wait` is now 1s, since it is a base rather than the whole delay.
+
+**This is a behaviour change with no compile error attached to it**, which makes
+it the one item in this phase that must appear in the release notes: a caller
+who set `wait` and expected it flat now gets it doubled, and a caller who set
+nothing waits 1s before the first retry rather than 3. It wants a release of its
+own.
+
+Not done, and deliberately: **`Retry-After` is ignored.** A 429 that carries the
+header is telling us the exact answer that the backoff curve is guessing at.
+Whether Alpaca sends it is unverified — it does not appear in the reference, and
+provoking a 429 to find out has not been done. Reading it when present, and
+falling back to the curve when absent, is additive, so it is not a 1.0 deadline.
 
 [rate-limits]: https://docs.alpaca.markets/us/docs/broker-api-rate-limits
 
