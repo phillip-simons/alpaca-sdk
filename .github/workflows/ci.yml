@@ -79,7 +79,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Linux alone on every push and pull request. macOS and Windows moved to
+        # the release workflow, which runs them before anything is published.
+        #
+        # Windows was most of the wall-clock of a routine run — around ten
+        # minutes of it — and what that bought was catching platform-specific
+        # bugs in a pure-Rust HTTP client and a msgpack decoder, which is a
+        # category that has not produced one yet. Paying it once per release
+        # rather than once per commit keeps the coverage and returns the loop.
+        #
+        # The matrix stays a matrix on purpose: adding a platform back is a
+        # one-line change, and `all checks` is the only required status check,
+        # so it does not touch branch protection either way.
+        os: [ubuntu-latest]
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
