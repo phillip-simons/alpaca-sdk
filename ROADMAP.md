@@ -8,17 +8,21 @@ Written to be picked up cold.
 | Phase | State | Contents |
 |---|---|---|
 | 0 — Foundation | ✅ | Transport, auth, retry, errors, backoff |
-| 1 — Type vocabulary | ✅ | 71 generated enums, `Decimal`, `TimeFrame`, `AssetIdent` |
+| 1 — Type vocabulary | ✅ | 71 wire enums, `Decimal`, `TimeFrame`, `AssetIdent` |
 | 2 — Trading REST | ✅ | 32 routes, 20 models, request builders |
 | 3 — Historical data | ✅ | 6 clients, 26 methods, the pagination loop |
 | 4 — Live market data | ✅ | msgpack websocket, 4 streams, reconnect machine |
 | 5 — Trade updates | ✅ | JSON websocket, single channel |
 | 6 — Broker | ✅ | 75 routes, 20 models, 4 pagination schemes, 5 SSE streams |
-| 6.5 — Exceed alpaca-py | ✅ | 251/253 spec routes, 2 deliberate skips |
-| 7 — Polish | ✅ | `blocking` and `polars` built, exponential retry, `Error::Stream`, two coverage checks, the migration guide |
+| 6.5 — Full API coverage | ✅ | 251/253 spec routes, 2 deliberate skips |
+| 7 — Polish | ✅ | `blocking` and `polars` built, exponential retry, `Error::Stream`, two coverage checks |
+| 8 — Spec-driven | ⬜ | Codegen harness removed, 252 alpaca-py references cut, coverage-driven tests |
 
-Ported against alpaca-py `cc4cb3b`. `just pinned` reports drift against a local
-alpaca-py checkout — though alpaca-py is no longer the target; see below.
+**Nothing is generated from another SDK any more.** The enum generator and the
+recipes that read a Python checkout are gone; `just fixtures` still extracts
+captured payloads from one, because a real response is a fact about the API.
+`NOTICE` keeps the attribution the licence requires. See "How this crate is
+verified".
 
 **Published:** `0.1.0-alpha.1` is on crates.io and docs.rs built it. It is a
 rehearsal rather than a milestone: it exists to prove the release path end to
@@ -54,15 +58,8 @@ Phase 6.5's business, and are now done — 153 implemented and one skipped.
 
 **Count the routes, not the sections.** This section once claimed accounts and
 trading-on-behalf were finished while 16 order, asset, announcement and
-account-lifecycle routes were missing. The check that would have caught it, and
-the one to re-run before believing this file:
-
-```sh
-diff <(grep -oE '^    def [a-z_0-9]+' ../alpaca-py/alpaca/broker/client.py \
-        | sed 's/    def //' | grep -v '^_' | sort) \
-     <(grep -oE 'pub (async )?fn [a-z_0-9]+' src/broker/client.rs \
-        | sed 's/.*fn //' | sort -u)
-```
+account-lifecycle routes were missing. `just coverage` is the check that would
+have caught it, and the one to re-run before believing this file.
 
 ### Still open from Phase 6 (nothing route-shaped)
 
@@ -90,9 +87,10 @@ silently drops the extra fields:
   and a non-USD order must be a market order
 - `BatchJournalResponse` = `Journal` + `error_message`
 
-They use `#[serde(flatten)]` over the trading struct rather than transcribing it,
-which is the closest thing to alpaca-py's subclassing. Check for this whenever a
-broker route appears to reuse a trading model.
+They use `#[serde(flatten)]` over the trading struct rather than transcribing
+it. Check for this whenever a broker route appears to reuse a trading model —
+and note that a *request* cannot do the same, because `serde_urlencoded` rejects
+a flattened struct when building a query string.
 
 ### Four pagination schemes, not one
 
@@ -124,10 +122,9 @@ Two details the SSE specification decides, not Alpaca:
 The subscription is awaited before the stream is handed back, so a rejected one
 is an error rather than a stream that mysteriously says nothing.
 
-Each paginated route has both a single-page method and a `get_all_*` that walks,
-which covers alpaca-py's `PaginationType.NONE` and `.FULL`. The lazy `.ITERATOR`
-mode is not ported; a `Stream` is its Rust equivalent if a caller ever wants one.
-Every walk stops on an empty page even when a token says otherwise — a token
+Each paginated route has both a single-page method and a `get_all_*` that
+walks. A lazy `Stream` over pages is the obvious third shape and does not exist
+yet. Every walk stops on an empty page even when a token says otherwise — a token
 pointing at an empty page would otherwise loop forever.
 
 `commission` arrives as a JSON *number* on order responses and as a *string* in
@@ -496,8 +493,10 @@ references were already in the right form: they lead with the wire fact and cite
 alpaca-py as contrast or as the source of a divergence, which is what should
 happen. What remains falls into three groups, and only the third is work:
 
-1. *Provenance* — "Ported from `alpaca/broker/client.py`". Keep. `just regen`,
-   `just pinned` and the end-of-port upstream diff all need the mapping.
+1. *Provenance* — "Ported from `alpaca/broker/client.py`". Kept at the time,
+   because `just regen` and `just pinned` needed the mapping. **Both recipes and
+   all 19 comments are gone as of phase 8**, which removed the last thing that
+   read a Python checkout other than the fixture extractor.
 2. *alpaca-py as the subject* — "alpaca-py registers a callback per symbol and
    dispatches from a task", "alpaca-py fragments one message at 32 KiB". These
    are about alpaca-py's design, and rewriting them to be about the API would
@@ -532,8 +531,10 @@ Not a blanket replacement. Three kinds of reference, three rules:
    Python SDK and is true regardless of what Alpaca does. Phase 7's migration
    guide is where this belongs; mark it rather than delete it.
 3. **Generator provenance → keep verbatim.** "Generated by `gen_enums.py` from
-   `alpaca/trading/enums.py` at revision `cc4cb3b`" is a build-reproducibility
-   fact, and `just pinned` parses that revision string. Do not touch.
+   `alpaca/trading/enums.py` at revision `cc4cb3b`" was a build-reproducibility
+   fact while a generator existed. **Superseded in phase 8**: the enum files are
+   source now, and their headers say what they are rather than where they came
+   from.
 
 ~~The lib.rs framing ("a port of the official Python SDK") needs rewriting
 too.~~ This contradicted the top of this section, which already said the framing
@@ -870,12 +871,10 @@ and reading does not survive contact with 251 routes.
     It is typed now too. That is the documented limitation behaving exactly as
     documented, which is the argument for having written it down.
 - **Enum drift is measured now** — `just enums-drift`, backed by
-  `scripts/enum_drift.py`. It reads the checked-in `enums.rs` files rather than
-  regenerating them, which is why it is a separate script and not a step in
-  `gen_enums.py` as this section originally asked: `gen_enums.py` needs an
-  alpaca-py checkout to run at all, and a check that can only run during a
-  regeneration is a check that runs once a year. The generated files are what
-  ships, and reading them also catches a hand edit that should not be there.
+  `scripts/enum_drift.py`. It reads the checked-in `enums.rs` files, which is
+  why it survived phase 8 deleting the generator this section originally asked to
+  put it in: a check that can only run during a regeneration is a check that runs
+  once a year, and there are no regenerations now.
 
   It confirms the count this section quoted from a manual survey — 7 of the 19
   with a same-named schema agree exactly — and names the rest. The report has
@@ -942,6 +941,53 @@ exactly that reason. The tool starts earning its place in `just publish-dry` at
 `1.0` — until then the release notes are the only mechanism, which is an
 argument for writing them as the change is made rather than at tag time.
 
+## Phase 8 — spec-driven, and saying so
+
+Phase 6.5 changed the *target* from alpaca-py parity to API coverage. The crate
+went on explaining itself in terms of alpaca-py anyway — 182 comments in `src/`,
+70 in `tests/` — and went on generating four files from a Python checkout. This
+phase closed that gap.
+
+### ✅ Nothing is generated from another SDK
+
+`scripts/gen_enums.py` produced the 71 wire enums and their parity test from
+alpaca-py's AST, which made a Python checkout a build input. It is deleted, with
+the `gen-enums`, `regen` and `pinned` recipes that drove it.
+
+**Regenerating the enums from the specs was considered and rejected.**
+`just enums-drift` shows the specs no longer document values Alpaca still serves
+— eight on `AccountStatus` alone — so generating from them would delete working
+match arms. The enum files are source now. `tests/enum_parity.rs` stops being a
+parity check and becomes a lock: every wire value spelled out once, which matters
+more without a generator, because an `Unknown(String)` fallback means a typo in a
+variant does not fail loudly, it quietly stops matching.
+
+Fixtures still come from other SDKs' test suites, and that is the one thing worth
+taking: a captured response is a fact about the API, where another project's
+types are only its reading of it.
+
+### ✅ The comments explain the API, not the port
+
+All 252 references are gone, treated in three groups:
+
+- **Provenance** — 19 `Ported from` headers, deleted with the recipes that
+  needed them.
+- **alpaca-py as the subject** — rewritten to say what this crate does and why.
+- **Rules and defaults attributed to alpaca-py** — the careful ones, each
+  checked against the reference before restating. Where the reference confirms
+  it, it is now an API fact quoted from the page. Where nothing documents it —
+  the ten-document upload cap, the `date`/`after`/`until` conflict — the comment
+  says *that*, rather than laundering a guess into a claim about Alpaca.
+
+The two undocumented routes kept their justification rather than losing it. One
+is implemented because a captured payload proves it answers; the other has
+neither payload nor documentation, and now says "possibly not real … other
+clients call it, and that is the whole of the evidence". Deleting that would have
+left two routes looking invented.
+
+Test names went too: a test named after another project's behaviour fails for the
+wrong reason.
+
 ## Also open
 
 Facts a reader needs rather than work to schedule. The work lives in
@@ -974,7 +1020,7 @@ Facts a reader needs rather than work to schedule. The work lives in
   behaviour, not ours, so `broker_documents.rs` asserts it against a pair of
   mock servers rather than trusting it to stay true across upgrades.
 
-## How this port is built
+## How this crate is verified
 
 The method that has actually found bugs, in order of value:
 
@@ -984,24 +1030,36 @@ The method that has actually found bugs, in order of value:
    immediately: `#[serde(default)]` covers an *absent* field, not a present-and-
    null one. Nine `Vec` fields had the same hole. Having the payload was not
    enough — a test had to read it.
-1. **Captured fixtures beat schemas.** `fixtures/` holds 135 real API responses
-   extracted from alpaca-py's test suite by `scripts/extract_fixtures.py`. Every
-   model is verified against them. Three bugs came from this that no schema would
-   have shown: a string where an `int` was declared, money-as-strings in `float`
-   fields, and a pagination loop that never terminated.
+1. **Captured payloads beat schemas.** `fixtures/` holds 135 real API responses,
+   extracted from other SDKs' test suites by `scripts/extract_fixtures.py` and
+   `scripts/harvest_go_fixtures.py`. Every model is verified against them. Three
+   bugs came from this that no schema would have shown: a string where an `int`
+   was declared, money-as-strings in `float` fields, and a pagination loop that
+   never terminated.
 2. **The live smoke test beats mocks.** `tests/live_smoke.rs` found a bug all 15
    stream tests had passed — the mocks encoded msgpack timestamps as strings, a
    form the real server never sends.
-3. **Generators for the mechanical parts.** `scripts/gen_enums.py` produces the
-   71 wire enums and their parity test from alpaca-py's AST.
-4. **The published reference beats the SDK you ported from.** Added after it
-   caught three event streams pointing at routes Alpaca had retired. A spec says
-   what exists; another SDK says what someone implemented; only the reference
-   says what is still *current*. See Phase 6.5.
+3. **The published reference beats any SDK.** Added after it caught three event
+   streams pointing at routes Alpaca had retired. A spec says what exists;
+   another SDK says what someone implemented; only the reference says what is
+   still *current*. See Phase 6.5.
+4. **Machine checks, because reading does not scale.** `just coverage` compares
+   routes, `just parameters` compares query parameters, `just enums-drift`
+   compares wire vocabularies. Each of the three found something a careful read
+   had missed.
 
-The limit of 1 is that a fixture can only verify a route the source SDK
-implements, which is why Phase 6.5 harvests payloads from the other four SDKs
-rather than only alpaca-py's.
+A payload can only verify a route somebody else's tests exercise, which is why
+the fixtures come from two SDKs rather than one, and why `just capture` records
+what paper keys can reach directly.
+
+### What is taken from another SDK, and what is not
+
+Payloads, and nothing else. A captured response is a fact about the API; another
+project's types are only its reading of it, and this crate had 182 comments
+explaining itself in terms of one of those readings — which is how three retired
+event streams shipped. Phase 7 removed all of them, deleted the enum generator
+that made a Python checkout a build input, and left the fixture extractors in
+place. `NOTICE` records the attribution the licence requires.
 
 ## Running things
 
@@ -1011,8 +1069,9 @@ just ci           # + msrv, cargo-deny
 just live         # the #[ignore]d tests against the real paper API
 just reference    # index the published API reference into specs/reference.json
 just coverage     # regenerate COVERAGE.md from the specs and that index
-just regen        # re-run both generators against ../alpaca-py
-just pinned       # is the generated code stale vs. the local alpaca-py?
+just parameters   # which documented query parameters are never sent
+just enums-drift  # where the wire enums and the spec schemas disagree
+just fixtures     # re-extract captured payloads from another SDK's tests
 just hooks        # install the pre-commit credential guard (once per clone)
 ```
 
