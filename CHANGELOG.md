@@ -36,10 +36,11 @@ behaviour changes are worth reading before the first release rather than after.
 - **Credentials no longer follow a cross-host redirect.** The event-stream client
   put the Alpaca key pair in `default_headers` and allowed ten redirects. reqwest
   strips `Authorization` on a cross-host hop and nothing else, so the custom
-  `APCA-API-*` headers rode along. The trading and market-data streaming clients
-  now refuse redirects. The broker clients still follow them — the document
-  download answers `301` to a presigned storage URL — which is safe there because
-  those credentials are basic auth, and reqwest does strip `Authorization`.
+  `APCA-API-*` headers rode along. **No stream client follows a redirect now** —
+  no SSE route redirects, so following one was surface without upside. The broker
+  keeps a second client that does follow them, for the one route that needs it:
+  the document download answers `301` to a presigned storage URL. That is safe
+  because those credentials are basic auth, which reqwest does strip.
 - **`RestConfig::timeout` is no longer applied to event streams.** It is a total
   deadline on a whole request, and an event stream's body never finishes, so
   setting it gave every subscription a fixed lifespan: events until the deadline,
@@ -110,6 +111,19 @@ behaviour changes are worth reading before the first release rather than after.
 - **`OneOrMany` reports the real decode error.** As an untagged enum it discarded
   both branches' errors on exactly the routes whose payloads have never been
   seen.
+- **`JitReport` reports the real decode error too.** It was the other untagged
+  enum on an unobserved route, and it was discarding the carefully worded error
+  its own inline arm produces.
+- **`Error::is_transient` is consistent across its two halves.** It reported a
+  504 as transient and a timeout as not, though both leave the same question
+  open — whether the server acted before the connection failed. Both are
+  transient now, and the docs say plainly that transient is not the same as safe
+  to replay.
+- **The broker document download retries like every other route.** Its
+  hand-rolled loop ignored `Retry-After` and waited a flat interval instead of
+  the backoff curve.
+- **`get_latest_*_for_symbol` treats a `null` payload as absent**, like the three
+  sibling helpers already did.
 
 ### Added
 
@@ -188,9 +202,14 @@ Decisions that become expensive after the first release, settled now.
   were referenced by nothing.
 - **`trading::AllAccountsPositions` is removed** — a byte-for-byte duplicate of
   the broker type, which is the one any route returns.
-- **`StreamConfig::min_backoff` and `max_backoff` are private,** set through
-  `StreamConfig::backoff`, which rejects a zero minimum. Zero looked like
-  "reconnect immediately" and was a hot loop.
+- **`StreamConfig`'s knobs are all private,** set through `StreamConfig::backoff`
+  and `StreamConfig::data_timeout`, which reject a zero value; read back through
+  `min_backoff()`, `max_backoff()`, `data_timeout_after()` and
+  `stable_session_after()`. Zero `min_backoff` looked like "reconnect
+  immediately" and was a hot loop, and a validator a field assignment can step
+  around is not a validator — `data_timeout` was still `pub` and had the same
+  hole. `TradingStream` gained `backoff` and the data streams gained `backoff`
+  and `stable_session`, so the two stream surfaces configure the same way.
 - **`CryptoDataStream::new` and `OptionDataStream::new` return `Result`,**
   matching `StockDataStream::new`. A `wire_enum`'s `Unknown(String)` variant is
   publicly constructible, so the feed name reached the endpoint URL unchecked.

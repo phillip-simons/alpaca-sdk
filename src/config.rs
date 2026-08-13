@@ -5,6 +5,23 @@ use std::time::Duration;
 /// Maximum number of items the market data API returns per page.
 pub const DATA_MAX_LIMIT: u32 = 10_000;
 
+/// How long a stream session must last before it counts as healthy.
+///
+/// The reconnect backoff curve is indexed by consecutive *failures*, and a
+/// connection that came up and immediately dropped is a failure however far it
+/// got through the handshake. Resetting the counter on connect alone pins the
+/// delay at its minimum against a server that accepts and hangs up — roughly one
+/// connection a second, at an endpoint that allows one per account.
+///
+/// So a session resets the curve when it either delivered data or stayed up this
+/// long. That covers the case the reset exists for — a quiet stream whose server
+/// recycles it — without rewarding a server that is only pretending to work.
+///
+/// Lives here rather than in either stream module so that both can re-export the
+/// same item: two constants of the same name would collide under a glob import
+/// of `data::*` and `trading::*`.
+pub const DEFAULT_STABLE_SESSION: Duration = Duration::from_secs(30);
+
 /// Maximum number of orders `/v2/orders` and its broker twin serve in one page.
 ///
 /// The default is 50; this is the ceiling, and what the order walkers ask for.

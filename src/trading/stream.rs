@@ -32,14 +32,7 @@ const TRADE_UPDATES: &str = "trade_updates";
 /// How long to wait for a frame before re-checking the staleness clock.
 const RECEIVE_POLL: Duration = Duration::from_secs(5);
 
-/// How long a session must last before it counts as healthy, by default.
-///
-/// Defined here as well as on the market data stream rather than shared: the two
-/// live behind different feature flags, and a constant is cheaper to state twice
-/// than a module is to introduce for it. See the market data stream for the
-/// reasoning — a connection that came up and immediately dropped is a failure
-/// however far it got through the handshake, so it must not clear the curve.
-pub const DEFAULT_STABLE_SESSION: Duration = Duration::from_secs(30);
+pub use crate::config::DEFAULT_STABLE_SESSION;
 
 /// A frame from the trade update stream.
 #[derive(Debug, Clone, PartialEq)]

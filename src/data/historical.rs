@@ -496,6 +496,16 @@ impl StockHistoricalDataClient {
                 format_args!("the response carried no `{key}`"),
             ));
         };
+        // `null` under the key means the endpoint had nothing for this symbol,
+        // the same as it does in `into_single` — an empty result rather than a
+        // malformed one.
+        if is_absent(&record) {
+            return Err(Error::decode_shape(
+                path,
+                "null",
+                format_args!("the response carried no `{key}` for this symbol"),
+            ));
+        }
         let mut record: T = T::deserialize(&record).map_err(|source| Error::Decode {
             path: path.to_owned(),
             body: decode_body(key, &record),

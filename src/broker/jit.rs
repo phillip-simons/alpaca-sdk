@@ -164,16 +164,42 @@ pub struct JitTradingLimits {
 
 /// A JIT report, however the caller asked for it.
 ///
-/// The route answers with one of two shapes depending on `response_type`, so
-/// this is untagged: a body of report strings, or a link to download one.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
+/// The route answers with one of two shapes depending on `response_type`: a body
+/// of report strings, or a link to download one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[non_exhaustive]
 pub enum JitReport {
     /// A presigned URL to fetch the report from.
     Download(JitReportDownload),
     /// The report itself.
     Inline(Box<JitReportInline>),
+}
+
+impl<'de> Deserialize<'de> for JitReport {
+    /// Branches on the response shape rather than deriving `#[serde(untagged)]`.
+    ///
+    /// Untagged discards both arms' errors and reports only "data did not match
+    /// any variant of untagged enum `JitReport`". That throws away the one
+    /// useful thing here: [`JitReportInline`]'s deserializer names every report
+    /// key it expected, and this route has never been seen against a real
+    /// payload — so the first response that does not fit is the most valuable
+    /// bug report the crate can receive.
+    ///
+    /// `url` is the discriminator: it is required on the download shape and is
+    /// not one of the report keys.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error as _;
+
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if value.get("url").is_some() {
+            return JitReportDownload::deserialize(value)
+                .map(Self::Download)
+                .map_err(D::Error::custom);
+        }
+        JitReportInline::deserialize(value)
+            .map(|inline| Self::Inline(Box::new(inline)))
+            .map_err(D::Error::custom)
+    }
 }
 
 /// A report served in the response body.

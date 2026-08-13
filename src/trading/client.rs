@@ -168,7 +168,7 @@ impl TradingClient {
         order_id: Uuid,
         filter: Option<&GetOrderByIdRequest>,
     ) -> Result<Order> {
-        let path = format!("/orders/{}", order_id);
+        let path = format!("/orders/{order_id}");
         match filter {
             Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
@@ -198,7 +198,7 @@ impl TradingClient {
         order_id: Uuid,
         replacement: Option<&ReplaceOrderRequest>,
     ) -> Result<Order> {
-        let path = format!("/orders/{}", order_id);
+        let path = format!("/orders/{order_id}");
         match replacement {
             Some(replacement) => {
                 replacement.validate()?;
@@ -221,7 +221,7 @@ impl TradingClient {
     /// # Errors
     /// Propagates transport and API failures.
     pub async fn cancel_order_by_id(&self, order_id: Uuid) -> Result<()> {
-        self.send_void(Method::DELETE, &format!("/orders/{}", order_id))
+        self.send_void(Method::DELETE, &format!("/orders/{order_id}"))
             .await
     }
 
@@ -782,7 +782,7 @@ impl TradingClient {
     /// Propagates transport, API, and decoding failures.
     pub async fn get_tokenization_request(&self, request_id: Uuid) -> Result<TokenizationRequest> {
         self.rest
-            .get(&format!("/tokenization/requests/{}", request_id), &Empty)
+            .get(&format!("/tokenization/requests/{request_id}"), &Empty)
             .await
     }
 
@@ -939,12 +939,16 @@ where
 {
     let page_size = crate::config::ORDERS_MAX_LIMIT as usize;
 
-    // Ask for no more than the caller wants. Without this, `max_items: Some(10)`
-    // still pulled a full 500-order page off the wire to hand back ten.
-    if let Some(max) = max_items
-        && let Ok(max) = u32::try_from(max)
-    {
-        request.limit = Some(request.limit.unwrap_or(u32::MAX).min(max));
+    /// Narrows the page size to what is still outstanding.
+    ///
+    /// Per page, not once: capping only the first request still pulled 1,000
+    /// orders to satisfy `max_items: Some(600)`.
+    fn narrow(request: &mut GetOrdersRequest, max_items: Option<usize>, so_far: usize) {
+        let Some(max) = max_items else { return };
+        let Ok(remaining) = u32::try_from(max.saturating_sub(so_far)) else {
+            return;
+        };
+        request.limit = Some(request.limit.unwrap_or(u32::MAX).min(remaining));
     }
 
     // Alpaca's cursors are inclusive on some routes and exclusive on others,
@@ -958,9 +962,11 @@ where
         if max_items == Some(0) {
             break;
         }
+        narrow(&mut request, max_items, all.len());
 
         let page = rest.get::<Vec<T>, _>(path, &request).await?;
-        let short_page = page.len() < page_size;
+        let asked_for = request.limit.map_or(page_size, |limit| limit as usize);
+        let short_page = page.len() < asked_for;
 
         // The cursor is the oldest id on this page, and it has to be read
         // before the page is moved into the accumulator.

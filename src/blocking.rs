@@ -56,7 +56,8 @@ fn is_nested_runtime_panic(panic: &(dyn std::any::Any + Send)) -> bool {
         .copied()
         .or_else(|| panic.downcast_ref::<String>().map(String::as_str));
 
-    message.is_some_and(|message| message.contains("runtime from within a runtime"))
+    message
+        .is_some_and(|message| message.starts_with("Cannot start a runtime from within a runtime"))
 }
 
 /// Runs an async client's calls to completion on a runtime it owns.

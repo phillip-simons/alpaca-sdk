@@ -615,11 +615,17 @@ async fn a_quiet_session_that_stayed_up_clears_the_failure_count() {
         "expected several reconnects, saw {}",
         times.len()
     );
+    // Compared against the *first* gap rather than a fixed threshold: under a
+    // reset every gap is one `min_backoff` draw, so the ratio is ~1; under a
+    // growing curve the last gap is several doublings larger. A ratio is
+    // immune to how fast the runner is, where an absolute bound is not.
     let gap = last_gap(&times).expect("at least two connections");
+    let first = times[1].duration_since(times[0]);
     assert!(
-        gap < Duration::from_secs(3),
+        gap < first * 3,
         "a session that stayed up past `stable_session` should have cleared the \
-         backoff curve, but the last gap was {gap:?} — the curve is still growing"
+         backoff curve, but the last gap was {gap:?} against a first gap of \
+         {first:?} — the curve is still growing"
     );
 }
 

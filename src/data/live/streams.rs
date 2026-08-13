@@ -107,6 +107,20 @@ macro_rules! common {
             Ok(self)
         }
 
+        /// The reconnect backoff window.
+        ///
+        /// The delay starts at `min`, doubles on each consecutive failure, and
+        /// is capped at `max`. See
+        /// [`StreamConfig::backoff`](crate::data::StreamConfig::backoff).
+        ///
+        /// # Errors
+        /// Returns [`Error::InvalidRequest`] if `min` is zero, or if `max` is
+        /// smaller than `min`.
+        pub fn backoff(&mut self, min: Duration, max: Duration) -> Result<&mut Self> {
+            self.inner.config_mut().set_backoff(min, max)?;
+            Ok(self)
+        }
+
         /// How long a session must stay up before it clears the reconnect
         /// failure count. See
         /// [`StreamConfig::stable_session`](crate::data::StreamConfig::stable_session).

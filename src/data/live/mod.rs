@@ -44,23 +44,14 @@ const MAX_FRAME_SIZE: usize = 32_768;
 /// `data_timeout` mean a hardcoded five seconds whatever the caller set.
 const RECEIVE_POLL: Duration = Duration::from_secs(5);
 
-/// How long a session must last before it counts as healthy, by default.
-///
-/// The backoff curve is indexed by consecutive *failures*, and a connection that
-/// came up and immediately dropped is a failure however far it got through the
-/// handshake. Resetting the counter on connect alone pinned the delay at its
-/// minimum forever against a server that accepts and hangs up — roughly one
-/// connection a second, at an endpoint that allows one per account.
-///
-/// So a session resets the curve when it either delivered data or stayed up this
-/// long. That covers the case the reset exists for — a quiet overnight stream
-/// whose server recycles it hourly — without rewarding a server that is only
-/// pretending to work.
-pub const DEFAULT_STABLE_SESSION: Duration = Duration::from_secs(30);
+pub use crate::config::DEFAULT_STABLE_SESSION;
 
 /// Configuration for a market data stream.
+///
+/// Deliberately *not* `#[non_exhaustive]`: every field is private and reached
+/// through a validating builder, so a struct literal is already impossible and
+/// the attribute would buy nothing on a type the caller has to construct.
 #[derive(Debug, Clone)]
-#[non_exhaustive]
 pub struct StreamConfig {
     /// The websocket endpoint.
     pub endpoint: String,
@@ -138,6 +129,16 @@ impl StreamConfig {
     /// Returns [`Error::InvalidRequest`] if `min` is zero — which would spin —
     /// or if `max` is smaller than `min`.
     pub fn backoff(mut self, min: Duration, max: Duration) -> Result<Self> {
+        self.set_backoff(min, max)?;
+        Ok(self)
+    }
+
+    /// The same, in place.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if `min` is zero, or if `max` is
+    /// smaller than `min`.
+    pub fn set_backoff(&mut self, min: Duration, max: Duration) -> Result<&mut Self> {
         if min.is_zero() {
             return Err(Error::InvalidRequest(
                 "min_backoff must be a positive duration; zero reconnects \

@@ -125,21 +125,24 @@ impl Error {
     ///
     /// Named for what it can actually tell you. The obvious reading of a method
     /// called `is_retryable` is "it is safe to send this again", and that is not
-    /// something an error alone can answer: a timed-out `POST /v2/orders` is
-    /// indistinguishable from an order Alpaca accepted and whose response was
-    /// lost, so replaying it places a second one. That is why a connect failure
-    /// counts here and a timeout does not — nothing was sent on a connect
-    /// failure.
+    /// something an error alone can answer — which is why it is not called that.
     ///
-    /// The safety question is the *method's*, and the client answers it
-    /// internally: `GET`, `PUT` and `DELETE` are replayed, `POST` and `PATCH`
-    /// are not, except on a 429.
+    /// **Transient does not mean safe to replay.** A timed-out `POST /v2/orders`
+    /// and a 504 on the same request are both transient, and both are
+    /// indistinguishable from an order Alpaca accepted whose response was lost;
+    /// replaying either places a second order. The one transport failure that
+    /// *is* safe is a connect error, because nothing was sent.
+    ///
+    /// The safety question belongs to the request method, and the client answers
+    /// it internally: `GET`, `PUT` and `DELETE` are replayed, `POST` and `PATCH`
+    /// are not, except on a 429. If you are deciding whether to re-issue a call
+    /// yourself, that is the rule to apply — this predicate only tells you
+    /// whether trying again could plausibly work.
     #[must_use]
     pub fn is_transient(&self) -> bool {
         match self {
             Self::Api(e) => e.is_retried_by_default(),
-            // Deliberately not `is_timeout`: see above.
-            Self::Transport(e) => e.is_connect(),
+            Self::Transport(e) => e.is_timeout() || e.is_connect(),
             _ => false,
         }
     }

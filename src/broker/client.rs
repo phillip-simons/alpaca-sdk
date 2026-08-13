@@ -489,7 +489,7 @@ impl BrokerClient {
     ) -> Result<()> {
         self.send_void(
             Method::DELETE,
-            &format!("/accounts/{account_id}/transfers/{}", transfer_id),
+            &format!("/accounts/{account_id}/transfers/{transfer_id}"),
             None::<&Empty>,
         )
         .await
@@ -920,10 +920,13 @@ impl BrokerClient {
     ///
     /// Two routes do: the trade document download and the W-8BEN download.
     /// Neither can go through [`RestClient`], which refuses redirects on
-    /// purpose, so both use the second client — which follows them and sheds
-    /// the broker credentials when one crosses to another host.
+    /// purpose, so both use the `plain` client, which follows them. What keeps
+    /// the credentials off the storage provider is not that client but their
+    /// *form*: `with_config` converts them to basic auth, and reqwest strips
+    /// `Authorization` on a cross-host hop.
     ///
-    /// The retry policy is the client's own, so these behave like every other
+    /// The retry policy is the client's own — same status set, same backoff
+    /// curve, same `Retry-After` handling — so these behave like every other
     /// route under a 429 or a 5xx.
     async fn download(&self, path: &str) -> Result<Vec<u8>> {
         let config = self.rest.config();
@@ -1559,7 +1562,7 @@ impl BrokerClient {
         order_id: Uuid,
         filter: Option<&crate::trading::GetOrderByIdRequest>,
     ) -> Result<Order> {
-        let path = format!("/trading/accounts/{account_id}/orders/{}", order_id);
+        let path = format!("/trading/accounts/{account_id}/orders/{order_id}");
         match filter {
             Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
@@ -1596,7 +1599,7 @@ impl BrokerClient {
         order_id: Uuid,
         replacement: Option<&crate::trading::ReplaceOrderRequest>,
     ) -> Result<Order> {
-        let path = format!("/trading/accounts/{account_id}/orders/{}", order_id);
+        let path = format!("/trading/accounts/{account_id}/orders/{order_id}");
         match replacement {
             Some(replacement) => {
                 replacement.validate()?;
@@ -1630,7 +1633,7 @@ impl BrokerClient {
     ) -> Result<()> {
         self.send_void(
             Method::DELETE,
-            &format!("/trading/accounts/{account_id}/orders/{}", order_id),
+            &format!("/trading/accounts/{account_id}/orders/{order_id}"),
             None::<&Empty>,
         )
         .await
@@ -2362,7 +2365,7 @@ impl BrokerClient {
         client_id: Uuid,
         filter: Option<&GetOAuthClientRequest>,
     ) -> Result<OAuthClient> {
-        let path = format!("/oauth/clients/{}", client_id);
+        let path = format!("/oauth/clients/{client_id}");
         match filter {
             Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
