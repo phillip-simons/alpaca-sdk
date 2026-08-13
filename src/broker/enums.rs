@@ -12,7 +12,7 @@ wire_enum! {
     /// The sub type of account
     /// IRA Account only
     ///
-    /// see <https://docs.alpaca.markets/reference/createaccount>
+    /// See <https://docs.alpaca.markets/reference/createaccount>.
     pub enum AccountSubType {
         /// `traditional`
         Traditional => "traditional",
@@ -24,7 +24,7 @@ wire_enum! {
 wire_enum! {
     /// The type of account
     ///
-    /// see <https://docs.alpaca.markets/reference/createaccount>
+    /// See <https://docs.alpaca.markets/reference/createaccount>.
     pub enum AccountType {
         /// `trading`
         Trading => "trading",
@@ -42,7 +42,7 @@ wire_enum! {
 wire_enum! {
     /// The various country specific tax identification numbers
     ///
-    /// see <https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#tax-id-type>
+    /// See <https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#tax-id-type>.
     pub enum TaxIdType {
         /// `USA_SSN`
         UsaSsn => "USA_SSN",
@@ -142,7 +142,7 @@ wire_enum! {
     ///
     /// Please feel free to reach out to Alpaca if you need other tax ID types.
     ///
-    /// see <https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#visa-type>
+    /// See <https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#visa-type>.
     pub enum VisaType {
         /// `B1`
         B1 => "B1",
@@ -178,7 +178,7 @@ wire_enum! {
 wire_enum! {
     /// Various sources of funding for brokerage accounts.
     ///
-    /// see <https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#funding-source>
+    /// See <https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#funding-source>.
     pub enum FundingSource {
         /// `employment_income`
         EmploymentIncome => "employment_income",
@@ -198,7 +198,7 @@ wire_enum! {
 wire_enum! {
     /// The possible employment statuses of the user
     ///
-    /// see <https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#employment-status>
+    /// See <https://docs.alpaca.markets/docs/broker/api-references/accounts/accounts/#employment-status>.
     pub enum EmploymentStatus {
         /// `UNEMPLOYED`
         Unemployed => "UNEMPLOYED",
@@ -214,7 +214,7 @@ wire_enum! {
 wire_enum! {
     /// The types of agreements that are to be signed by the user
     ///
-    /// see <https://docs.alpaca.markets/reference/createaccount>
+    /// See <https://docs.alpaca.markets/reference/createaccount>.
     pub enum AgreementType {
         /// `margin_agreement`
         Margin => "margin_agreement",
@@ -314,7 +314,7 @@ wire_enum! {
 wire_enum! {
     /// Enum representing what CIP provider was used.
     ///
-    /// see <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/accounts/#cip-provider> for more info
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/accounts/#cip-provider>.
     pub enum CIPProvider {
         /// `alloy`
         Alloy => "alloy",
@@ -334,7 +334,7 @@ wire_enum! {
 wire_enum! {
     /// An enum representing the status of the `CIPInfo`
     ///
-    /// see <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/accounts/#cip-status> for more info
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/accounts/#cip-status>.
     pub enum CIPStatus {
         /// `complete`
         Complete => "complete",
@@ -344,7 +344,7 @@ wire_enum! {
 }
 
 wire_enum! {
-    /// see <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/accounts/#cip-result> for more info
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/accounts/accounts/#cip-result>.
     pub enum CIPResult {
         /// `clear`
         Clear => "clear",
@@ -373,7 +373,7 @@ wire_enum! {
     ///
     /// However, for older accounts with legacy documents the other legacy values might show up.
     ///
-    /// please see <https://docs.alpaca.markets/docs/api-references/broker-api/documents/#enumdocumenttype> for more info
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/documents/#enumdocumenttype>.
     pub enum TradeDocumentType {
         /// `account_statement`
         AccountStatement => "account_statement",
@@ -405,7 +405,7 @@ wire_enum! {
 wire_enum! {
     /// Represents additional information for whats inside a `TradeDocument` in combination with a `TradeDocumentType`
     ///
-    /// please see <https://docs.alpaca.markets/docs/api-references/broker-api/documents/#the-document-object> for more info
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/documents/#the-document-object>.
     pub enum TradeDocumentSubType {
         /// `1099-Comp`
         Type1099Comp => "1099-Comp",
@@ -421,8 +421,7 @@ wire_enum! {
 wire_enum! {
     /// Represents a sub type for an `UploadDocumentRequest`
     ///
-    /// please see: <https://docs.alpaca.markets/docs/api-references/broker-api/documents/#enumuploaddocumentsubtype>
-    /// for more info
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/documents/#enumuploaddocumentsubtype>.
     pub enum UploadDocumentSubType {
         /// `Account Application`
         AccountApplication => "Account Application",
@@ -436,7 +435,7 @@ wire_enum! {
 wire_enum! {
     /// specifies the mime type of the base64 data you're uploading as part of a `UploadDocumentRequest`
     ///
-    /// please see <https://docs.alpaca.markets/docs/api-references/broker-api/documents/#parameters> for more info
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/documents/#parameters>.
     pub enum UploadDocumentMimeType {
         /// `application/pdf`
         Pdf => "application/pdf",
@@ -452,7 +451,7 @@ wire_enum! {
 wire_enum! {
     /// Represents the state that an `ACHRelationship` is in.
     ///
-    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/funding/ach/#attributes> for more details
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/funding/ach/#attributes>.
     pub enum ACHRelationshipStatus {
         /// `QUEUED`
         Queued => "QUEUED",
@@ -466,7 +465,7 @@ wire_enum! {
 wire_enum! {
     /// Represents a kind of bank account.
     ///
-    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/funding/ach/#attributes>
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/funding/ach/#attributes>.
     pub enum BankAccountType {
         /// `CHECKING`
         Checking => "CHECKING",
@@ -493,7 +492,7 @@ wire_enum! {
 wire_enum! {
     /// Represents the states a Bank instance can be in.
     ///
-    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/funding/bank/#enumbankstatus> for more details.
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/funding/bank/#enumbankstatus>.
     pub enum BankStatus {
         /// `QUEUED`
         Queued => "QUEUED",
@@ -589,7 +588,7 @@ wire_enum! {
     /// Represents the types of journals. Cash journals are transfers of cash.
     /// Security journals are transfers of securities like stocks.
     ///
-    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/journals/> for more details.
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/journals/>.
     pub enum JournalEntryType {
         /// `JNLC`
         Cash => "JNLC",
@@ -601,7 +600,7 @@ wire_enum! {
 wire_enum! {
     /// The various states a journal can be in during its lifecycle.
     ///
-    /// Please see <https://docs.alpaca.markets/docs/api-references/broker-api/journals/#enumjournalstatus> for more details.
+    /// See <https://docs.alpaca.markets/docs/api-references/broker-api/journals/#enumjournalstatus>.
     pub enum JournalStatus {
         /// `queued`
         Queued => "queued",
@@ -631,7 +630,7 @@ wire_enum! {
 wire_enum! {
     /// The possible values of the Portfolio status.
     ///
-    /// See <https://docs.alpaca.markets/reference/get-v1-rebalancing-portfolios>
+    /// See <https://docs.alpaca.markets/reference/get-v1-rebalancing-portfolios>.
     pub enum PortfolioStatus {
         /// `active`
         Active => "active",
@@ -645,7 +644,7 @@ wire_enum! {
 wire_enum! {
     /// The possible values of the Weight type.
     ///
-    /// See <https://docs.alpaca.markets/reference/post-v1-rebalancing-portfolios>
+    /// See <https://docs.alpaca.markets/reference/post-v1-rebalancing-portfolios>.
     pub enum WeightType {
         /// `cash`
         Cash => "cash",
@@ -657,7 +656,7 @@ wire_enum! {
 wire_enum! {
     /// The possible values of the Rebalancing Conditions type.
     ///
-    /// See <https://docs.alpaca.markets/reference/post-v1-rebalancing-portfolios>
+    /// See <https://docs.alpaca.markets/reference/post-v1-rebalancing-portfolios>.
     pub enum RebalancingConditionsType {
         /// `drift_band`
         DriftBand => "drift_band",
@@ -669,7 +668,7 @@ wire_enum! {
 wire_enum! {
     /// The possible values of the Rebalancing Conditions subtype for `drift_band`.
     ///
-    /// See <https://docs.alpaca.markets/reference/post-v1-rebalancing-portfolios>
+    /// See <https://docs.alpaca.markets/reference/post-v1-rebalancing-portfolios>.
     pub enum DriftBandSubType {
         /// `absolute`
         Absolute => "absolute",
@@ -681,7 +680,7 @@ wire_enum! {
 wire_enum! {
     /// The possible values of the Rebalancing Conditions subtype for `drift_band`.
     ///
-    /// See <https://docs.alpaca.markets/reference/post-v1-rebalancing-portfolios>
+    /// See <https://docs.alpaca.markets/reference/post-v1-rebalancing-portfolios>.
     pub enum CalendarSubType {
         /// `weekly`
         Weekly => "weekly",
@@ -697,7 +696,7 @@ wire_enum! {
 wire_enum! {
     /// The possible values of the Run type.
     ///
-    /// See <https://docs.alpaca.markets/reference/post-v1-rebalancing-runs>
+    /// See <https://docs.alpaca.markets/reference/post-v1-rebalancing-runs>.
     pub enum RunType {
         /// `full_rebalance`
         FullRebalance => "full_rebalance",
@@ -709,7 +708,7 @@ wire_enum! {
 wire_enum! {
     /// The possible values of the `initiated_from` field.
     ///
-    /// See <https://docs.alpaca.markets/docs/portfolio-rebalancing>
+    /// See <https://docs.alpaca.markets/docs/portfolio-rebalancing>.
     pub enum RunInitiatedFrom {
         /// `system`
         System => "system",
@@ -721,7 +720,7 @@ wire_enum! {
 wire_enum! {
     /// The possible values of the Run status.
     ///
-    /// See <https://docs.alpaca.markets/reference/get-v1-rebalancing-runs>
+    /// See <https://docs.alpaca.markets/reference/get-v1-rebalancing-runs>.
     pub enum RunStatus {
         /// `QUEUED`
         Queued => "QUEUED",
