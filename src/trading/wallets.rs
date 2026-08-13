@@ -173,6 +173,7 @@ pub struct TransferFeeEstimate {
 
 /// Filters for listing deposit wallets.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetCryptoWalletsRequest {
     /// Only wallets for this asset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -209,6 +210,7 @@ impl GetCryptoWalletsRequest {
 
 /// A request to allowlist a withdrawal address.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateWhitelistedAddressRequest {
     /// The address to allow.
     pub address: String,
@@ -231,6 +233,7 @@ impl CreateWhitelistedAddressRequest {
 
 /// A request for a transfer's estimated gas fee.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TransferFeeEstimateRequest {
     /// The asset to move.
     #[serde(default, skip_serializing_if = "Option::is_none")]

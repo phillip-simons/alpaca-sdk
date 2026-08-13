@@ -298,6 +298,7 @@ pub struct RecipientBank {
 
 /// A request to open funding wallets for several accounts at once.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct BatchCreateFundingWalletsRequest {
     /// The accounts to open wallets for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -316,6 +317,7 @@ impl BatchCreateFundingWalletsRequest {
 
 /// Filters for an account's funding details.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetFundingDetailsRequest {
     /// Only details for this rail.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -327,6 +329,7 @@ pub struct GetFundingDetailsRequest {
 
 /// A request to register a bank a withdrawal may be sent to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateRecipientBankRequest {
     /// The account number.
     pub account_number: String,
@@ -424,6 +427,7 @@ impl CreateRecipientBankRequest {
 
 /// A request to send money out of a funding wallet.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateWithdrawalRequest {
     /// How much to send, in USD.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -474,6 +478,7 @@ impl CreateWithdrawalRequest {
 
 /// A sandbox-only deposit, for testing the funding path end to end.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct DemoFundingRequest {
     /// How much to deposit.
     #[serde(default, skip_serializing_if = "Option::is_none")]

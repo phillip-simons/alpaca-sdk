@@ -125,6 +125,7 @@ pub struct Settlements {
 
 /// Filters for listing settlements.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetSettlementsRequest {
     /// Only settlements in these states, comma-separated.
     #[serde(

@@ -37,6 +37,7 @@ use crate::rest::RestConfig;
 /// here means the ULID everywhere it is accepted — unlike the v1 broker
 /// streams, where that name belongs to a deprecated integer form.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct EventStreamRequest {
     /// Replay events emitted at or after this time.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -73,6 +73,7 @@ wire_enum! {
 
 /// Filters for the corporate actions event stream.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CorporateActionEventsRequest {
     /// The replay window and cursor, shared with every other Alpaca stream
     /// found in the reference sweep.

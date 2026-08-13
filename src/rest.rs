@@ -48,7 +48,12 @@ fn retry_after(headers: &HeaderMap) -> Option<Duration> {
 pub struct Empty;
 
 /// Configuration shared by every REST client.
+///
+/// Build one with [`RestConfig::new`] and adjust it with the builder methods.
+/// It is `#[non_exhaustive]` so that a new knob can arrive as a field rather
+/// than as a breaking change.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct RestConfig {
     /// The endpoint to target. Overridable for proxies and mock servers.
     pub base_url: String,

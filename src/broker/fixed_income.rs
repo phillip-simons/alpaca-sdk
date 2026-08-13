@@ -381,6 +381,7 @@ pub struct EntryRequirement {
 
 /// Filters for the corporates list.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetUsCorporatesRequest {
     /// Only bonds in this state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -432,6 +433,7 @@ impl GetUsCorporatesRequest {
 
 /// Filters for the treasuries list.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetUsTreasuriesRequest {
     /// Only this kind of instrument.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -472,6 +474,7 @@ impl GetUsTreasuriesRequest {
 
 /// A request for entry requirements.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetEntryRequirementsRequest {
     /// The symbols to ask about, sent as one comma-separated parameter.
     #[serde(serialize_with = "crate::types::serde_util::comma_separated_required")]

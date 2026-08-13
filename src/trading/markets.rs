@@ -159,6 +159,7 @@ pub struct MarketCalendar {
 
 /// Filters for a market calendar.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetMarketCalendarRequest {
     /// The first day to return.
     #[serde(default, skip_serializing_if = "Option::is_none")]

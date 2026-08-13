@@ -100,6 +100,7 @@ pub struct OAuthToken {
 ///
 /// Both routes take the same body, which is why one type serves them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OAuthRequest {
     /// The account being acted on behalf of.
     pub account_id: Uuid,
@@ -134,6 +135,7 @@ impl OAuthRequest {
 
 /// Filters for looking up a registered client.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetOAuthClientRequest {
     /// Which flow the app intends to use.
     #[serde(default, skip_serializing_if = "Option::is_none")]

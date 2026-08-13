@@ -583,11 +583,9 @@ fn only_a_trade_update_counts_as_stream_activity() {
 fn the_filters_can_name_every_documented_value() {
     use alpaca_sdk::trading::{ActivityType, AssetClass, GetOrdersRequest};
 
-    let filter = GetOrdersRequest {
-        side: Some(OrderSide::SellShort),
-        asset_class: Some(vec![AssetClass::UsIndex, AssetClass::Treasury]),
-        ..Default::default()
-    };
+    let mut filter = GetOrdersRequest::default();
+    filter.side = Some(OrderSide::SellShort);
+    filter.asset_class = Some(vec![AssetClass::UsIndex, AssetClass::Treasury]);
 
     let sent = serde_json::to_value(&filter).unwrap();
     assert_eq!(sent["side"], "sell_short");

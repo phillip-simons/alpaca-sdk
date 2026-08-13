@@ -110,6 +110,7 @@ pub struct FpslAnalytics {
 
 /// Filters for listing loans.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetFpslLoansRequest {
     /// Only loans from this account.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -161,6 +162,7 @@ impl GetFpslLoansRequest {
 
 /// A window over one account's lending analytics.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetFpslAnalyticsRequest {
     /// The first day.
     #[serde(default, skip_serializing_if = "Option::is_none")]

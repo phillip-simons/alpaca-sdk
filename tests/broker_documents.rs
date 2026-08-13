@@ -88,11 +88,10 @@ async fn listing_documents_sends_the_date_window_and_type() {
         .mount(&server)
         .await;
 
-    let filter = GetTradeDocumentsRequest {
-        start: Some("2022-02-01".parse().unwrap()),
-        end: Some("2022-02-28".parse().unwrap()),
-        document_type: Some(TradeDocumentType::AccountStatement),
-    };
+    let mut filter = GetTradeDocumentsRequest::default();
+    filter.start = Some("2022-02-01".parse().unwrap());
+    filter.end = Some("2022-02-28".parse().unwrap());
+    filter.document_type = Some(TradeDocumentType::AccountStatement);
 
     let documents = client(&server)
         .get_trade_documents_for_account(account_id(), Some(&filter))
@@ -105,11 +104,9 @@ async fn listing_documents_sends_the_date_window_and_type() {
 #[tokio::test]
 async fn a_backwards_date_window_never_reaches_the_network() {
     let server = MockServer::start().await;
-    let filter = GetTradeDocumentsRequest {
-        start: Some("2022-02-28".parse().unwrap()),
-        end: Some("2022-02-01".parse().unwrap()),
-        document_type: None,
-    };
+    let mut filter = GetTradeDocumentsRequest::default();
+    filter.start = Some("2022-02-28".parse().unwrap());
+    filter.end = Some("2022-02-01".parse().unwrap());
 
     let error = client(&server)
         .get_trade_documents_for_account(account_id(), Some(&filter))

@@ -33,6 +33,7 @@ use crate::types::SupportedCurrencies;
 /// correspondent may set: the commission to charge the end user, and the
 /// currency to settle in.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OrderRequest {
     /// Every field the trading API also accepts.
     #[serde(flatten)]
@@ -101,6 +102,7 @@ impl OrderRequest {
 ///
 /// [createaccount]: https://docs.alpaca.markets/us/reference/createaccount
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateAccountRequest {
     /// How to reach the account holder.
     pub contact: Contact,
@@ -357,6 +359,7 @@ pub struct UpdatableIdentity {
 ///
 /// [patchaccount]: https://docs.alpaca.markets/us/reference/patchaccount
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UpdateAccountRequest {
     /// New contact details.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -380,6 +383,7 @@ pub struct UpdateAccountRequest {
 
 /// Filters for listing accounts.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ListAccountsRequest {
     /// Space-delimited tokens, matched against the account number, phone
     /// number, name and email address.
@@ -458,6 +462,7 @@ pub struct PlaidACHRelationship {
 
 /// The body that connects a recipient bank for wires.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateBankRequest {
     /// The bank's name.
     pub name: String,
@@ -619,6 +624,7 @@ impl CreateTransferRequest {
 
 /// Money moving over an ACH relationship.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateACHTransferRequest {
     /// How much to move. Fees are deducted from this.
     #[serde(with = "crate::types::decimal")]
@@ -658,6 +664,7 @@ impl CreateACHTransferRequest {
 
 /// Money moving by wire to a connected bank.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateBankTransferRequest {
     /// How much to move. Fees are deducted from this.
     #[serde(with = "crate::types::decimal")]
@@ -701,6 +708,7 @@ impl CreateBankTransferRequest {
 
 /// Filters for listing an account's transfers.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetTransfersRequest {
     /// Only transfers moving this way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -724,6 +732,7 @@ pub struct GetTransfersRequest {
 /// [`cash`](Self::cash) or
 /// [`security`](Self::security) and the right fields are set for you.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateJournalRequest {
     /// The account the money or securities come from.
     pub from_account: Uuid,
@@ -854,6 +863,7 @@ impl CreateJournalRequest {
 
 /// One destination in a batch journal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct BatchJournalRequestEntry {
     /// The account to fund.
     pub to_account: Uuid,
@@ -899,6 +909,7 @@ impl BatchJournalRequestEntry {
 
 /// One source in a reverse batch journal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ReverseBatchJournalRequestEntry {
     /// The account to draw from.
     pub from_account: Uuid,
@@ -947,6 +958,7 @@ impl ReverseBatchJournalRequestEntry {
 /// Only cash batch journals are supported, so `entry_type` is always
 /// [`JournalEntryType::Cash`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateBatchJournalRequest {
     /// Always [`JournalEntryType::Cash`].
     pub entry_type: JournalEntryType,
@@ -973,6 +985,7 @@ impl CreateBatchJournalRequest {
 /// Only cash reverse batch journals are supported, so `entry_type` is always
 /// [`JournalEntryType::Cash`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateReverseBatchJournalRequest {
     /// Always [`JournalEntryType::Cash`].
     pub entry_type: JournalEntryType,
@@ -996,6 +1009,7 @@ impl CreateReverseBatchJournalRequest {
 
 /// Filters for listing journals.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetJournalsRequest {
     /// Only journals created on or after this date.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1019,6 +1033,7 @@ pub struct GetJournalsRequest {
 
 /// Filters for listing an account's trade documents.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetTradeDocumentsRequest {
     /// Only documents dated on or after this date.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1078,6 +1093,7 @@ impl UploadDocument {
 
 /// A document uploaded as base64-encoded content.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UploadDocumentRequest {
     /// What kind of document this is.
     pub document_type: DocumentType,
@@ -1125,6 +1141,7 @@ impl UploadDocumentRequest {
 
 /// A W-8BEN upload, as an encoded file or as structured fields.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UploadW8BenDocumentRequest {
     /// Always [`DocumentType::W8ben`]; Alpaca requires it in the body.
     pub document_type: DocumentType,
@@ -1213,6 +1230,7 @@ impl UploadW8BenDocumentRequest {
 
 /// The body that creates a portfolio.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreatePortfolioRequest {
     /// A name for the portfolio.
     pub name: String,
@@ -1263,6 +1281,7 @@ impl CreatePortfolioRequest {
 /// Changing the weights or the conditions re-evaluates every subscribed account
 /// at the next opportunity, subject to the cooldown.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UpdatePortfolioRequest {
     /// A new name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1297,6 +1316,7 @@ impl UpdatePortfolioRequest {
 
 /// Filters for listing portfolios.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetPortfoliosRequest {
     /// Only portfolios with this name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1317,6 +1337,7 @@ pub struct GetPortfoliosRequest {
 
 /// The body that subscribes an account to a portfolio.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateSubscriptionRequest {
     /// The account to rebalance.
     pub account_id: Uuid,
@@ -1337,6 +1358,7 @@ impl CreateSubscriptionRequest {
 
 /// Filters for listing subscriptions.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetSubscriptionsRequest {
     /// Only this account's subscription.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1354,6 +1376,7 @@ pub struct GetSubscriptionsRequest {
 
 /// The body that starts a rebalancing run by hand.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateRunRequest {
     /// The account to rebalance.
     pub account_id: Uuid,
@@ -1390,6 +1413,7 @@ impl CreateRunRequest {
 
 /// Filters for listing rebalancing runs.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetRunsRequest {
     /// Only this account's runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1418,6 +1442,7 @@ pub struct GetRunsRequest {
 /// rule and nothing in the reference or the spec states it, and this crate does
 /// not refuse requests on a guess. See `ROADMAP.md`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetAccountActivitiesRequest {
     /// Only this account's activities.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1514,6 +1539,7 @@ impl GetAccountActivitiesRequest {
 /// Both fields are optional and unset ones are dropped, so an exercise with no
 /// commission posts `{}`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateOptionExerciseRequest {
     /// The commission to charge the end user, in dollars.
     #[serde(

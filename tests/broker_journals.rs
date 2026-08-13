@@ -281,14 +281,12 @@ async fn listing_journals_sends_every_filter_it_is_given() {
         .mount(&server)
         .await;
 
-    let filter = GetJournalsRequest {
-        after: Some("2020-12-01".parse().unwrap()),
-        before: Some("2020-12-31".parse().unwrap()),
-        status: Some(JournalStatus::Executed),
-        entry_type: Some(JournalEntryType::Cash),
-        to_account: Some(to_account()),
-        from_account: None,
-    };
+    let mut filter = GetJournalsRequest::default();
+    filter.after = Some("2020-12-01".parse().unwrap());
+    filter.before = Some("2020-12-31".parse().unwrap());
+    filter.status = Some(JournalStatus::Executed);
+    filter.entry_type = Some(JournalEntryType::Cash);
+    filter.to_account = Some(to_account());
 
     let journals = client(&server).get_journals(Some(&filter)).await.unwrap();
     assert!(!journals.is_empty());

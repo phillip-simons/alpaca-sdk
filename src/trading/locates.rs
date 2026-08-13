@@ -148,6 +148,7 @@ pub struct LocateQuotes {
 /// `America/New_York` rather than at midnight UTC, and `end` is exclusive where
 /// `start` is inclusive.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetLocatesRequest {
     /// Only locates in this state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -201,6 +202,7 @@ impl GetLocatesRequest {
 
 /// A request for locate quotes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetLocateQuotesRequest {
     /// The symbols to quote, sent as one comma-separated parameter.
     #[serde(serialize_with = "crate::types::serde_util::comma_separated_required")]
@@ -216,6 +218,7 @@ impl GetLocateQuotesRequest {
 
 /// A request for a new locate.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateLocateRequest {
     /// The symbol to borrow.
     pub symbol: String,

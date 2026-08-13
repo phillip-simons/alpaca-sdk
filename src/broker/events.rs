@@ -42,6 +42,7 @@ pub type BrokerEvent = crate::sse::Event;
 /// The derived `Serialize` uses the v2 spelling. The client does not use it —
 /// it builds the query itself, because it knows which stream it is calling.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetEventsRequest {
     /// Resume after this event id.
     ///

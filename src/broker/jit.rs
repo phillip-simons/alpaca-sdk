@@ -203,6 +203,7 @@ pub struct JitReportDownload {
 
 /// Filters for a JIT report.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetJitReportRequest {
     /// Which report to run.
     pub report_type: JitReportType,
@@ -248,6 +249,7 @@ impl GetJitReportRequest {
 
 /// A window over a ledger's balances.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetJitBalancesRequest {
     /// The first day.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -294,6 +296,7 @@ pub struct JitSettlementAccount {
 
 /// A request to settle a day's JIT obligation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateJitSettlementRequest {
     /// The accounts to settle.
     pub accounts: Vec<JitSettlementAccount>,

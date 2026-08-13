@@ -186,6 +186,7 @@ pub struct InstantFundingReport {
 
 /// Filters for listing instant funding requests.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetInstantFundingRequest {
     /// Only requests in this state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -238,6 +239,7 @@ impl GetInstantFundingRequest {
 
 /// A request to advance cash against an uncleared deposit.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateInstantFundingRequest {
     /// The account to credit.
     pub account_no: String,
@@ -290,6 +292,7 @@ pub struct SettlementTransfer {
 
 /// A request to settle one or more advances.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateInstantFundingSettlementRequest {
     /// The advances to settle.
     pub transfers: Vec<SettlementTransfer>,
@@ -325,6 +328,7 @@ impl CreateInstantFundingSettlementRequest {
 
 /// Filters for the instant funding report.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetInstantFundingReportRequest {
     /// Which report to run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -336,6 +340,7 @@ pub struct GetInstantFundingReportRequest {
 
 /// A request for several accounts' instant funding limits.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetAccountLimitsRequest {
     /// The accounts to ask about, sent as one comma-separated parameter.
     ///

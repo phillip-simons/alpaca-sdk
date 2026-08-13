@@ -204,11 +204,9 @@ async fn the_nta_stream_sends_its_own_two_filters() {
         .mount(&server)
         .await;
 
-    let filter = GetEventsRequest {
-        group_id: Some("9b6c7c1a-9eb2-4d4a-8a3a-1bf4c1d5cbaa".parse().unwrap()),
-        include_preprocessing: Some(true),
-        ..GetEventsRequest::default()
-    };
+    let mut filter = GetEventsRequest::default();
+    filter.group_id = Some("9b6c7c1a-9eb2-4d4a-8a3a-1bf4c1d5cbaa".parse().unwrap());
+    filter.include_preprocessing = Some(true);
 
     drop(
         client(&server)
@@ -238,11 +236,9 @@ async fn the_subscription_sends_the_sse_headers_and_the_filter() {
         .mount(&server)
         .await;
 
-    let filter = GetEventsRequest {
-        since: Some("2022-02-01".parse().unwrap()),
-        until: Some("2022-02-28".parse().unwrap()),
-        ..GetEventsRequest::default()
-    };
+    let mut filter = GetEventsRequest::default();
+    filter.since = Some("2022-02-01".parse().unwrap());
+    filter.until = Some("2022-02-28".parse().unwrap());
 
     // The mock's `expect(1)` is the assertion; the stream itself is not needed.
     drop(

@@ -247,10 +247,8 @@ async fn portfolios_are_a_bare_array_with_no_paging() {
         .mount(&server)
         .await;
 
-    let filter = alpaca_sdk::broker::GetPortfoliosRequest {
-        status: Some(PortfolioStatus::Active),
-        ..Default::default()
-    };
+    let mut filter = alpaca_sdk::broker::GetPortfoliosRequest::default();
+    filter.status = Some(PortfolioStatus::Active);
 
     let portfolios = client(&server)
         .get_all_portfolios(Some(&filter))
@@ -281,14 +279,11 @@ async fn updating_and_inactivating_a_portfolio() {
     let portfolio_id = Uuid::parse_str(PORTFOLIO_ID).unwrap();
     let client = client(&server);
 
+    let mut update = UpdatePortfolioRequest::default();
+    update.cooldown_days = Some(7);
+
     client
-        .update_portfolio_by_id(
-            portfolio_id,
-            &UpdatePortfolioRequest {
-                cooldown_days: Some(7),
-                ..Default::default()
-            },
-        )
+        .update_portfolio_by_id(portfolio_id, &update)
         .await
         .unwrap();
     client
@@ -450,11 +445,9 @@ async fn runs_filter_by_type_under_the_type_key() {
         .mount(&server)
         .await;
 
-    let filter = GetRunsRequest {
-        account_id: Some(Uuid::parse_str(ACCOUNT_ID).unwrap()),
-        run_type: Some(RunType::FullRebalance),
-        ..Default::default()
-    };
+    let mut filter = GetRunsRequest::default();
+    filter.account_id = Some(Uuid::parse_str(ACCOUNT_ID).unwrap());
+    filter.run_type = Some(RunType::FullRebalance);
 
     let page = client(&server).get_runs(Some(&filter)).await.unwrap();
     assert_eq!(page.runs.len(), 1);
@@ -542,11 +535,9 @@ async fn a_subscriptions_filter_reaches_the_query_string() {
         .mount(&server)
         .await;
 
-    let filter = GetSubscriptionsRequest {
-        account_id: Some(Uuid::parse_str(ACCOUNT_ID).unwrap()),
-        limit: Some(50),
-        ..Default::default()
-    };
+    let mut filter = GetSubscriptionsRequest::default();
+    filter.account_id = Some(Uuid::parse_str(ACCOUNT_ID).unwrap());
+    filter.limit = Some(50);
 
     client(&server)
         .get_subscriptions(Some(&filter))

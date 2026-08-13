@@ -77,6 +77,7 @@ wire_enum! {
 /// The response to a mint carries a narrower set of these fields than a listed
 /// request does, so all but the core are optional.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TokenizationRequest {
     /// Alpaca's identifier for the request.
     pub tokenization_request_id: String,
@@ -131,6 +132,7 @@ pub struct TokenizationRequest {
 
 /// A request to mint a tokenized asset.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MintTokenRequest {
     /// The position to tokenize.
     pub underlying_symbol: String,
@@ -179,6 +181,7 @@ impl MintTokenRequest {
 
 /// Filters for listing tokenization requests.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetTokenizationRequestsRequest {
     /// Only mints, or only redemptions.
     #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
@@ -227,6 +230,7 @@ impl GetTokenizationRequestsRequest {
 
 /// A lookup by the caller's own request id.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ByClientRequestId {
     /// The identifier the caller sent with the request.
     pub client_request_id: String,

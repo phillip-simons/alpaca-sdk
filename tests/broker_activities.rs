@@ -82,12 +82,10 @@ async fn the_activity_type_filter_is_one_comma_separated_parameter() {
         .mount(&server)
         .await;
 
-    let filter = GetAccountActivitiesRequest {
-        account_id: Some(Uuid::parse_str(ACCOUNT_ID).unwrap()),
-        activity_types: Some(vec![ActivityType::Fill, ActivityType::Div]),
-        direction: Some(Sort::Asc),
-        ..Default::default()
-    };
+    let mut filter = GetAccountActivitiesRequest::default();
+    filter.account_id = Some(Uuid::parse_str(ACCOUNT_ID).unwrap());
+    filter.activity_types = Some(vec![ActivityType::Fill, ActivityType::Div]);
+    filter.direction = Some(Sort::Asc);
 
     let activities = client(&server)
         .get_account_activities(Some(&filter))
@@ -112,11 +110,9 @@ async fn date_with_after_is_alpacas_to_reject_not_ours() {
         .mount(&server)
         .await;
 
-    let filter = GetAccountActivitiesRequest {
-        date: Some("2022-03-04T00:00:00Z".parse().unwrap()),
-        after: Some("2022-03-01T00:00:00Z".parse().unwrap()),
-        ..Default::default()
-    };
+    let mut filter = GetAccountActivitiesRequest::default();
+    filter.date = Some("2022-03-04T00:00:00Z".parse().unwrap());
+    filter.after = Some("2022-03-01T00:00:00Z".parse().unwrap());
 
     client(&server)
         .get_account_activities(Some(&filter))
@@ -140,10 +136,8 @@ async fn activities_of_one_type_take_the_same_typed_filter() {
         .mount(&server)
         .await;
 
-    let filter = GetAccountActivitiesRequest {
-        page_size: Some(25),
-        ..Default::default()
-    };
+    let mut filter = GetAccountActivitiesRequest::default();
+    filter.page_size = Some(25);
 
     let activities = client(&server)
         .get_account_activities_by_type(&ActivityType::Fill, Some(&filter))

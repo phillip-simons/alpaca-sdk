@@ -503,11 +503,9 @@ async fn category_and_activity_types_cannot_both_be_set() {
     use alpaca_sdk::broker::{ActivityCategory, GetAccountActivitiesRequest};
     use alpaca_sdk::trading::ActivityType;
 
-    let both = GetAccountActivitiesRequest {
-        category: Some(ActivityCategory::TradeActivity),
-        activity_types: Some(vec![ActivityType::Fill]),
-        ..GetAccountActivitiesRequest::default()
-    };
+    let mut both = GetAccountActivitiesRequest::default();
+    both.category = Some(ActivityCategory::TradeActivity);
+    both.activity_types = Some(vec![ActivityType::Fill]);
     assert!(both.validate().is_err());
 
     let one = GetAccountActivitiesRequest::default().category(ActivityCategory::NonTradeActivity);
@@ -515,11 +513,9 @@ async fn category_and_activity_types_cannot_both_be_set() {
 
     // And the rule this crate declines to enforce still reaches the server, in
     // the same shape as the `expect(0)` tests on the retired event streams.
-    let dated = GetAccountActivitiesRequest {
-        date: Some("2026-01-02T00:00:00Z".parse().unwrap()),
-        after: Some("2026-01-01T00:00:00Z".parse().unwrap()),
-        ..GetAccountActivitiesRequest::default()
-    };
+    let mut dated = GetAccountActivitiesRequest::default();
+    dated.date = Some("2026-01-02T00:00:00Z".parse().unwrap());
+    dated.after = Some("2026-01-01T00:00:00Z".parse().unwrap());
     assert!(
         dated.validate().is_ok(),
         "an undocumented rule has not crept back in"

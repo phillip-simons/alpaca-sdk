@@ -495,12 +495,10 @@ async fn listing_accounts_sends_entities_as_one_comma_separated_parameter() {
         .mount(&server)
         .await;
 
-    let filter = ListAccountsRequest {
-        query: Some("jane".to_owned()),
-        sort: Some(Sort::Asc),
-        entities: Some(vec![AccountEntities::Identity, AccountEntities::Contact]),
-        ..Default::default()
-    };
+    let mut filter = ListAccountsRequest::default();
+    filter.query = Some("jane".to_owned());
+    filter.sort = Some(Sort::Asc);
+    filter.entities = Some(vec![AccountEntities::Identity, AccountEntities::Contact]);
 
     let accounts = client(&server).list_accounts(Some(&filter)).await.unwrap();
     assert!(!accounts.is_empty());
@@ -521,13 +519,11 @@ async fn an_update_sends_only_the_fields_it_names() {
         .mount(&server)
         .await;
 
-    let update = UpdateAccountRequest {
-        contact: Some(UpdatableContact {
-            email_address: Some("new@example.com".to_owned()),
-            ..Default::default()
-        }),
+    let mut update = UpdateAccountRequest::default();
+    update.contact = Some(UpdatableContact {
+        email_address: Some("new@example.com".to_owned()),
         ..Default::default()
-    };
+    });
 
     client(&server)
         .update_account(Uuid::parse_str(ACCOUNT_ID).unwrap(), &update)

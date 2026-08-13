@@ -56,6 +56,7 @@ pub enum Trail {
 
 /// The profit-taking leg of a bracket, OCO, or OTO order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TakeProfitRequest {
     /// The limit price to exit a profitable trade at.
     #[serde(with = "crate::types::decimal")]
@@ -72,6 +73,7 @@ impl TakeProfitRequest {
 
 /// The loss-limiting leg of a bracket, OCO, or OTO order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct StopLossRequest {
     /// The stop price to exit a losing trade at.
     #[serde(with = "crate::types::decimal")]
@@ -105,6 +107,7 @@ impl StopLossRequest {
 
 /// One leg of a multi-leg option order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OptionLegRequest {
     /// The option contract symbol.
     pub symbol: String,
@@ -180,6 +183,7 @@ impl OptionLegRequest {
 /// assert!(order.validate().is_ok());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OrderRequest {
     /// The symbol being traded. Required for every order class except mleg.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -521,6 +525,7 @@ impl OrderRequest {
 
 /// Changes to apply to an existing order.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ReplaceOrderRequest {
     /// The new number of shares.
     #[serde(
@@ -655,6 +660,7 @@ impl ClosePositionRequest {
 
 /// Filters for listing orders.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetOrdersRequest {
     /// Which orders to return: open, closed, or all. Defaults to open.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -740,6 +746,7 @@ pub struct GetOrdersRequest {
 /// cannot be serialized into a query string — `serde_urlencoded` rejects it at
 /// runtime, with no compile error to warn anyone.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetAccountActivitiesRequest {
     /// Only activities of these kinds.
     ///
@@ -814,7 +821,10 @@ impl GetAccountActivitiesRequest {
 }
 
 /// Filters for fetching one order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `Default` leaves `nested` off, which is the API's own default.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetOrderByIdRequest {
     /// Whether to roll multi-leg orders up under their parent's `legs`.
     pub nested: bool,
@@ -822,6 +832,7 @@ pub struct GetOrderByIdRequest {
 
 /// Filters for listing assets.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetAssetsRequest {
     /// Only assets with this status.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -839,6 +850,7 @@ pub struct GetAssetsRequest {
 
 /// Filters for the market calendar.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetCalendarRequest {
     /// The first day to return.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -850,6 +862,7 @@ pub struct GetCalendarRequest {
 
 /// Filters for portfolio history.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetPortfolioHistoryRequest {
     /// Duration of the data, as a number and unit such as `1D`, `1W`, `1M`, `1A`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -882,6 +895,7 @@ pub struct GetPortfolioHistoryRequest {
 
 /// A new watchlist.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CreateWatchlistRequest {
     /// The watchlist name, up to 64 characters.
     pub name: String,
@@ -906,6 +920,7 @@ impl CreateWatchlistRequest {
 /// it, because a `PATCH` with an empty body changes nothing and Alpaca's answer
 /// to one is not documented.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UpdateWatchlistRequest {
     /// A new name for the watchlist.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -952,6 +967,7 @@ impl UpdateWatchlistRequest {
 
 /// Filters for corporate action announcements.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetCorporateAnnouncementsRequest {
     /// The action types to return. Alpaca allows at most 20.
     pub ca_types: Vec<CorporateActionType>,
@@ -1051,6 +1067,7 @@ impl GetCorporateAnnouncementsRequest {
 
 /// Filters for listing option contracts.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetOptionContractsRequest {
     /// Only contracts on these underlying symbols.
     ///

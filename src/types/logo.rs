@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 /// A request for a company logo.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LogoRequest {
     /// Whether to answer with a generated placeholder when no logo exists.
     ///

@@ -129,6 +129,7 @@ pub struct OptionsApprovalsPage {
 
 /// A request for a given options level.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct RequestOptionsApprovalRequest {
     /// The level to ask for.
     pub level: OptionsLevel,
@@ -154,6 +155,7 @@ impl RequestOptionsApprovalRequest {
 
 /// Filters for listing options approval requests.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetOptionsApprovalsRequest {
     /// Only this account.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -200,6 +202,7 @@ pub struct OnfidoToken {
 
 /// Filters for an Onfido SDK token.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GetOnfidoTokenRequest {
     /// The origin the SDK will run on, which Onfido checks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -211,6 +214,7 @@ pub struct GetOnfidoTokenRequest {
 
 /// What Onfido's SDK concluded, reported back to Alpaca.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UpdateOnfidoOutcomeRequest {
     /// The token the verification ran under.
     pub token: String,
@@ -312,6 +316,7 @@ pub struct TradingLimits {
 
 /// A hypothetical order, to be costed rather than placed.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct EstimateOrderRequest {
     /// The symbol.
     #[serde(default, skip_serializing_if = "Option::is_none")]

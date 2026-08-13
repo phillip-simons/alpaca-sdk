@@ -51,6 +51,14 @@ fn account_id() -> Uuid {
     Uuid::parse_str(ACCOUNT_ID).unwrap()
 }
 
+/// `GetOrderByIdRequest` is `#[non_exhaustive]`, so it is built from its default
+/// and adjusted rather than written as a literal.
+fn nested_order_request() -> GetOrderByIdRequest {
+    let mut request = GetOrderByIdRequest::default();
+    request.nested = true;
+    request
+}
+
 // ------------------------------------------------------------------ orders
 
 #[test]
@@ -158,11 +166,9 @@ async fn get_orders_for_account_sends_its_filter() {
         .mount(&server)
         .await;
 
-    let filter = GetOrdersRequest {
-        status: Some(QueryOrderStatus::Open),
-        symbols: Some(vec!["AAPL".to_owned(), "TSLA".to_owned()]),
-        ..Default::default()
-    };
+    let mut filter = GetOrdersRequest::default();
+    filter.status = Some(QueryOrderStatus::Open);
+    filter.symbols = Some(vec!["AAPL".to_owned(), "TSLA".to_owned()]);
 
     client(&server)
         .get_orders_for_account(account_id(), Some(&filter))
@@ -189,12 +195,10 @@ async fn get_orders_for_account_sends_the_broker_only_filters() {
         .mount(&server)
         .await;
 
-    let filter = GetOrdersRequest {
-        qty_above: Some("1.5".parse().unwrap()),
-        qty_below: Some("100".parse().unwrap()),
-        subtag: Some("desk-7".to_owned()),
-        ..Default::default()
-    };
+    let mut filter = GetOrdersRequest::default();
+    filter.qty_above = Some("1.5".parse().unwrap());
+    filter.qty_below = Some("100".parse().unwrap());
+    filter.subtag = Some("desk-7".to_owned());
 
     client(&server)
         .get_orders_for_account(account_id(), Some(&filter))
@@ -221,7 +225,7 @@ async fn get_order_for_account_by_id_passes_nested() {
         .get_order_for_account_by_id(
             account_id(),
             Uuid::parse_str(ORDER_ID).unwrap(),
-            Some(&GetOrderByIdRequest { nested: true }),
+            Some(&nested_order_request()),
         )
         .await
         .unwrap();

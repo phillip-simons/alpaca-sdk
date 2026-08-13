@@ -121,13 +121,11 @@ async fn get_orders_sends_its_filters() {
         .mount(&server)
         .await;
 
-    let filter = GetOrdersRequest {
-        status: Some(QueryOrderStatus::Open),
-        limit: Some(50),
-        nested: Some(true),
-        symbols: Some(vec!["AAPL".to_owned(), "SPY".to_owned()]),
-        ..GetOrdersRequest::default()
-    };
+    let mut filter = GetOrdersRequest::default();
+    filter.status = Some(QueryOrderStatus::Open);
+    filter.limit = Some(50);
+    filter.nested = Some(true);
+    filter.symbols = Some(vec!["AAPL".to_owned(), "SPY".to_owned()]);
 
     client(&server).get_orders(Some(&filter)).await.unwrap();
 }
@@ -151,7 +149,8 @@ async fn get_order_by_id_uses_the_id_in_the_path() {
     )
     .await;
 
-    let filter = GetOrderByIdRequest { nested: true };
+    let mut filter = GetOrderByIdRequest::default();
+    filter.nested = true;
     client(&server)
         .get_order_by_id(Uuid::parse_str(ORDER_ID).unwrap(), Some(&filter))
         .await
@@ -430,11 +429,9 @@ async fn get_all_assets_sends_its_filters() {
         .mount(&server)
         .await;
 
-    let filter = GetAssetsRequest {
-        status: Some(AssetStatus::Active),
-        asset_class: Some(alpaca_sdk::trading::AssetClass::UsEquity),
-        ..GetAssetsRequest::default()
-    };
+    let mut filter = GetAssetsRequest::default();
+    filter.status = Some(AssetStatus::Active);
+    filter.asset_class = Some(alpaca_sdk::trading::AssetClass::UsEquity);
 
     client(&server).get_all_assets(Some(&filter)).await.unwrap();
 }

@@ -266,12 +266,10 @@ async fn account_activities_send_their_typed_filters() {
         .mount(&server)
         .await;
 
-    let filter = GetAccountActivitiesRequest {
-        activity_types: Some(vec![ActivityType::Fill, ActivityType::Div]),
-        page_size: Some(50),
-        direction: Some(Sort::Asc),
-        ..GetAccountActivitiesRequest::default()
-    };
+    let mut filter = GetAccountActivitiesRequest::default();
+    filter.activity_types = Some(vec![ActivityType::Fill, ActivityType::Div]);
+    filter.page_size = Some(50);
+    filter.direction = Some(Sort::Asc);
 
     client(&server)
         .get_account_activities(Some(&filter))
@@ -286,11 +284,9 @@ async fn account_activities_send_their_typed_filters() {
 async fn activity_types_and_category_cannot_be_combined() {
     let server = MockServer::start().await;
 
-    let filter = GetAccountActivitiesRequest {
-        activity_types: Some(vec![ActivityType::Fill]),
-        category: Some(ActivityCategory::TradeActivity),
-        ..GetAccountActivitiesRequest::default()
-    };
+    let mut filter = GetAccountActivitiesRequest::default();
+    filter.activity_types = Some(vec![ActivityType::Fill]);
+    filter.category = Some(ActivityCategory::TradeActivity);
 
     let error = client(&server)
         .get_account_activities(Some(&filter))

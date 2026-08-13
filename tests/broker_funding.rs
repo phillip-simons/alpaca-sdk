@@ -486,11 +486,10 @@ async fn one_page_of_transfers_honours_the_filter_as_given() {
         .mount(&server)
         .await;
 
-    let filter = GetTransfersRequest {
-        direction: Some(TransferDirection::Incoming),
-        limit: Some(10),
-        offset: Some(20),
-    };
+    let mut filter = GetTransfersRequest::default();
+    filter.direction = Some(TransferDirection::Incoming);
+    filter.limit = Some(10);
+    filter.offset = Some(20);
 
     let transfers = client(&server)
         .get_transfers_for_account(account_id(), Some(&filter))

@@ -80,6 +80,7 @@ impl<const N: usize> From<[&str; N]> for Symbols {
 
 /// Fields shared by every historical time series request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TimeseriesRequest {
     /// The symbols to query, sent as one comma-separated `symbols` parameter.
     #[serde(rename = "symbols")]
@@ -152,6 +153,7 @@ impl TimeseriesRequest {
 
 /// Historical bars for stocks.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct StockBarsRequest {
     /// The shared time series filters.
     #[serde(flatten)]
@@ -198,6 +200,7 @@ impl StockBarsRequest {
 
 /// Historical bars for crypto.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CryptoBarsRequest {
     /// The shared time series filters.
     #[serde(flatten)]
@@ -218,6 +221,7 @@ impl CryptoBarsRequest {
 
 /// Historical bars for options.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OptionBarsRequest {
     /// The shared time series filters.
     #[serde(flatten)]
@@ -238,6 +242,7 @@ impl OptionBarsRequest {
 
 /// Historical quotes or trades for stocks.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct StockTimeseriesRequest {
     /// The shared time series filters.
     #[serde(flatten)]
@@ -319,6 +324,7 @@ timeseries_delegates!(StockAuctionsRequest);
 
 /// A request for the most recent stock data.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct StockLatestRequest {
     /// The symbols to query.
     #[serde(rename = "symbols")]
@@ -351,6 +357,7 @@ impl StockLatestRequest {
 
 /// A request for the most recent crypto data.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CryptoLatestRequest {
     /// The symbols to query.
     #[serde(rename = "symbols")]
@@ -368,6 +375,7 @@ impl CryptoLatestRequest {
 
 /// A request for the most recent option data.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OptionLatestRequest {
     /// The symbols to query.
     #[serde(rename = "symbols")]
@@ -405,6 +413,7 @@ pub type OptionSnapshotRequest = OptionLatestRequest;
 
 /// A request for every contract in an underlying's option chain.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OptionChainRequest {
     /// The underlying symbol.
     ///
@@ -481,6 +490,7 @@ impl OptionChainRequest {
 ///
 /// See <https://docs.alpaca.markets/us/reference/stockauctions-1>.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct StockAuctionsRequest {
     /// The shared time series filters.
     #[serde(flatten)]
@@ -518,6 +528,7 @@ impl StockAuctionsRequest {
 ///
 /// See <https://docs.alpaca.markets/us/reference/stockbarsingle-1>.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SingleSymbolRequest {
     /// The earliest timestamp to return.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -616,6 +627,7 @@ impl SingleSymbolRequest {
 ///
 /// See <https://docs.alpaca.markets/us/reference/rates-1>.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ForexRatesRequest {
     /// The pairs to query, sent as one comma-separated parameter.
     ///
@@ -678,6 +690,7 @@ impl ForexRatesRequest {
 
 /// The latest forex rates for currency pairs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ForexLatestRatesRequest {
     /// The pairs to query.
     #[serde(rename = "currency_pairs")]
@@ -695,6 +708,7 @@ impl ForexLatestRatesRequest {
 
 /// A request for the most actively traded stocks.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MostActivesRequest {
     /// How many to return.
     pub top: u32,
@@ -726,6 +740,7 @@ fn default_market_type() -> MarketType {
 
 /// A request for the day's biggest movers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MarketMoversRequest {
     /// How many of each direction to return.
     pub top: u32,
@@ -755,6 +770,7 @@ impl Default for MarketMoversRequest {
 
 /// A request for news articles.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NewsRequest {
     /// The earliest article to return.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -810,6 +826,7 @@ impl NewsRequest {
 
 /// A request for corporate actions.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CorporateActionsRequest {
     /// Only actions for these symbols.
     #[serde(
