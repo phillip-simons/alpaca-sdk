@@ -101,11 +101,35 @@ async fn submit_order_for_account_posts_under_the_account() {
         .unwrap();
 }
 
-#[test]
-fn a_local_currency_order_must_be_a_market_order() {
-    // alpaca-py enforces this in a model validator; local currency trading only
-    // supports market orders.
-    let limit = OrderRequest::new(alpaca_sdk::trading::OrderRequest::limit(
+#[tokio::test]
+async fn a_local_currency_limit_order_reaches_the_server() {
+    // alpaca-py refuses any non-USD order that is not a market order. The LCT
+    // documentation says otherwise — "market, limit, stop & stop limit orders"
+    // — so refusing one here would reject a request Alpaca accepts.
+    //
+    // Asserted against a mock rather than by calling validate(), because what
+    // matters is that the request is *sent*. If a future re-port reinstates
+    // alpaca-py's rule, this fails.
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!("/v1/trading/accounts/{ACCOUNT_ID}/orders")))
+        .and(body_json(json!({
+            "symbol": "AAPL",
+            "qty": "1",
+            "side": "buy",
+            "type": "limit",
+            "time_in_force": "day",
+            "limit_price": "100",
+            "currency": "GBP"
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture(
+            "broker/test_trading_routes__test_close_position_for_account_with_qty__01.json",
+        )))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let order = OrderRequest::new(alpaca_sdk::trading::OrderRequest::limit(
         "AAPL",
         OrderSide::Buy,
         OrderAmount::Qty(Decimal::ONE),
@@ -113,27 +137,12 @@ fn a_local_currency_order_must_be_a_market_order() {
         Decimal::from(100),
     ))
     .currency(SupportedCurrencies::Gbp);
-    assert!(limit.validate().is_err());
+    order.validate().expect("an LCT limit order is valid");
 
-    let market = OrderRequest::new(alpaca_sdk::trading::OrderRequest::market(
-        "AAPL",
-        OrderSide::Buy,
-        OrderAmount::Qty(Decimal::ONE),
-        TimeInForce::Day,
-    ))
-    .currency(SupportedCurrencies::Gbp);
-    assert!(market.validate().is_ok());
-
-    // A limit order in USD is fine; the rule is about the currency, not the type.
-    let usd_limit = OrderRequest::new(alpaca_sdk::trading::OrderRequest::limit(
-        "AAPL",
-        OrderSide::Buy,
-        OrderAmount::Qty(Decimal::ONE),
-        TimeInForce::Day,
-        Decimal::from(100),
-    ))
-    .currency(SupportedCurrencies::Usd);
-    assert!(usd_limit.validate().is_ok());
+    client(&server)
+        .submit_order_for_account(account_id(), &order)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

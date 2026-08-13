@@ -271,6 +271,63 @@ alpaca-py, and the two disagree enough to be worth recording:
 - **`primary_account_holder_id`** exists on both create and update, for
   multi-live accounts, and is absent from alpaca-py entirely.
 
+### The validation rules, checked against the reference
+
+Every client-side rule this crate enforces was read back against its reference
+page. The rules split four ways, and the split is the useful part — a future
+port of anything else should sort its rules the same way before enforcing them.
+
+**Confirmed by the reference — enforced.**
+
+| Rule | Where |
+|---|---|
+| Announcement window ≤ 90 days | "The date range is limited to 90 days." |
+| W-8BEN: `content` xor `content_data` | "required unless content_data is provided" |
+| W-8BEN: `content_data` implies `application/json` | upload schema |
+| `ftin_not_required` when neither tax id is set | "Required if foreign_tax_id and tax_id_ssn are empty." |
+| Bank: address fields only on a BIC bank | "Only for international banks, ie if bank_code_type = BIC" |
+| Journals: `amount` ↔ JNLC, `symbol`+`qty` ↔ JNLS | "Required if entry_type = JNLC" / "= JNLS" |
+| Account creation: the fifteen required fields | `createaccount` schema |
+
+**Contradicted by the reference — removed.**
+
+- **Local currency orders are not market-only.** alpaca-py rejects any non-USD
+  order that is not a market order. The LCT page: "Alpaca currently supports LCT
+  trading for market, limit, stop & stop limit orders with a time in force=Day".
+  The rule refused orders Alpaca accepts. Its time-in-force constraint is *not*
+  enforced in its place — that sentence describes what is supported today, and
+  enforcing it would recreate the same bug one field over.
+- **International banks do not need all five address fields.** The reference
+  marks every one of them optional.
+
+**Undocumented business rules — not enforced, documented instead.**
+
+A limit or combination that encodes Alpaca's policy, which only Alpaca can
+confirm. The server's rejection says more than a guess of ours, and a guess can
+refuse a request that would have worked.
+
+- The ten-document cap on an upload. Alpaca documents a 10MB ceiling on each
+  document's contents and no count at all. `DOCUMENT_UPLOAD_LIMIT` is still
+  exported for a caller who wants alpaca-py's behaviour.
+- `date` alongside `after`/`until` on account activities.
+
+**Coherence rules — kept without needing the reference.**
+
+A request that contradicts itself, or is degenerate, cannot be one Alpaca
+accepts, so these cannot wrongly refuse anything: transfer `amount > 0`, weight
+`percent > 0`, an asset weight naming a symbol, `start <= end` on a date window,
+a watchlist update changing something, and the trading request's `> 0` checks.
+`amount > 0` guards a money-movement route and catches a sign error before it
+becomes a transfer.
+
+Each removed rule has a test asserting the request now *reaches* the server, the
+same shape as the `expect(0)` test on the retired event streams: a re-port from
+alpaca-py cannot quietly reinstate a stale rule.
+
+**Found while checking, not yet done:** the reference documents that `category`
+and `activity_types` are mutually exclusive on account activities. This crate has
+no `category` field, so it implements neither the field nor its rule.
+
 ### Documentation: cite the API, not the Python SDK
 
 **Partly done.** The framing is fixed — `lib.rs`, `README.md` and `NOTICE` now

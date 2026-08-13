@@ -275,34 +275,33 @@ async fn uploading_posts_an_array_and_expects_no_body_back() {
 }
 
 #[tokio::test]
-async fn more_than_ten_documents_is_refused_locally() {
+async fn more_than_ten_documents_is_alpacas_to_refuse_not_ours() {
+    // alpaca-py caps an upload at ten. Alpaca documents a 10MB ceiling on each
+    // document's *contents* and no limit on the count, so the cap is its own
+    // invention — plausibly real, but not ours to enforce. Eleven documents go
+    // to the server, and the server decides.
     let server = MockServer::start().await;
-    let document = UploadDocument::Document(UploadDocumentRequest::new(
-        DocumentType::IdentityVerification,
-        "QQ==",
-        UploadDocumentMimeType::Pdf,
-    ));
-    let too_many = vec![document; 11];
-
-    let error = client(&server)
-        .upload_documents_to_account(account_id(), &too_many)
-        .await
-        .unwrap_err();
-
-    assert!(matches!(error, alpaca_sdk::Error::InvalidRequest(_)));
-    assert!(server.received_requests().await.unwrap().is_empty());
-
-    // Ten is fine.
     Mock::given(method("POST"))
         .and(path(format!("/v1/accounts/{ACCOUNT_ID}/documents/upload")))
         .respond_with(ResponseTemplate::new(204))
         .expect(1)
         .mount(&server)
         .await;
+
+    let document = UploadDocument::Document(UploadDocumentRequest::new(
+        DocumentType::IdentityVerification,
+        "QQ==",
+        UploadDocumentMimeType::Pdf,
+    ));
+    let eleven = vec![document; 11];
+
     client(&server)
-        .upload_documents_to_account(account_id(), &too_many[..10])
+        .upload_documents_to_account(account_id(), &eleven)
         .await
         .unwrap();
+
+    // The number alpaca-py uses is still exposed, for a caller who wants it.
+    assert_eq!(alpaca_sdk::broker::DOCUMENT_UPLOAD_LIMIT, 10);
 }
 
 #[test]

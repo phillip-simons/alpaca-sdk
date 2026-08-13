@@ -33,8 +33,13 @@ use crate::error::Result;
 use crate::rest::{Empty, RestClient, RestConfig};
 use crate::trading::{Activity, Position, Watchlist};
 
-/// The most documents Alpaca accepts in one upload.
-const DOCUMENT_UPLOAD_LIMIT: usize = 10;
+/// The most documents alpaca-py will send in one upload.
+///
+/// Not documented by Alpaca — neither the reference nor the spec mentions a
+/// count limit, only a 10MB ceiling on each document's contents. Exposed so a
+/// caller who wants alpaca-py's behaviour can apply it, and not enforced by
+/// [`BrokerClient::upload_documents_to_account`].
+pub const DOCUMENT_UPLOAD_LIMIT: usize = 10;
 
 /// The id an activity pages from, whichever kind it is.
 fn activity_id(activity: &Activity) -> &str {
@@ -814,25 +819,25 @@ impl BrokerClient {
         unreachable!("retry loop exited without returning")
     }
 
-    /// Uploads up to ten documents to an account.
+    /// Uploads documents to an account.
     ///
-    /// Contents are base64-encoded, and capped at 10MB each when Alpaca does the
-    /// KYC. The route answers `204`, so a success returns nothing.
+    /// Contents are base64-encoded, and capped at 10MB each when Alpaca does
+    /// the KYC. The route answers `204`, so a success returns nothing.
+    ///
+    /// alpaca-py additionally refuses more than [`DOCUMENT_UPLOAD_LIMIT`]
+    /// documents in one call. That limit is not in the reference or the spec,
+    /// and it is not enforced here: it may well be real, but rejecting a
+    /// request Alpaca would have accepted is the worse of the two failures, and
+    /// the server's answer says more than a guess of ours would.
     ///
     /// # Errors
-    /// Returns [`crate::Error::InvalidRequest`] if more than ten documents are
-    /// passed, or if any of them fails [`UploadDocument::validate`].
+    /// Returns [`crate::Error::InvalidRequest`] if any document fails
+    /// [`UploadDocument::validate`].
     pub async fn upload_documents_to_account(
         &self,
         account_id: Uuid,
         documents: &[UploadDocument],
     ) -> Result<()> {
-        if documents.len() > DOCUMENT_UPLOAD_LIMIT {
-            return Err(crate::Error::InvalidRequest(format!(
-                "at most {DOCUMENT_UPLOAD_LIMIT} documents may be uploaded at once, got {}",
-                documents.len()
-            )));
-        }
         for document in documents {
             document.validate()?;
         }

@@ -97,21 +97,31 @@ async fn the_activity_type_filter_is_one_comma_separated_parameter() {
 }
 
 #[tokio::test]
-async fn date_cannot_be_combined_with_after_or_until() {
+async fn date_with_after_is_alpacas_to_reject_not_ours() {
+    // alpaca-py refuses `date` alongside `after` or `until`. The reference
+    // documents no such rule — the one exclusivity it does document is between
+    // `category` and `activity_types`, which this filter does not carry. So the
+    // combination is sent and Alpaca answers.
     let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/accounts/activities"))
+        .and(query_param("date", "2022-03-04T00:00:00Z"))
+        .and(query_param("after", "2022-03-01T00:00:00Z"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture(ACTIVITIES)))
+        .expect(1)
+        .mount(&server)
+        .await;
+
     let filter = GetAccountActivitiesRequest {
         date: Some("2022-03-04T00:00:00Z".parse().unwrap()),
         after: Some("2022-03-01T00:00:00Z".parse().unwrap()),
         ..Default::default()
     };
 
-    let error = client(&server)
+    client(&server)
         .get_account_activities(Some(&filter))
         .await
-        .unwrap_err();
-
-    assert!(matches!(error, alpaca_sdk::Error::InvalidRequest(_)));
-    assert!(server.received_requests().await.unwrap().is_empty());
+        .unwrap();
 }
 
 fn activity(id: &str) -> serde_json::Value {

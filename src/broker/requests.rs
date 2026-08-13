@@ -24,8 +24,8 @@ use crate::broker::models::{
     Weight,
 };
 use crate::error::{Error, Result};
+use crate::trading::ActivityType;
 use crate::trading::{AccountStatus, AssetClass};
-use crate::trading::{ActivityType, OrderType};
 use crate::types::Sort;
 use crate::types::SupportedCurrencies;
 
@@ -78,24 +78,20 @@ impl OrderRequest {
 
     /// Checks the rules Alpaca enforces on the order before it is sent.
     ///
+    /// Local currency orders are **not** restricted to market orders here.
+    /// alpaca-py rejects anything else, and [the LCT documentation][lct]
+    /// contradicts it: "Alpaca currently supports LCT trading for market,
+    /// limit, stop & stop limit orders with a time in force=Day". That page
+    /// also names the time-in-force constraint, which is deliberately not
+    /// enforced either — it is a statement of what is supported today, and
+    /// enforcing it would recreate the same stale-rule bug one field over.
+    ///
     /// # Errors
-    /// Returns [`Error::InvalidRequest`] if the wrapped order is invalid, or if
-    /// a non-USD order is anything other than a market order — local currency
-    /// trading supports market orders only.
+    /// Returns [`Error::InvalidRequest`] if the wrapped order is invalid.
+    ///
+    /// [lct]: https://docs.alpaca.markets/us/docs/local-currency-trading-lct
     pub fn validate(&self) -> Result<()> {
-        self.order.validate()?;
-
-        let local_currency = self
-            .currency
-            .as_ref()
-            .is_some_and(|currency| *currency != SupportedCurrencies::Usd);
-        if local_currency && self.order.order_type != OrderType::Market {
-            return Err(Error::InvalidRequest(
-                "orders in a local currency must be market orders".to_owned(),
-            ));
-        }
-
-        Ok(())
+        self.order.validate()
     }
 }
 
@@ -536,12 +532,20 @@ impl CreateBankRequest {
         }
     }
 
-    /// Checks the address rules Alpaca enforces on bank connections.
+    /// Checks the address rules Alpaca documents for bank connections.
+    ///
+    /// Only one direction is enforced. [The reference][createrecipientbank]
+    /// marks the address fields "Only for international banks, ie if
+    /// `bank_code_type` = BIC", so setting them on a domestic bank is an error.
+    /// It also marks all five *optional*, so an international bank missing one
+    /// is **not** rejected here — alpaca-py requires all five, which would
+    /// refuse a request Alpaca accepts.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if a domestic (ABA) bank carries any
-    /// address field, or an international (BIC) bank is missing one. alpaca-py
-    /// enforces both directions in a model validator.
+    /// address field.
+    ///
+    /// [createrecipientbank]: https://docs.alpaca.markets/us/reference/createrecipientbank
     pub fn validate(&self) -> Result<()> {
         let address = [
             ("country", &self.country),
@@ -561,17 +565,9 @@ impl CreateBankRequest {
                     }
                 }
             }
-            IdentifierType::Bic => {
-                for (field, value) in address {
-                    if value.is_none() {
-                        return Err(Error::InvalidRequest(format!(
-                            "{field} is required for international bank accounts"
-                        )));
-                    }
-                }
-            }
-            // A value Alpaca added that predates this rule; let the API judge it.
-            IdentifierType::Unknown(_) => {}
+            // The reference marks every address field optional, so an
+            // incomplete international bank is Alpaca's to reject, not ours.
+            IdentifierType::Bic | IdentifierType::Unknown(_) => {}
         }
 
         Ok(())
@@ -1463,17 +1459,19 @@ pub struct GetAccountActivitiesRequest {
 }
 
 impl GetAccountActivitiesRequest {
-    /// Checks the date filters do not conflict.
+    /// Always succeeds. Kept so the client's call sites read the same as the
+    /// other request types, and so a rule can be added here if one is ever
+    /// documented.
+    ///
+    /// alpaca-py rejects `date` combined with `after` or `until`. The reference
+    /// documents no such rule — the one exclusivity it *does* document is
+    /// between `category` and `activity_types`, neither of which this type
+    /// carries yet. Guessing at the first while missing the second is worse
+    /// than letting Alpaca answer.
     ///
     /// # Errors
-    /// Returns [`Error::InvalidRequest`] if `date` is combined with `after` or
-    /// `until`.
+    /// Never.
     pub fn validate(&self) -> Result<()> {
-        if self.date.is_some() && (self.after.is_some() || self.until.is_some()) {
-            return Err(Error::InvalidRequest(
-                "date cannot be combined with after or until".to_owned(),
-            ));
-        }
         Ok(())
     }
 }

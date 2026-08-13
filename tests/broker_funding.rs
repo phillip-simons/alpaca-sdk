@@ -235,9 +235,12 @@ fn a_domestic_bank_may_not_carry_an_address_and_an_international_one_must() {
     );
     assert!(international.validate().is_ok());
 
+    // alpaca-py requires all five address fields on an international bank. The
+    // reference marks every one of them optional, so an incomplete one is
+    // Alpaca's to reject — not ours.
     let mut incomplete = international;
     incomplete.postal_code = None;
-    assert!(incomplete.validate().is_err());
+    assert!(incomplete.validate().is_ok());
 }
 
 #[tokio::test]

@@ -9,7 +9,7 @@ mod events;
 mod models;
 mod requests;
 
-pub use client::BrokerClient;
+pub use client::{BrokerClient, DOCUMENT_UPLOAD_LIMIT};
 pub use enums::*;
 pub use events::{BrokerEvent, GetEventsRequest};
 pub use models::*;
