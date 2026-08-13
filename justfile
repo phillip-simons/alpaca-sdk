@@ -174,6 +174,14 @@ reference:
 coverage: specs
     python3 scripts/coverage.py specs --out COVERAGE.md
 
+# Which documented query parameters this crate never sends.
+#
+# `just coverage` compares paths and methods; a route can be implemented,
+# counted, and still be missing half of what it accepts. Needs the parameters
+# recorded by `just reference`, so run that first.
+parameters:
+    python3 scripts/parameters.py
+
 # Compare the pinned upstream revision against the local alpaca-py checkout.
 pinned source=alpaca_py:
     #!/usr/bin/env bash

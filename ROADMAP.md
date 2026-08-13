@@ -806,13 +806,41 @@ failure, and `Error::Decode` already exists for it. Also additive, also not a
 Both of these are the same lesson twice: 6.5 found real divergences by reading,
 and reading does not survive contact with 251 routes.
 
-- **Parameter coverage is not route coverage, and nothing measures it.**
-  `just coverage` compares paths and methods only. Hand-checking three routes
-  turned up four missing parameters — `asset_class`, `before_order_id` and
-  `after_order_id` on `GET /v2/orders`, `show_deliverables` on the option
-  contracts route. Three routes out of 251 is not a sample. `specs/reference.json`
-  already carries every parameter of every operation, so the diff is a scripting
-  job, not research.
+- **Parameter coverage is measured now** — `just parameters`, backed by
+  `scripts/parameters.py`. `just coverage` compares paths and methods only, and
+  hand-checking three routes in 6.5 turned up four missing parameters. Three
+  routes out of 251 is not a sample.
+
+  This section used to say `specs/reference.json` already carried every
+  parameter of every operation. **It did not** — it carried route metadata and
+  nothing else. The parameters are in the cached reference pages, so
+  `reference.py` now records them and the file has a `parameters` field; a
+  reference.json written before that is reported as stale rather than passing
+  silently.
+
+  The check is one-directional on purpose. There is no mechanical path from a
+  route to the struct that serializes its query string, so it widens each route
+  to the module implementing it — `src/trading/client.rs` to `src/trading/`,
+  plus `src/types/`, plus `src/trading/` again for anything in `src/broker/`,
+  which reuses it — and asks whether the parameter's name appears there at all.
+  A name it does not find is definitely not sent; a name it finds might belong
+  to a different struct. False positives cost a minute; a false negative costs a
+  parameter nobody notices for a year.
+
+  **It found twelve on its first run**, and they are real:
+
+  | Route | Missing |
+  |---|---|
+  | `GET /v1/accounts/positions` | `page` — the call passes `&Empty` |
+  | `GET /v1/events/nta` | `group_id`, `include_preprocessing` — NTA-only, and `GetEventsRequest` is shared across all five streams |
+  | `GET /v1/options/contracts`, `GET /v2/options/contracts` | `ppind` |
+  | `GET /v1/trading/accounts/{account_id}/orders` | `qty_above`, `qty_below`, `subtag` — broker-only extras on a trading-shaped request |
+  | `GET /v2/account/activities`, `…/{activity_type}` | `activity_types`, `category`, `page_size` |
+
+  The last row is the interesting one. Those two methods take a free-form
+  `&[(&str, String)]` query, so the parameters *can* be sent — they are just not
+  named anywhere, and the broker's equivalent route has a typed request with a
+  `page_size` field. That asymmetry is the gap, not the parameters.
 - **Enum drift.** Of 71 generated enums, only 7 of the 19 with a same-named spec
   schema agree exactly. Unknown values degrade to `Unknown(String)` rather than
   breaking, so this is a quality item and not a bug. Add the cross-check to

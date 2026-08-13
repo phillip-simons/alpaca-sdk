@@ -43,6 +43,30 @@ def fetch(url: str, into: pathlib.Path | None = None) -> str | None:
     return into.read_text(errors="replace") if into else result.stdout
 
 
+def parameters(declared: list) -> list[dict]:
+    """The parameters of one operation, deduplicated and sorted.
+
+    `$ref`s are dropped rather than resolved: these are one-operation documents
+    and a reference into `components` is rare, so following them would be more
+    machinery than it earns. A dropped parameter is invisible to the check
+    rather than reported wrongly.
+    """
+    seen: dict[tuple[str, str], dict] = {}
+    for parameter in declared:
+        if not isinstance(parameter, dict) or "$ref" in parameter:
+            continue
+        name = parameter.get("name")
+        where = parameter.get("in")
+        if not name or not where:
+            continue
+        seen[(where, name)] = {
+            "name": name,
+            "in": where,
+            "required": bool(parameter.get("required")),
+        }
+    return [seen[key] for key in sorted(seen)]
+
+
 def parse(slug: str, text: str) -> list[dict]:
     """Every operation a reference page documents."""
     marker = text.find("# OpenAPI definition")
@@ -64,6 +88,10 @@ def parse(slug: str, text: str) -> list[dict]:
     api = doc.get("info", {}).get("title", "")
     rows = []
     for path, item in doc.get("paths", {}).items():
+        # Parameters may be declared once for the path and inherited by every
+        # operation on it, or per operation, or both. The union is what a caller
+        # may send.
+        shared = item.get("parameters", []) if isinstance(item, dict) else []
         for method, operation in item.items():
             if method.lower() not in METHODS:
                 continue
@@ -75,6 +103,12 @@ def parse(slug: str, text: str) -> list[dict]:
                     "method": method.lower(),
                     "path": path,
                     "operation_id": operation.get("operationId", ""),
+                    # Every parameter the operation accepts, which is what
+                    # `scripts/parameters.py` diffs against the crate. Route
+                    # coverage and parameter coverage are different questions,
+                    # and hand-checking three routes for the second one found
+                    # four missing parameters.
+                    "parameters": parameters(shared + operation.get("parameters", [])),
                     # Three independent ways Alpaca marks a route as on its way
                     # out, and pages use different ones.
                     "deprecated": bool(operation.get("deprecated")),
