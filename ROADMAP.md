@@ -16,7 +16,7 @@ Written to be picked up cold.
 | 6 — Broker | ✅ | 75 routes, 20 models, 4 pagination schemes, 5 SSE streams |
 | 6.5 — Full API coverage | ✅ | 251/253 spec routes, 2 deliberate skips |
 | 7 — Polish | ✅ | `blocking` and `polars` built, exponential retry, `Error::Stream`, two coverage checks |
-| 8 — Spec-driven | ✅ | Codegen harness removed, 252 alpaca-py references cut, 640 tests at 88% coverage |
+| 8 — Spec-driven | ✅ | Codegen harness removed, 252 alpaca-py references cut, 663 tests at 89% coverage |
 
 **Nothing is generated from another SDK any more.** The enum generator and the
 recipes that read a Python checkout are gone; `just fixtures` still extracts
@@ -1003,11 +1003,21 @@ said where they were missing, and the answer was five files and 60 tests:
 | `data_route_smoke.rs` | The 17 untested market data routes, with bodies | `data/historical` 50→78% |
 | `trading_route_smoke.rs` | The 12 untested trading routes | `trading/client` 70→90% |
 | `stream_subscriptions.rs` | Each stream's channel set, without a socket | `data/live/streams` 51→100% |
+| `order_builders.rs` | Every order shape, on the body it posts | `trading/requests` 82→96% |
 
 A second pass took the smoke tests through the routes that *write* — 33 broker
 methods and 12 trading ones — and the four live streams' subscription surfaces,
 which need no socket at all. **87.9% of lines and 85.9% of functions now**, over
 640 tests, with `broker/client.rs` at 92% and `data/live/streams.rs` at 100%.
+
+**The order builders were the last untested thing that costs money.** Only
+`market` and `limit` were exercised; `stop`, `stop_limit`, `trailing_stop`,
+`multi_leg`, `bracket`, `oco` and the two `oto_*` constructors were not. A
+filter that serializes under the wrong name returns the wrong rows; a bracket
+order whose stop-loss leg serializes under the wrong name is a real position
+with no exit, and it compiles. `tests/order_builders.rs` asserts whole bodies
+rather than probing fields, because an extra key is as wrong as a missing one
+and a probe cannot see one.
 
 **It found a route that could not be called.**
 `GET /v1/instant_funding/limits/accounts` takes its account numbers as a

@@ -16,7 +16,6 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::types::serde_util::comma_separated;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -204,7 +203,7 @@ impl GetLocatesRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GetLocateQuotesRequest {
     /// The symbols to quote, sent as one comma-separated parameter.
-    #[serde(serialize_with = "comma_separated_required")]
+    #[serde(serialize_with = "crate::types::serde_util::comma_separated_required")]
     pub symbols: Vec<String>,
 }
 
@@ -213,18 +212,6 @@ impl GetLocateQuotesRequest {
     pub fn new(symbols: Vec<String>) -> Self {
         Self { symbols }
     }
-}
-
-/// The required counterpart to [`comma_separated`], which takes an `Option`.
-///
-/// `symbols` is the one parameter this route insists on, so modelling it as an
-/// `Option` to reuse the existing helper would let a caller build a request
-/// that cannot succeed.
-fn comma_separated_required<S>(values: &[String], serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    comma_separated(&Some(values.to_vec()), serializer)
 }
 
 /// A request for a new locate.
