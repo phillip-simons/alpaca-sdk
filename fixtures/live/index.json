@@ -1,0 +1,144 @@
+{
+  "captured_by": "tests/live_capture.rs",
+  "note": "Captured from the live market data API by tests/live_capture.rs (`just capture`). Routes that refused are recorded too: a 403 means the route exists and the account's plan does not reach it.",
+  "routes": {
+    "forex_latest_rates": {
+      "detail": "alpaca api error 403 on /forex/latest/rates: forbidden: insufficient grants",
+      "http_status": 403,
+      "query": [
+        [
+          "currency_pairs",
+          "EURUSD,GBPUSD"
+        ]
+      ],
+      "route": "/v1beta1/forex/latest/rates",
+      "status": "refused"
+    },
+    "forex_rates": {
+      "detail": "alpaca api error 403 on /forex/rates: forbidden: insufficient grants",
+      "http_status": 403,
+      "query": [
+        [
+          "currency_pairs",
+          "EURUSD"
+        ],
+        [
+          "start",
+          "2026-08-10"
+        ],
+        [
+          "end",
+          "2026-08-11"
+        ],
+        [
+          "timeframe",
+          "1Day"
+        ]
+      ],
+      "route": "/v1beta1/forex/rates",
+      "status": "refused"
+    },
+    "indices_latest_values": {
+      "detail": "alpaca api error 403 on /indices/latest/values: forbidden: insufficient grants",
+      "http_status": 403,
+      "query": [
+        [
+          "symbols",
+          "SPX"
+        ]
+      ],
+      "route": "/v1beta1/indices/latest/values",
+      "status": "refused"
+    },
+    "logos_aapl": {
+      "detail": "alpaca api error 403 on /logos/AAPL: Subscription does not permit querying logos",
+      "http_status": 403,
+      "query": [],
+      "route": "/v1beta1/logos/AAPL",
+      "status": "refused"
+    },
+    "options_meta_conditions_trade": {
+      "query": [],
+      "route": "/v1beta1/options/meta/conditions/trade",
+      "status": "captured"
+    },
+    "options_meta_exchanges": {
+      "query": [],
+      "route": "/v1beta1/options/meta/exchanges",
+      "status": "captured"
+    },
+    "stocks_auctions": {
+      "query": [
+        [
+          "symbols",
+          "AAPL"
+        ],
+        [
+          "start",
+          "2026-08-10"
+        ],
+        [
+          "end",
+          "2026-08-11"
+        ],
+        [
+          "limit",
+          "5"
+        ]
+      ],
+      "route": "/v2/stocks/auctions",
+      "status": "captured"
+    },
+    "stocks_bars_sip": {
+      "query": [
+        [
+          "symbols",
+          "AAPL"
+        ],
+        [
+          "start",
+          "2026-08-10"
+        ],
+        [
+          "end",
+          "2026-08-11"
+        ],
+        [
+          "timeframe",
+          "1Day"
+        ],
+        [
+          "feed",
+          "sip"
+        ]
+      ],
+      "route": "/v2/stocks/bars",
+      "status": "captured"
+    },
+    "stocks_meta_conditions_quote": {
+      "query": [
+        [
+          "tape",
+          "A"
+        ]
+      ],
+      "route": "/v2/stocks/meta/conditions/quote",
+      "status": "captured"
+    },
+    "stocks_meta_conditions_trade": {
+      "query": [
+        [
+          "tape",
+          "A"
+        ]
+      ],
+      "route": "/v2/stocks/meta/conditions/trade",
+      "status": "captured"
+    },
+    "stocks_meta_exchanges": {
+      "query": [],
+      "route": "/v2/stocks/meta/exchanges",
+      "status": "captured"
+    }
+  }
+}

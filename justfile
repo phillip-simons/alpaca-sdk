@@ -108,6 +108,14 @@ gen-enums source=alpaca_py:
 fixtures source=alpaca_py:
     python3 scripts/extract_fixtures.py {{ source }}
 
+# Capture payloads for the routes no SDK's tests cover.
+#
+# Read-only GETs against live market data. Records refusals as well as
+# successes: several of these routes are plan-gated, and a 403 is a finding.
+# Needs credentials, same as `just live`.
+capture:
+    cargo test --all-features --test live_capture -- --ignored --nocapture
+
 # Harvest response payloads from the Go SDK's tests into fixtures/go.
 #
 # The Go suite is the only one of the other four worth reading: it pastes raw

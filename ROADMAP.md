@@ -271,6 +271,40 @@ alpaca-py, and the two disagree enough to be worth recording:
 - **`primary_account_holder_id`** exists on both create and update, for
   multi-live accounts, and is absent from alpaca-py entirely.
 
+### What the live capture found
+
+`just capture` asks the API directly for the routes no SDK tests, writing to
+`fixtures/live/` and recording refusals as well as successes. Seven of eleven
+came back.
+
+**Captured:** stock exchanges, stock trade and quote conditions, option
+exchanges, option trade conditions, auctions, and a SIP bars sample.
+
+**Refused, on an account whose paid plan reaches SIP** — so these are
+per-product grants, not the plan as a whole:
+
+| Route | Answer |
+|---|---|
+| `/v1beta1/forex/{rates,latest/rates}` | 403 `forbidden: insufficient grants` |
+| `/v1beta1/indices/latest/values` | 403 `forbidden: insufficient grants` |
+| `/v1beta1/logos/{symbol}` | 403 `Subscription does not permit querying logos` |
+
+A 403 rather than a 404 settles a question the spec could not: **indices exist**,
+which until now rested on the Node SDK alone. Porting any of these three needs
+the matching entitlement before it can be verified, and `stocks_bars_sip` in the
+same run is the control that proves the plan itself is fine.
+
+**Two findings worth keeping:**
+
+- **`/v2/stocks/meta/conditions/{tick_type}` requires a `tape` parameter** and
+  answers 400 without one. The option equivalent takes none. Nothing in the spec
+  or the gap list above hints at the asymmetry, and a port written from the spec
+  would have shipped a route that always fails.
+- **A single space is a trade condition.** `" ": "Regular Sale"` — the most
+  common condition on the tape. Any helper that trims, splits on whitespace, or
+  treats the empty string as absent loses the ordinary case. That is the trap
+  waiting for the `conditions` lookup helper this file keeps asking for.
+
 ### The validation rules, checked against the reference
 
 Every client-side rule this crate enforces was read back against its reference
@@ -454,10 +488,12 @@ is already dead, which is the pattern this whole section exists to get ahead of.
   `/v2/assets/fixed_income/us_{corporates,treasuries}`
 - Logos: `/v1beta1/logos/{symbol}`
 
-**Not in the spec — verify against the live API before implementing:**
+**Not in the spec — now verified against the live API:**
 
-- Indices: `/v1beta1/indices/{values,latest/values}` (Node only)
-- Crypto perpetuals: `/v1beta1/crypto-perps/{feed}/latest/*` (C#, Go, Node)
+- Indices: `/v1beta1/indices/{values,latest/values}` (Node only). **Exists** —
+  answers 403 `insufficient grants`, not 404.
+- Crypto perpetuals: `/v1beta1/crypto-perps/{feed}/latest/*` (C#, Go, Node).
+  Six payloads harvested from the Go suite; see `fixtures/go/`.
 
 **Trading** — confirmed in `trading-api.json`:
 
