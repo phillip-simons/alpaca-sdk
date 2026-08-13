@@ -624,7 +624,18 @@ mod tests {
 
     #[test]
     fn long_bodies_are_truncated_on_a_char_boundary() {
-        let body = "é".repeat(MAX_ERROR_BODY);
+        // "é" is 2 bytes, so with it MAX_ERROR_BODY (2048) already lands on a
+        // boundary and the walk-back loop never runs — a version of `truncate`
+        // that dropped the loop entirely would still pass. "€" is 3 bytes, so
+        // 2048 falls mid-character, which is the case that actually exercises
+        // it: slicing at a non-boundary index panics outright, so this would
+        // fail loudly rather than quietly if the loop were broken.
+        let body = "€".repeat(1000);
+        assert!(
+            !body.is_char_boundary(MAX_ERROR_BODY),
+            "the test needs a cutoff that is NOT already on a boundary"
+        );
+
         let truncated = truncate(&body);
         assert!(truncated.ends_with("bytes total)"));
         assert!(truncated.len() < body.len());

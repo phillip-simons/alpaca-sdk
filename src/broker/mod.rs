@@ -5,19 +5,18 @@
 //!
 //! # What is verified, and what is not
 //!
-//! The core of this API — accounts, funding, journals, documents, rebalancing,
-//! trading on behalf of an account — is checked against captured payloads.
-//!
-//! Instant funding, JIT, FPSL, funding wallets, IPOs, reporting, OAuth,
-//! tokenization and the crypto wallets are not. Those came from the published
-//! reference and the vendored specs, and have never met a real response, because
-//! this account has no broker sandbox key.
+//! Accounts, funding, documents, journals, trading, watchlists and
+//! rebalancing are checked against captured payloads in `fixtures/broker/`.
+//! So is [`fixed_income`], harvested from the Go SDK's tests in
+//! `fixtures/go/`. Everything else — instant funding, JIT,
+//! FPSL, funding wallets, IPOs, reporting, OAuth, tokenization and the crypto
+//! wallets — came from the published reference and the vendored specs, and have
+//! never met a real response, because this account has no broker sandbox key.
 //!
 //! That is not a reason to distrust them so much as a reason to expect the first
 //! live payload to correct something. Treat a decode failure on one of these as
 //! expected work rather than a regression, exactly as the `CIP*` models are
-//! treated. The one family with real payloads behind it is
-//! [`fixed_income`], harvested from the Go SDK's tests.
+//! treated.
 
 mod client;
 mod enums;

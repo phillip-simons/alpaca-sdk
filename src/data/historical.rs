@@ -1,8 +1,8 @@
 //! The [historical market data](https://docs.alpaca.markets/us/docs/about-market-data-api) clients.
 //!
-//! Six clients rather than one, because each targets a different API version:
-//! stocks on `v2`, crypto on `v1beta3`, options, news and the screener on
-//! `v1beta1`, and corporate actions on `v1`.
+//! Eight clients rather than one, because each targets a different API version:
+//! stocks on `v2`, crypto on `v1beta3`, options, forex, logos, news, and the
+//! screener on `v1beta1`, and corporate actions on `v1`.
 
 use std::collections::HashMap;
 

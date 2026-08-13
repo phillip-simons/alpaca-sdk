@@ -694,6 +694,7 @@ pub struct GetOrdersRequest {
     pub symbols: Option<Vec<String>>,
     /// Only orders in these asset classes.
     ///
+    /// Sent as one comma-separated parameter, which is what Alpaca expects.
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",

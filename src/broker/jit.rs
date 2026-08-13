@@ -353,6 +353,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_balances_window_rejects_an_end_before_its_start() {
+        let start: NaiveDate = "2026-01-05".parse().unwrap();
+        let end: NaiveDate = "2026-01-01".parse().unwrap();
+
+        assert!(GetJitBalancesRequest::new().between(start, end).is_err());
+
+        let request = GetJitBalancesRequest::new().between(end, start).unwrap();
+        assert_eq!(request.start_date, Some(end));
+        assert_eq!(request.end_date, Some(start));
+    }
+
+    #[test]
     fn a_report_decodes_as_either_shape() {
         let download: JitReport = serde_json::from_value(serde_json::json!({
             "url": "https://example.invalid/report.csv",

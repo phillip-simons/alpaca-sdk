@@ -17,3 +17,6 @@ specs/
 
 # Python bytecode from the scripts/ helpers.
 __pycache__/
+
+# Agent worktrees.
+.claude/

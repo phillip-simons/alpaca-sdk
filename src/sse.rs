@@ -283,6 +283,37 @@ mod tests {
         assert!(EventStreamRequest::default().query().is_empty());
     }
 
+    /// `path` labels the error, not `url` — the two differ deliberately (see
+    /// [`subscribe`]'s doc comment), so a wrong implementation that reached for
+    /// the request's own path instead would not be caught by asserting they
+    /// happen to match.
+    #[tokio::test]
+    async fn a_rejected_subscription_is_labeled_with_the_given_path() {
+        use wiremock::matchers::{method, path as path_matcher};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_matcher("/v1/events/status"))
+            .respond_with(ResponseTemplate::new(403).set_body_string("forbidden"))
+            .mount(&server)
+            .await;
+
+        let http = reqwest::Client::new();
+        let url = format!("{}/v1/events/status", server.uri());
+        // The `Ok` side is a `Stream`, which is not `Debug`, so this cannot be
+        // `unwrap_err()`.
+        match subscribe(&http, &url, "/status", &[]).await {
+            Err(Error::Api(api)) => {
+                assert_eq!(api.status, 403);
+                assert_eq!(api.path, "/status");
+                assert_eq!(api.message, "forbidden");
+            }
+            Err(other) => panic!("expected Api, got {other:?}"),
+            Ok(_) => panic!("expected the rejected subscription to error"),
+        }
+    }
+
     #[test]
     fn the_payload_deserializes_into_a_caller_chosen_type() {
         let event = Event {

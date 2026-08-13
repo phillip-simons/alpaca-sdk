@@ -678,8 +678,6 @@ impl W8BenDocument {
 /// exactly as sent — editing a server's own numbers on the way in is worse than
 /// the inconsistency — and a `percent` assigned directly to the field is the
 /// caller's to round.
-/// Rounding a value on the way *in* would be the port quietly editing Alpaca's
-/// own numbers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Weight {
     /// Whether this line is cash or a security.

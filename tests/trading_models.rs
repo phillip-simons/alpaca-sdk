@@ -85,6 +85,27 @@ fn account_configuration_tolerates_removed_deprecated_fields() {
     assert_eq!(config.pdt_check, None);
 }
 
+#[test]
+fn account_tolerates_the_fields_finra_removed() {
+    // daytrading_buying_power, pattern_day_trader and daytrade_count were
+    // dropped from Alpaca responses on 2026-07-06 in the FINRA intraday-margin
+    // migration, per the doc comments on TradeAccount. The captured fixture
+    // predates that migration and still carries them, so this pins the other
+    // half: a response that already lacks them still decodes.
+    let account: TradeAccount = serde_json::from_str(
+        r#"{
+            "id": "6a1cf3f0-0e17-4c66-8c92-cbf03e0b0c6f",
+            "account_number": "010203ABCD",
+            "status": "ACTIVE"
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(account.daytrading_buying_power, None);
+    assert_eq!(account.pattern_day_trader, None);
+    assert_eq!(account.daytrade_count, None);
+}
+
 // ------------------------------------------------------------------ asset
 
 #[test]

@@ -370,13 +370,15 @@ pub struct CreateRecipientBankRequest {
 }
 
 impl CreateRecipientBankRequest {
-    /// The five fields the route requires, and nothing assumed beyond them.
+    /// The six fields the route requires, and nothing assumed beyond them.
     ///
     /// Which of `iban`, `bic_swift` and `routing_code` a given country needs is
     /// Alpaca's business: the reference marks all three optional, and enforcing
     /// a combination here would refuse requests it accepts. That is the rule
     /// throughout this crate — a documented constraint is checked locally, an
-    /// undocumented one is left to the server.
+    /// undocumented one is left to the server — and the same reasoning
+    /// [`CreateBankRequest::validate`](crate::broker::CreateBankRequest::validate)
+    /// applies to international bank addresses.
     pub fn new(
         account_number: impl Into<String>,
         bank_name: impl Into<String>,

@@ -320,6 +320,8 @@ mod tests {
 
         assert_eq!(locate.status, LocateStatus::Rejected);
         assert_eq!(locate.located_qty, None);
+        assert_eq!(locate.located_price, None);
+        assert_eq!(locate.total_fee, None);
         assert_eq!(locate.expires_at, None);
     }
 }
