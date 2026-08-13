@@ -88,17 +88,19 @@ mod tests {
             capped_delay(65, Duration::from_secs(1), Duration::MAX),
             Duration::MAX
         );
-        // And with jitter applied, which does its own conversion.
+        // And with jitter applied, which does its own conversion. The value is
+        // drawn from [capped/2, capped], so with an unbounded ceiling it lands
+        // in the top half of the range rather than anywhere at all.
         let delay = reconnect_delay(65, Duration::from_secs(1), Duration::MAX);
-        assert!(delay <= Duration::MAX);
+        assert!(delay >= Duration::MAX / 2);
     }
 
     /// The same, at the boundary rather than far past it.
     #[test]
     fn a_ceiling_near_the_representable_limit_is_still_a_duration() {
         let huge = Duration::from_secs(u64::MAX / 2);
-        assert!(capped_delay(100, Duration::from_secs(1), huge) <= huge);
-        assert!(reconnect_delay(100, Duration::from_secs(1), huge) <= huge);
+        assert_eq!(capped_delay(100, Duration::from_secs(1), huge), huge);
+        assert!(reconnect_delay(100, Duration::from_secs(1), huge) >= huge / 2);
     }
 
     const MIN: Duration = DEFAULT_MIN_BACKOFF;

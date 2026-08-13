@@ -43,13 +43,32 @@ enum Script {
 /// Everything the server saw a client send, across all connections.
 type Received = Arc<Mutex<Vec<Value>>>;
 
+/// When each connection was accepted.
+///
+/// Timestamps rather than a count: the property the backoff curve controls is
+/// the *gap* between reconnects, and asserting on a count inside a fixed window
+/// makes the test a race against the runner. The gap is set by the client's own
+/// timer, so it holds on a slow machine too.
+type Connections = Arc<Mutex<Vec<std::time::Instant>>>;
+
+/// The delay between the last two connections.
+///
+/// `None` if fewer than two were made, which is itself a failure for these
+/// tests and is reported as such by the caller.
+fn last_gap(times: &[std::time::Instant]) -> Option<std::time::Duration> {
+    match times {
+        [.., previous, last] => Some(last.duration_since(*previous)),
+        _ => None,
+    }
+}
+
 /// Starts a server that speaks the Alpaca handshake, and returns its endpoint.
-async fn serve(script: Script) -> (String, Received, Arc<Mutex<u32>>) {
+async fn serve(script: Script) -> (String, Received, Connections) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let endpoint = format!("ws://{}", listener.local_addr().unwrap());
 
     let received: Received = Arc::new(Mutex::new(Vec::new()));
-    let connections = Arc::new(Mutex::new(0u32));
+    let connections: Connections = Arc::new(Mutex::new(Vec::new()));
 
     let seen = Arc::clone(&received);
     let counter = Arc::clone(&connections);
@@ -64,7 +83,7 @@ async fn serve(script: Script) -> (String, Received, Arc<Mutex<u32>>) {
             let script = script.clone();
 
             tokio::spawn(async move {
-                *counter.lock().await += 1;
+                counter.lock().await.push(std::time::Instant::now());
                 let Ok(mut ws) = tokio_tungstenite::accept_async(socket).await else {
                     return;
                 };
@@ -315,7 +334,11 @@ async fn an_insufficient_subscription_stops_the_stream_for_good() {
     // The stream must end rather than reconnect.
     let next = tokio::time::timeout(Duration::from_secs(3), messages.next()).await;
     assert!(matches!(next, Ok(None)), "the stream should have ended");
-    assert_eq!(*connections.lock().await, 1, "it must not have reconnected");
+    assert_eq!(
+        connections.lock().await.len(),
+        1,
+        "it must not have reconnected"
+    );
 }
 
 #[tokio::test]
@@ -343,7 +366,7 @@ async fn a_rejected_authentication_stops_the_stream() {
 
     let next = tokio::time::timeout(Duration::from_secs(3), messages.next()).await;
     assert!(matches!(next, Ok(None)), "the stream should have ended");
-    assert_eq!(*connections.lock().await, 1);
+    assert_eq!(connections.lock().await.len(), 1);
 }
 
 // ------------------------------------------------------------- reconnects
@@ -364,7 +387,7 @@ async fn a_dropped_socket_reconnects() {
         "expected a reconnect, got {messages:?}"
     );
     assert!(
-        *connections.lock().await >= 2,
+        connections.lock().await.len() >= 2,
         "the server should have seen a second connection"
     );
 }
@@ -404,9 +427,9 @@ async fn a_mute_connection_reconnects_when_a_data_timeout_is_set() {
     let _ = tokio::time::timeout(Duration::from_secs(8), messages.next()).await;
 
     assert!(
-        *connections.lock().await >= 2,
+        connections.lock().await.len() >= 2,
         "a mute stream should have been reconnected, saw {} connection(s)",
-        *connections.lock().await
+        connections.lock().await.len()
     );
 }
 
@@ -423,7 +446,7 @@ async fn a_mute_connection_is_left_alone_without_a_data_timeout() {
     let _ = tokio::time::timeout(Duration::from_secs(3), messages.next()).await;
 
     assert_eq!(
-        *connections.lock().await,
+        connections.lock().await.len(),
         1,
         "a quiet stream should not have been reconnected"
     );
@@ -528,7 +551,7 @@ async fn a_timeout_longer_than_the_poll_interval_is_not_fired_early() {
     let _ = tokio::time::timeout(Duration::from_secs(12), messages.next()).await;
 
     assert_eq!(
-        *connections.lock().await,
+        connections.lock().await.len(),
         1,
         "a 30s timeout must not reconnect within 12s; the clock is being read \
          from one poll window rather than from elapsed time"
@@ -547,52 +570,56 @@ async fn a_timeout_longer_than_the_poll_interval_still_fires_eventually() {
         .expect("a positive timeout");
 
     let mut messages = Box::pin(stream.run());
-    let _ = tokio::time::timeout(Duration::from_secs(20), messages.next()).await;
+    // 7s timeout plus a reconnect, so 12s is ample; the budget is the test's
+    // wall-clock cost, and this one dominates `just check`.
+    let _ = tokio::time::timeout(Duration::from_secs(12), messages.next()).await;
 
     assert!(
-        *connections.lock().await >= 2,
+        connections.lock().await.len() >= 2,
         "a 7s timeout should have reconnected within 20s, saw {} connection(s)",
-        *connections.lock().await
+        connections.lock().await.len()
     );
 }
 
 /// A quiet session that stayed up and was then recycled clears the failure
 /// count.
 ///
-/// This is the one case where the old loop and the new one differ, and therefore
-/// the only one worth asserting. The original incremented the counter after a
-/// *successful* connect and reset it only on a market data message — so a
-/// legitimately silent stream whose server recycles it climbed to the 30s
-/// ceiling and stayed there. Resetting on connect alone would have gone too far
-/// the other way (see the test below), so the discriminator is whether the
-/// session lasted: `stable_session` is set short here purely to keep the test
-/// fast.
+/// This is the one case where the old loop and the new one differ. The original
+/// incremented the counter after a *successful* connect and reset it only on a
+/// market data message — so a legitimately silent stream whose server recycles
+/// it climbed to the 30s ceiling and stayed there.
 ///
-/// The default backoff is 1s jittered to [0.5s, 1s). With the curve reset each
-/// time, a 400ms session plus a ~0.75s wait is roughly one connection per 1.2s,
-/// so twelve seconds fits at least six. Without the reset the curve doubles —
-/// 0.5s, 1s, 2s, 4s, 8s — and four connections is all that fits.
+/// The assertion is on the gap between the last two reconnects, not on how many
+/// fit in a window: the gap is set by the client's own timer, so it holds on a
+/// slow runner too. With the curve reset each time the delay stays in
+/// [0.5s, 1s); without it, by the fifth reconnect it is past 4s.
 #[tokio::test]
 async fn a_quiet_session_that_stayed_up_clears_the_failure_count() {
-    let (endpoint, _, connections) = serve(Script::HoldThenDrop(Duration::from_millis(400))).await;
+    let (endpoint, _, connections) = serve(Script::HoldThenDrop(Duration::from_millis(300))).await;
 
     let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
     stream.subscribe_trades(["AAPL"]);
     stream
-        .stable_session(Duration::from_millis(200))
+        .stable_session(Duration::from_millis(150))
         .expect("a positive duration");
 
     let mut messages = Box::pin(stream.run());
-    let _ = tokio::time::timeout(Duration::from_secs(12), async {
+    let _ = tokio::time::timeout(Duration::from_secs(10), async {
         while messages.next().await.is_some() {}
     })
     .await;
 
-    let seen = *connections.lock().await;
+    let times = connections.lock().await.clone();
     assert!(
-        seen >= 6,
+        times.len() >= 3,
+        "expected several reconnects, saw {}",
+        times.len()
+    );
+    let gap = last_gap(&times).expect("at least two connections");
+    assert!(
+        gap < Duration::from_secs(2),
         "a session that stayed up past `stable_session` should have cleared the \
-         backoff curve, but only {seen} reconnects fit in 12s"
+         backoff curve, but the last gap was {gap:?} — the curve is still growing"
     );
 }
 
@@ -607,22 +634,27 @@ async fn a_session_that_dropped_immediately_does_advance_the_backoff_curve() {
 
     let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
     stream.subscribe_trades(["AAPL"]);
-    // Well below the session length, so only the *duration* rule decides.
     stream
-        .stable_session(Duration::from_millis(200))
+        .stable_session(Duration::from_millis(150))
         .expect("a positive duration");
 
     let mut messages = Box::pin(stream.run());
-    let _ = tokio::time::timeout(Duration::from_secs(12), async {
+    let _ = tokio::time::timeout(Duration::from_secs(10), async {
         while messages.next().await.is_some() {}
     })
     .await;
 
-    let seen = *connections.lock().await;
+    let times = connections.lock().await.clone();
     assert!(
-        seen <= 7,
-        "a connect-then-drop server should be backed off from, but saw {seen} \
-         connections in 12s — the curve is not growing"
+        times.len() >= 3,
+        "expected several reconnects, saw {}",
+        times.len()
+    );
+    let gap = last_gap(&times).expect("at least two connections");
+    assert!(
+        gap >= Duration::from_secs(1),
+        "a connect-then-drop server should be backed off from, but the last gap \
+         was only {gap:?} — the curve is pinned at its minimum"
     );
 }
 

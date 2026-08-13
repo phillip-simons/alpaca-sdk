@@ -209,36 +209,11 @@ pub(crate) fn stream_error(error: &eventsource_stream::EventStreamError<reqwest:
     }
 }
 
-/// Whether the client being built may follow a redirect.
-///
-/// Not a bool, because the answer turns on which header the credentials are in
-/// and that is worth naming at the call site.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Redirects {
-    /// Refuse them, as [`crate::rest::RestClient`] does.
-    ///
-    /// Required wherever the credentials are [`Credentials::KeyPair`]. reqwest
-    /// strips `Authorization`, `Cookie` and `Proxy-Authorization` when a
-    /// redirect crosses to another host — and nothing else. Alpaca's key pair
-    /// travels in `APCA-API-KEY-ID` and `APCA-API-SECRET-KEY`, which are custom
-    /// headers, so they would ride along to wherever the `Location` pointed.
-    Refuse,
-    /// Follow up to ten, for the one route that needs it.
-    ///
-    /// The broker document download answers `301` to a presigned storage URL.
-    /// That client authenticates with basic auth or a bearer token, both of
-    /// which reqwest puts in `Authorization` and therefore strips on a
-    /// cross-host hop — so the credentials cannot reach the storage provider.
-    ///
-    /// Only the broker client builds one of these.
-    #[cfg_attr(not(feature = "broker"), allow(dead_code))]
-    Follow,
-}
-
 /// Builds the HTTP client an event stream is read through.
 ///
 /// Separate from [`crate::rest::RestClient`] because that one decodes a whole
-/// body and these are read incrementally.
+/// body and these are read incrementally. Redirects are refused, as they are
+/// there.
 ///
 /// # No timeout
 ///
@@ -256,10 +231,7 @@ pub(crate) enum Redirects {
 ///
 /// # Errors
 /// Returns an error if the credentials cannot be encoded as headers.
-pub(crate) fn streaming_client(
-    credentials: &Credentials,
-    redirects: Redirects,
-) -> Result<reqwest::Client> {
+pub(crate) fn streaming_client(credentials: &Credentials) -> Result<reqwest::Client> {
     let mut headers = reqwest::header::HeaderMap::new();
     credentials.apply(&mut headers)?;
     headers.insert(
@@ -267,14 +239,14 @@ pub(crate) fn streaming_client(
         reqwest::header::HeaderValue::from_static(crate::config::user_agent()),
     );
 
-    let policy = match redirects {
-        Redirects::Refuse => reqwest::redirect::Policy::none(),
-        Redirects::Follow => reqwest::redirect::Policy::limited(10),
-    };
-
     Ok(reqwest::Client::builder()
         .default_headers(headers)
-        .redirect(policy)
+        // No event stream redirects, so following one has no upside and some
+        // downside: reqwest strips `Authorization` on a cross-host hop but not
+        // the `APCA-API-*` headers the trading and data clients send, and this
+        // is a long-lived credentialed connection. The one route that does
+        // redirect — the broker document download — has its own client below.
+        .redirect(reqwest::redirect::Policy::none())
         .build()?)
 }
 

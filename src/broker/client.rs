@@ -165,7 +165,7 @@ impl BrokerClient {
         // where the trading and data APIs take the pair as two headers.
         let credentials = credentials.clone().into_basic();
         Ok(Self {
-            events: crate::sse::streaming_client(&credentials, crate::sse::Redirects::Follow)?,
+            events: crate::sse::streaming_client(&credentials)?,
             plain: crate::sse::download_client(&credentials, config.timeout)?,
             rest: RestClient::new(&credentials, config)?,
         })

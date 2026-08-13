@@ -52,6 +52,10 @@ fn is_absent(value: &Value) -> bool {
 
 /// Deserializes a merged payload into a map of symbol to a list of records,
 /// filling in the symbol each list was keyed by.
+///
+/// Symbols Alpaca had nothing for are **absent from the result**, not present
+/// with an empty list — so a caller reconciling against a requested set should
+/// compare keys rather than assume one entry per symbol asked for.
 fn into_sets<T>(merged: Merged) -> Result<HashMap<String, Vec<T>>>
 where
     T: DeserializeOwned + WithSymbol,
@@ -176,6 +180,9 @@ impl StockHistoricalDataClient {
 
     /// Historical bars, keyed by symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_stock_bars(&self, request: &StockBarsRequest) -> Result<BarSet> {
@@ -190,6 +197,9 @@ impl StockHistoricalDataClient {
 
     /// Historical quotes, keyed by symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_stock_quotes(&self, request: &StockTimeseriesRequest) -> Result<QuoteSet> {
@@ -203,6 +213,9 @@ impl StockHistoricalDataClient {
     }
 
     /// Historical trades, keyed by symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -1117,7 +1130,7 @@ impl CorporateActionsClient {
     /// Returns an error if the credentials cannot be encoded as headers.
     pub fn with_config(credentials: &Credentials, config: RestConfig) -> Result<Self> {
         Ok(Self {
-            raw: crate::sse::streaming_client(credentials, crate::sse::Redirects::Refuse)?,
+            raw: crate::sse::streaming_client(credentials)?,
             base_url: config.base_url.clone(),
             rest: RestClient::new(credentials, config)?,
         })

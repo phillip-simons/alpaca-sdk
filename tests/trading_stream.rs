@@ -32,12 +32,31 @@ enum Script {
 
 type Received = Arc<Mutex<Vec<Value>>>;
 
-async fn serve(script: Script) -> (String, Received, Arc<Mutex<u32>>) {
+/// When each connection was accepted.
+///
+/// Timestamps rather than a count: the property the backoff curve controls is
+/// the *gap* between reconnects, and asserting on a count inside a fixed window
+/// makes the test a race against the runner. The gap is set by the client's own
+/// timer, so it holds on a slow machine too.
+type Connections = Arc<Mutex<Vec<std::time::Instant>>>;
+
+/// The delay between the last two connections.
+///
+/// `None` if fewer than two were made, which is itself a failure for these
+/// tests and is reported as such by the caller.
+fn last_gap(times: &[std::time::Instant]) -> Option<std::time::Duration> {
+    match times {
+        [.., previous, last] => Some(last.duration_since(*previous)),
+        _ => None,
+    }
+}
+
+async fn serve(script: Script) -> (String, Received, Connections) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let endpoint = format!("ws://{}", listener.local_addr().unwrap());
 
     let received: Received = Arc::new(Mutex::new(Vec::new()));
-    let connections = Arc::new(Mutex::new(0u32));
+    let connections: Connections = Arc::new(Mutex::new(Vec::new()));
     let seen = Arc::clone(&received);
     let counter = Arc::clone(&connections);
 
@@ -51,7 +70,7 @@ async fn serve(script: Script) -> (String, Received, Arc<Mutex<u32>>) {
             let script = script.clone();
 
             tokio::spawn(async move {
-                *counter.lock().await += 1;
+                counter.lock().await.push(std::time::Instant::now());
                 let Ok(mut ws) = tokio_tungstenite::accept_async(socket).await else {
                     return;
                 };
@@ -296,7 +315,7 @@ async fn a_rejected_authorization_stops_the_stream() {
     let next = tokio::time::timeout(Duration::from_secs(3), messages.next()).await;
     assert!(matches!(next, Ok(None)), "the stream should have ended");
     assert_eq!(
-        *connections.lock().await,
+        connections.lock().await.len(),
         1,
         "bad credentials must not be retried"
     );
@@ -313,7 +332,7 @@ async fn a_dropped_socket_reconnects_and_relistens() {
         messages.len() >= 2,
         "expected a reconnect, got {messages:?}"
     );
-    assert!(*connections.lock().await >= 2);
+    assert!(connections.lock().await.len() >= 2);
 
     let seen = received.lock().await;
     let listens = seen.iter().filter(|m| m["action"] == "listen").count();
@@ -329,7 +348,7 @@ async fn a_mute_stream_is_left_alone_by_default() {
     let mut messages = Box::pin(stream.run());
     let _ = tokio::time::timeout(Duration::from_secs(3), messages.next()).await;
 
-    assert_eq!(*connections.lock().await, 1);
+    assert_eq!(connections.lock().await.len(), 1);
 }
 
 #[tokio::test]
@@ -344,9 +363,9 @@ async fn a_mute_stream_reconnects_when_a_data_timeout_is_set() {
     let _ = tokio::time::timeout(Duration::from_secs(8), messages.next()).await;
 
     assert!(
-        *connections.lock().await >= 2,
+        connections.lock().await.len() >= 2,
         "a mute stream should have been reconnected, saw {}",
-        *connections.lock().await
+        connections.lock().await.len()
     );
 }
 
@@ -372,7 +391,7 @@ async fn a_timeout_longer_than_the_poll_interval_is_not_fired_early() {
     let _ = tokio::time::timeout(Duration::from_secs(12), updates.next()).await;
 
     assert_eq!(
-        *connections.lock().await,
+        connections.lock().await.len(),
         1,
         "a 30s timeout must not reconnect within 12s; the clock is being read \
          from one poll window rather than from elapsed time"
@@ -384,25 +403,34 @@ async fn a_timeout_longer_than_the_poll_interval_is_not_fired_early() {
 /// particular: it reset only on a trade update, and a silent account never
 /// sends one — so a few server-side recycles left every reconnect waiting the
 /// 30s maximum, and there is no replay here, so a fill in that window is gone.
+///
+/// Asserted on the gap between the last two reconnects rather than a count in a
+/// window, so a slow runner cannot fail a correct implementation.
 #[tokio::test]
 async fn a_quiet_session_that_stayed_up_clears_the_failure_count() {
-    let (endpoint, _, connections) = serve(Script::HoldThenDrop(Duration::from_millis(400))).await;
+    let (endpoint, _, connections) = serve(Script::HoldThenDrop(Duration::from_millis(300))).await;
 
     let stream = TradingStream::with_endpoint(credentials(), endpoint)
-        .stable_session(Duration::from_millis(200))
+        .stable_session(Duration::from_millis(150))
         .expect("a positive duration");
 
     let mut updates = Box::pin(stream.run());
-    let _ = tokio::time::timeout(Duration::from_secs(12), async {
+    let _ = tokio::time::timeout(Duration::from_secs(10), async {
         while updates.next().await.is_some() {}
     })
     .await;
 
-    let seen = *connections.lock().await;
+    let times = connections.lock().await.clone();
     assert!(
-        seen >= 6,
+        times.len() >= 3,
+        "expected several reconnects, saw {}",
+        times.len()
+    );
+    let gap = last_gap(&times).expect("at least two connections");
+    assert!(
+        gap < Duration::from_secs(2),
         "a session that stayed up past `stable_session` should have cleared the \
-         backoff curve, but only {seen} reconnects fit in 12s"
+         backoff curve, but the last gap was {gap:?}"
     );
 }
 
@@ -412,20 +440,26 @@ async fn a_session_that_dropped_immediately_does_advance_the_backoff_curve() {
     let (endpoint, _, connections) = serve(Script::SendThenDrop(Vec::new())).await;
 
     let stream = TradingStream::with_endpoint(credentials(), endpoint)
-        .stable_session(Duration::from_millis(200))
+        .stable_session(Duration::from_millis(150))
         .expect("a positive duration");
 
     let mut updates = Box::pin(stream.run());
-    let _ = tokio::time::timeout(Duration::from_secs(12), async {
+    let _ = tokio::time::timeout(Duration::from_secs(10), async {
         while updates.next().await.is_some() {}
     })
     .await;
 
-    let seen = *connections.lock().await;
+    let times = connections.lock().await.clone();
     assert!(
-        seen <= 7,
-        "a connect-then-drop server should be backed off from, but saw {seen} \
-         connections in 12s"
+        times.len() >= 3,
+        "expected several reconnects, saw {}",
+        times.len()
+    );
+    let gap = last_gap(&times).expect("at least two connections");
+    assert!(
+        gap >= Duration::from_secs(1),
+        "a connect-then-drop server should be backed off from, but the last gap \
+         was only {gap:?}"
     );
 }
 

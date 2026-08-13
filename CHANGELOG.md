@@ -146,6 +146,11 @@ Decisions that become expensive after the first release, settled now.
   a row of interchangeable strings.
 - **`Channel::ALL` is `&'static [Channel]`,** not `[Channel; 11]`. The array put
   the variant count in a public type signature.
+- **Several public enums are now `#[non_exhaustive]` too,** which is a separate
+  break from the struct sweep: `Channel`, `Activity`, `ClosePositionBody`,
+  `JitReport` and `RebalancingSubType` now require a wildcard arm in an external
+  `match`. Alpaca has added stream channels and activity kinds without a version
+  bump before, and each addition would otherwise be a major release here.
 - **`OrderRequest::stop_limit` takes a `StopLimit { stop, limit }`** instead of
   two adjacent bare `Decimal`s in the reverse of the field order used everywhere
   else. Transposing them compiled and produced a legal order Alpaca accepted, so

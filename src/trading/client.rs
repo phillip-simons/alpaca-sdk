@@ -75,7 +75,7 @@ impl TradingClient {
     /// underlying HTTP client fails to build.
     pub fn with_config(credentials: &Credentials, config: RestConfig) -> Result<Self> {
         Ok(Self {
-            raw: crate::sse::streaming_client(credentials, crate::sse::Redirects::Refuse)?,
+            raw: crate::sse::streaming_client(credentials)?,
             rest: RestClient::new(credentials, config)?,
         })
     }
@@ -941,6 +941,14 @@ where
     F: Fn(&T) -> Uuid,
 {
     let page_size = crate::config::ORDERS_MAX_LIMIT as usize;
+
+    // Ask for no more than the caller wants. Without this, `max_items: Some(10)`
+    // still pulled a full 500-order page off the wire to hand back ten.
+    if let Some(max) = max_items
+        && let Ok(max) = u32::try_from(max)
+    {
+        request.limit = Some(request.limit.unwrap_or(u32::MAX).min(max));
+    }
 
     // The cursor is exclusive on this route, but Alpaca's cursors are inclusive
     // on some others and the reference does not say which this is — so a page

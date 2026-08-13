@@ -74,6 +74,14 @@ fn is_nested_runtime_panic(panic: &(dyn std::any::Any + Send)) -> bool {
 ///   [`Error::InvalidRequest`] instead. In an async context, use the async
 ///   client directly — it is what this is wrapping.
 ///
+///   **Under `panic = "abort"` this recovery does not exist.** `catch_unwind`
+///   catches nothing there, so the misuse aborts the process rather than
+///   returning an error. That is a deliberate trade: the alternative is a
+///   pre-check that cannot distinguish an async fn from a `spawn_blocking`
+///   closure, and so rejects the supported bridge below. Calling the façade
+///   from an async context is a programming error either way; on an abort
+///   profile it is a loud one.
+///
 ///   The exception is [`tokio::task::spawn_blocking`], which is the supported
 ///   bridge from an async program into this façade: those threads are not
 ///   driving the reactor, so blocking on them is allowed and a call made there
@@ -167,7 +175,13 @@ impl<C> Blocking<C> {
         // reporting it as "you called this from an async context" would be a
         // lie that hides a real defect. This also means the behaviour under
         // `panic = "abort"` is the same as without the wrapper: nothing is
-        // caught, and the process aborts on a genuine panic either way.
+        // caught, and the process aborts on a genuine panic either way — see
+        // the type documentation for what that means for the misuse case.
+        //
+        // There is no cheaper pre-check that would avoid entering tokio here.
+        // `Handle::try_current()` is true in both contexts, and so is
+        // `task::try_id()` for an async fn running inside a spawned task, so
+        // neither can tell "on a reactor thread" from "on a blocking thread".
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             runtime.block_on(call(&self.client))
         })) {

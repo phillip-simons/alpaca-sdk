@@ -186,7 +186,7 @@ impl TradingStream {
                 // reconnect waiting the maximum. There is no replay on this
                 // socket, so a fill in that window is gone. Resetting on
                 // connect alone would swing too far the other way — see
-                // `STABLE_SESSION`.
+                // `DEFAULT_STABLE_SESSION`.
                 let session_start = Instant::now();
 
                 // Reset by trade updates, so `data_timeout` measures elapsed
