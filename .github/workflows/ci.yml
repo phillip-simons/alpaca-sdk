@@ -27,7 +27,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -138,6 +138,41 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --all-features --no-deps
+
+  # The single required status check.
+  #
+  # Branch protection names check *runs*, and a matrix job that is skipped
+  # cannot expand its own name: it reports once, literally, as
+  # `test (${{ matrix.os }})`. So requiring `test (ubuntu-latest)` and its two
+  # siblings means requiring three names that never arrive on a documentation
+  # change — the pull request sits blocked forever, which is the same deadlock
+  # the job-level skip was meant to avoid, arriving by a subtler route.
+  #
+  # Depending on every job and requiring only this one sidesteps all of it.
+  # Renaming a job, adding a platform to the matrix, or skipping the lot no
+  # longer touches the protection configuration.
+  #
+  # `always()` rather than `!cancelled()`: a cancelled run should report a
+  # failure here, not a skip that protection would accept.
+  gate:
+    name: all checks
+    needs: [changes, fmt, clippy, test, features, msrv, deny, docs]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail unless every job succeeded or was deliberately skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          set -euo pipefail
+          echo "job results: $RESULTS"
+          for result in $RESULTS; do
+            case "$result" in
+              success | skipped) ;;
+              *) echo "::error::a job reported '$result'"; exit 1 ;;
+            esac
+          done
+          echo "every job succeeded or was skipped"
 
   coverage:
     name: coverage
