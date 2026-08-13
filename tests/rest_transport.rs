@@ -228,6 +228,109 @@ async fn the_delay_between_retries_grows() {
     );
 }
 
+/// A 429 carrying `Retry-After` is stating the answer the curve is guessing at,
+/// so it wins. The assertion is on the wall clock rather than on a delay value:
+/// with the header ignored, a 10-second base doubling three times could not
+/// finish in under a second, so the two outcomes cannot be confused.
+#[tokio::test]
+async fn retry_after_overrides_the_backoff_curve() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v2/account"))
+        .respond_with(ResponseTemplate::new(429).insert_header("retry-after", "0"))
+        .expect(4)
+        .mount(&server)
+        .await;
+
+    let retry = RetryConfig::default().wait(Duration::from_secs(10));
+
+    let started = Instant::now();
+    let err = client(&server, retry)
+        .get::<Account, _>("/account", &())
+        .await
+        .unwrap_err();
+    let elapsed = started.elapsed();
+
+    assert!(matches!(err, Error::RetriesExhausted { .. }), "{err:?}");
+    assert!(
+        elapsed < Duration::from_secs(1),
+        "waited {elapsed:?}; the curve was used and the header ignored"
+    );
+}
+
+/// The value comes from the other end, so it is clamped rather than trusted.
+/// Without the clamp this test would take an hour.
+#[tokio::test]
+async fn an_absurd_retry_after_is_clamped_to_the_ceiling() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v2/account"))
+        .respond_with(ResponseTemplate::new(429).insert_header("retry-after", "3600"))
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    let retry = RetryConfig::default()
+        .attempts(1)
+        .backoff(RetryBackoff::Exponential {
+            max: Duration::from_millis(50),
+        });
+
+    let started = Instant::now();
+    let err = client(&server, retry)
+        .get::<Account, _>("/account", &())
+        .await
+        .unwrap_err();
+    let elapsed = started.elapsed();
+
+    assert!(matches!(err, Error::RetriesExhausted { .. }), "{err:?}");
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "waited {elapsed:?}; the ceiling was not applied"
+    );
+}
+
+/// A header this crate does not read must not become a zero-length wait. The
+/// HTTP-date form falls back to the curve, which is the pre-existing behaviour.
+#[tokio::test]
+async fn an_http_date_retry_after_falls_back_to_the_curve() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v2/account"))
+        .respond_with(
+            ResponseTemplate::new(429)
+                .insert_header("retry-after", "Wed, 21 Oct 2026 07:28:00 GMT"),
+        )
+        .expect(3)
+        .mount(&server)
+        .await;
+
+    let retry = RetryConfig::default()
+        .attempts(2)
+        .wait(Duration::from_millis(60))
+        .backoff(RetryBackoff::Exponential {
+            max: Duration::from_secs(30),
+        });
+
+    let started = Instant::now();
+    let err = client(&server, retry)
+        .get::<Account, _>("/account", &())
+        .await
+        .unwrap_err();
+    let elapsed = started.elapsed();
+
+    assert!(matches!(err, Error::RetriesExhausted { .. }), "{err:?}");
+    // Two waits, jittered from a 60ms base: the floor is half of 60 plus half
+    // of 120. A parsed-as-zero header would total nothing.
+    assert!(
+        elapsed >= Duration::from_millis(90),
+        "waited {elapsed:?}; the unparsed header appears to have been read as zero"
+    );
+}
+
 #[tokio::test]
 async fn retries_504_as_well_as_429() {
     let server = MockServer::start().await;

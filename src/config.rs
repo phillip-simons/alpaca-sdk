@@ -170,6 +170,12 @@ pub enum RetryBackoff {
 /// — on HTTP 429 and 504, waiting about a second before the first and doubling
 /// from there, capped at 30 seconds and jittered.
 ///
+/// **A response carrying `Retry-After` overrides all of that.** The server is
+/// stating the answer this configuration is otherwise guessing at, so its value
+/// is used in place of the computed delay — clamped to the backoff's own ceiling,
+/// since it arrives from the other end. Only the delta-seconds form is read; an
+/// HTTP-date is treated as absent and the delay below applies.
+///
 /// A flat wait is available for callers who want one, and has to be asked for
 /// by name — it does not follow [Alpaca's own rate-limit
 /// documentation][rate-limits], which is why it is not the default:
@@ -248,10 +254,27 @@ impl RetryConfig {
         self.status_codes.contains(&status)
     }
 
+    /// The ceiling a server-supplied `Retry-After` is clamped to.
+    ///
+    /// A rate limiter — or a proxy in front of one — answering
+    /// `Retry-After: 86400` must not put the caller to sleep for a day. Under
+    /// [`RetryBackoff::Exponential`] the curve already has a ceiling and it is
+    /// the natural bound; a flat policy has none of its own, so the default
+    /// applies.
+    pub(crate) fn retry_after_cap(&self) -> Duration {
+        match self.backoff {
+            RetryBackoff::Exponential { max } => max,
+            RetryBackoff::Flat => DEFAULT_RETRY_MAX_WAIT,
+        }
+    }
+
     /// How long to wait after `failures` consecutive failures, 1-based.
     ///
     /// Under [`RetryBackoff::Exponential`] the result is sampled, so two calls
     /// with the same argument do not agree.
+    ///
+    /// This is the curve. A response carrying `Retry-After` overrides it — the
+    /// server is stating the answer the curve is guessing at.
     #[must_use]
     pub fn delay(&self, failures: u32) -> Duration {
         match self.backoff {
@@ -312,6 +335,25 @@ mod tests {
         assert_eq!(BaseUrl::trading_stream(true), BaseUrl::TradingStreamPaper);
         assert_eq!(BaseUrl::broker(true), BaseUrl::BrokerSandbox);
         assert_eq!(BaseUrl::data(false), BaseUrl::Data);
+    }
+
+    /// The exponential curve already has a ceiling, so it is the one a
+    /// server-supplied `Retry-After` is held to.
+    #[test]
+    fn retry_after_is_capped_by_the_exponential_ceiling() {
+        let cfg = RetryConfig::default().backoff(RetryBackoff::Exponential {
+            max: Duration::from_secs(5),
+        });
+        assert_eq!(cfg.retry_after_cap(), Duration::from_secs(5));
+    }
+
+    /// A flat policy has no ceiling of its own, so the default one applies —
+    /// otherwise a caller who asked for a flat 1s would clamp every
+    /// `Retry-After` to 1s, which honours the header in name only.
+    #[test]
+    fn a_flat_policy_caps_retry_after_at_the_default_ceiling() {
+        let cfg = RetryConfig::default().backoff(RetryBackoff::Flat);
+        assert_eq!(cfg.retry_after_cap(), DEFAULT_RETRY_MAX_WAIT);
     }
 
     /// The wait is the rate-limit page's, not a flat interval — see

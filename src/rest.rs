@@ -22,6 +22,27 @@ use crate::error::{ApiError, Error, Result};
 /// Response bodies longer than this are truncated in [`Error::Decode`].
 const MAX_ERROR_BODY: usize = 2048;
 
+/// Reads `Retry-After`, in the delta-seconds form only.
+///
+/// A 429 that carries this header is stating the exact answer the backoff curve
+/// is guessing at, so it wins when present.
+///
+/// RFC 9110 also allows an HTTP-date, which this deliberately does not read:
+/// honoring one means trusting that the caller's clock agrees with the server's,
+/// and a date honored badly waits either far too long or not at all. Anything
+/// that is not a plain count of seconds is treated as absent, which falls back
+/// to the curve — the behaviour before this header was read at all.
+fn retry_after(headers: &HeaderMap) -> Option<Duration> {
+    headers
+        .get(reqwest::header::RETRY_AFTER)?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .map(Duration::from_secs)
+}
+
 /// A request with no query parameters or body.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct Empty;
@@ -397,6 +418,10 @@ impl RestClient {
                 return Ok(response);
             }
 
+            // Read before the body: `text()` consumes the response, headers
+            // and all.
+            let retry_after = retry_after(response.headers());
+
             let body = response.text().await.unwrap_or_default();
             let api_error = ApiError::from_body(status, path, body);
 
@@ -422,14 +447,19 @@ impl RestClient {
             current = next;
 
             // `attempt` is also the number of consecutive failures so far, which
-            // is what the backoff curve is indexed by.
-            let delay = retry.delay(attempt);
+            // is what the backoff curve is indexed by. A `Retry-After` overrides
+            // it — but clamped, because the value comes from the other end.
+            let delay = retry_after.map_or_else(
+                || retry.delay(attempt),
+                |after| after.min(retry.retry_after_cap()),
+            );
             tracing::debug!(
                 path,
                 status,
                 attempt,
                 total_attempts,
                 delay_ms = delay.as_millis(),
+                honored_retry_after = retry_after.is_some(),
                 "retryable response, backing off"
             );
             tokio::time::sleep(delay).await;
@@ -477,6 +507,51 @@ mod tests {
     fn client(base_url: &str) -> RestClient {
         let creds = Credentials::new("key", "secret").unwrap();
         RestClient::new(&creds, RestConfig::new(base_url)).unwrap()
+    }
+
+    fn with_retry_after(value: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            reqwest::header::RETRY_AFTER,
+            HeaderValue::from_str(value).unwrap(),
+        );
+        headers
+    }
+
+    #[test]
+    fn retry_after_reads_delta_seconds() {
+        assert_eq!(
+            retry_after(&with_retry_after("120")),
+            Some(Duration::from_secs(120))
+        );
+        assert_eq!(
+            retry_after(&with_retry_after(" 3 ")),
+            Some(Duration::from_secs(3))
+        );
+    }
+
+    #[test]
+    fn no_retry_after_header_means_the_curve_applies() {
+        assert_eq!(retry_after(&HeaderMap::new()), None);
+    }
+
+    /// RFC 9110 allows this form and this crate does not read it: honouring a
+    /// date means trusting that the two clocks agree. Reading as absent puts the
+    /// caller back on the backoff curve, which is the safe direction.
+    #[test]
+    fn the_http_date_form_reads_as_absent() {
+        assert_eq!(
+            retry_after(&with_retry_after("Fri, 31 Dec 1999 23:59:59 GMT")),
+            None
+        );
+    }
+
+    #[test]
+    fn a_value_that_is_not_a_count_of_seconds_reads_as_absent() {
+        assert_eq!(retry_after(&with_retry_after("soon")), None);
+        // Negative and fractional values are not the delta-seconds form either.
+        assert_eq!(retry_after(&with_retry_after("-5")), None);
+        assert_eq!(retry_after(&with_retry_after("1.5")), None);
     }
 
     #[test]
