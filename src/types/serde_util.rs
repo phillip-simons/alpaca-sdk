@@ -217,16 +217,42 @@ where
     T: Display,
 {
     match values {
-        Some(values) => {
-            let joined = values
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",");
-            serializer.serialize_str(&joined)
-        }
+        Some(values) => comma_joined(values, serializer),
         None => serializer.serialize_none(),
     }
+}
+
+/// The same, for a list Alpaca requires rather than one it accepts.
+///
+/// A required list cannot be `Option`, so it needs its own serializer. It needs
+/// one at all for a reason worth stating plainly: **a `Vec` in a query struct
+/// does not serialize.** `serde_urlencoded` has no representation for a
+/// sequence, so reqwest's query builder fails the whole request with
+/// `Builder: unsupported value` — locally, before anything is sent, with no
+/// status and nothing on the wire to look at. A route whose only parameter is a
+/// bare `Vec` can never be called at all.
+///
+/// # Errors
+/// Propagates the serializer's own failure.
+pub fn comma_separated_required<S, T>(values: &[T], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+    T: Display,
+{
+    comma_joined(values, serializer)
+}
+
+fn comma_joined<S, T>(values: &[T], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+    T: Display,
+{
+    let joined = values
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    serializer.serialize_str(&joined)
 }
 
 /// Deserializes a field that may be a single string or a list of them.

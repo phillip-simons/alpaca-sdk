@@ -16,7 +16,7 @@ Written to be picked up cold.
 | 6 — Broker | ✅ | 75 routes, 20 models, 4 pagination schemes, 5 SSE streams |
 | 6.5 — Full API coverage | ✅ | 251/253 spec routes, 2 deliberate skips |
 | 7 — Polish | ✅ | `blocking` and `polars` built, exponential retry, `Error::Stream`, two coverage checks |
-| 8 — Spec-driven | ✅ | Codegen harness removed, 252 alpaca-py references cut, 615 tests at 81% coverage |
+| 8 — Spec-driven | ✅ | Codegen harness removed, 252 alpaca-py references cut, 640 tests at 88% coverage |
 
 **Nothing is generated from another SDK any more.** The enum generator and the
 recipes that read a Python checkout are gone; `just fixtures` still extracts
@@ -999,12 +999,33 @@ said where they were missing, and the answer was five files and 60 tests:
 | `wire_codecs.rs` | Money, time, and the four wire quirks | `serde_util` 69→77%, `timestamp` 82→89% |
 | `error_surface.rs` | `Display`, `source`, `status`, `is_retryable` | `error.rs` 68→95% |
 | `request_builders.rs` | Every market data builder's parameters | `data/requests` 57→93% |
-| `broker_route_smoke.rs` | Routing for 40 broker routes nothing called | `broker/client` 51→72% |
+| `broker_route_smoke.rs` | Routing for 73 broker routes nothing called | `broker/client` 51→92% |
 | `data_route_smoke.rs` | The 17 untested market data routes, with bodies | `data/historical` 50→78% |
+| `trading_route_smoke.rs` | The 12 untested trading routes | `trading/client` 70→90% |
+| `stream_subscriptions.rs` | Each stream's channel set, without a socket | `data/live/streams` 51→100% |
 
-**81.4% of lines and 78.4% of functions now.** The number is a map rather than a
-target: what is left is dominated by route methods with no test, and each one is
-a wiremock test nobody has written.
+A second pass took the smoke tests through the routes that *write* — 33 broker
+methods and 12 trading ones — and the four live streams' subscription surfaces,
+which need no socket at all. **87.9% of lines and 85.9% of functions now**, over
+640 tests, with `broker/client.rs` at 92% and `data/live/streams.rs` at 100%.
+
+**It found a route that could not be called.**
+`GET /v1/instant_funding/limits/accounts` takes its account numbers as a
+`Vec<String>`, and a bare `Vec` in a query struct does not serialize:
+`serde_urlencoded` has no representation for a sequence, so reqwest fails the
+whole request with `Builder: unsupported value` — locally, before anything is
+sent, with no status and nothing on the wire to look at. The route had been
+unreachable since it was written, and no test had ever called it.
+
+The reference settles the fix: "comma-separated account numbers". The field's
+own comment had said the opposite, reasoning from the spec's array type — a
+repeated parameter, which this transport cannot produce either.
+
+`GetEntryRequirementsRequest` had already hit this and grown a one-off
+serializer; that is now the shared `comma_separated_required`, whose doc
+comment states the trap in as many words. **A smoke test is the only thing that
+shows this symptom**: the mock reports "the server did not receive any request",
+because there was none.
 
 Three things worth keeping from writing them:
 

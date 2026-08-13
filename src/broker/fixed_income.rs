@@ -474,7 +474,7 @@ impl GetUsTreasuriesRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GetEntryRequirementsRequest {
     /// The symbols to ask about, sent as one comma-separated parameter.
-    #[serde(serialize_with = "crate::broker::fixed_income::required_symbols")]
+    #[serde(serialize_with = "crate::types::serde_util::comma_separated_required")]
     pub symbols: Vec<String>,
 }
 
@@ -483,14 +483,6 @@ impl GetEntryRequirementsRequest {
     pub fn new(symbols: Vec<String>) -> Self {
         Self { symbols }
     }
-}
-
-/// `symbols` is required here, so it is not an `Option` to be joined.
-pub(crate) fn required_symbols<S>(values: &[String], serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    comma_separated(&Some(values.to_vec()), serializer)
 }
 
 #[cfg(test)]

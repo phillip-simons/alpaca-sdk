@@ -337,10 +337,14 @@ pub struct GetInstantFundingReportRequest {
 /// A request for several accounts' instant funding limits.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GetAccountLimitsRequest {
-    /// The accounts to ask about.
+    /// The accounts to ask about, sent as one comma-separated parameter.
     ///
-    /// A repeated parameter rather than a comma-separated one, which is how the
-    /// spec draws it and unusual for this API.
+    /// The spec draws this as an array, which reads as a repeated parameter;
+    /// the reference says "comma-separated account numbers" in as many words,
+    /// and it is the reference that describes the live route. It also has to be
+    /// joined to be sent at all — a bare `Vec` in a query struct fails the
+    /// request before it leaves the process.
+    #[serde(serialize_with = "crate::types::serde_util::comma_separated_required")]
     pub account_numbers: Vec<String>,
 }
 
