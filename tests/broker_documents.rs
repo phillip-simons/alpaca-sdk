@@ -388,22 +388,23 @@ fn a_w8ben_must_identify_the_applicant_for_tax() {
 /// The download shares a retry policy with every other route.
 ///
 /// It runs its own loop — the response body is bytes, not JSON — and that loop
-/// used to sleep a flat `retry.wait`, which defaults to `Duration::ZERO`. So a
-/// rate-limited download was hammered with no delay at all, while every other
-/// route honoured the backoff curve and the server's own `Retry-After`.
+/// used to sleep a flat `retry.wait` on every attempt, ignoring both the backoff
+/// curve and the server's own `Retry-After`. Every other route honours both.
+///
+/// The two are separated by making them disagree: `wait` is set to 3s and the
+/// server asks for 1s. The old loop would sleep its own 3s; the new one does
+/// what it was told. An earlier version of this test used the default 1s `wait`
+/// against a `Retry-After: 1`, which of course could not tell them apart — it
+/// passed against the unfixed code.
 #[tokio::test]
-async fn a_rate_limited_download_honours_retry_after() {
+async fn a_rate_limited_download_honours_retry_after_over_its_own_wait() {
     let server = MockServer::start().await;
 
     Mock::given(method("GET"))
         .and(path(format!(
             "/v1/accounts/{ACCOUNT_ID}/documents/{DOCUMENT_ID}/download"
         )))
-        .respond_with(
-            ResponseTemplate::new(429)
-                // Read and clamped, not ignored. Small so the test stays quick.
-                .insert_header("retry-after", "1"),
-        )
+        .respond_with(ResponseTemplate::new(429).insert_header("retry-after", "1"))
         .up_to_n_times(1)
         .expect(1)
         .mount(&server)
@@ -418,11 +419,11 @@ async fn a_rate_limited_download_honours_retry_after() {
         .mount(&server)
         .await;
 
-    // The shared helper disables retries; this route's whole point here is that
-    // it retries the way the rest of the crate does.
     let retrying = BrokerClient::with_config(
         &Credentials::new("broker-key", "broker-secret").unwrap(),
-        RestConfig::new(server.uri()).api_version("v1"),
+        RestConfig::new(server.uri())
+            .api_version("v1")
+            .retry(RetryConfig::default().wait(std::time::Duration::from_secs(3))),
     )
     .unwrap();
 
@@ -434,11 +435,15 @@ async fn a_rate_limited_download_honours_retry_after() {
         )
         .await
         .unwrap();
+    let elapsed = started.elapsed();
 
     assert_eq!(bytes, b"%PDF-1.4");
     assert!(
-        started.elapsed() >= std::time::Duration::from_millis(900),
-        "the `Retry-After` was ignored: the retry came after {:?}",
-        started.elapsed()
+        elapsed >= std::time::Duration::from_millis(800),
+        "the retry did not wait at all: {elapsed:?}"
+    );
+    assert!(
+        elapsed < std::time::Duration::from_millis(2500),
+        "`Retry-After: 1` was ignored in favour of the client's own 3s wait: {elapsed:?}"
     );
 }

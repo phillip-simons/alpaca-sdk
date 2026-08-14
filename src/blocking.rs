@@ -75,9 +75,12 @@ fn is_nested_runtime_panic(panic: &(dyn std::any::Any + Send)) -> bool {
 ///   [`Error::InvalidRequest`] instead. In an async context, use the async
 ///   client directly — it is what this is wrapping.
 ///
-///   **Under `panic = "abort"` this recovery does not exist.** `catch_unwind`
-///   catches nothing there, so the misuse aborts the process rather than
-///   returning an error. That is a deliberate trade: the alternative is a
+///   Two consequences worth knowing. Tokio's panic hook runs *before* the
+///   panic is caught, so a misuse prints "Cannot start a runtime from within a
+///   runtime" and a backtrace to stderr and then returns the error — where the
+///   old pre-check returned quietly. And **under `panic = "abort"` the recovery
+///   does not exist at all**: `catch_unwind` catches nothing there, so the
+///   misuse aborts the process rather than returning an error. That is a deliberate trade: the alternative is a
 ///   pre-check that cannot distinguish an async fn from a `spawn_blocking`
 ///   closure, and so rejects the supported bridge below. Calling the façade
 ///   from an async context is a programming error either way; on an abort

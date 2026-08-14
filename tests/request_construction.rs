@@ -123,3 +123,42 @@ fn the_order_value_types_can_be_built() {
     );
     assert!(order.validate().is_ok());
 }
+
+/// A request body sends the fields it was given, not a null for every field it
+/// was not.
+///
+/// This is the same hazard `AccountConfiguration` was fixed for — it `PATCH`ed
+/// `"dtbp_check": null` at a route whose schema does not document the field —
+/// and it reaches further than that one type. Two of the constructors above
+/// leave an optional field unset by design, so without this every call would
+/// put a null on the wire.
+#[test]
+fn request_bodies_omit_the_fields_they_do_not_set() {
+    let drift = serde_json::to_value(RebalancingCondition::drift_band(
+        DriftBandSubType::Absolute,
+        Decimal::ONE,
+    ))
+    .unwrap();
+    assert!(drift.get("day").is_none(), "{drift}");
+    assert_eq!(drift["percent"], "1");
+
+    let calendar = serde_json::to_value(RebalancingCondition::calendar(
+        CalendarSubType::Quarterly,
+        None,
+    ))
+    .unwrap();
+    assert!(calendar.get("percent").is_none(), "{calendar}");
+    assert!(calendar.get("day").is_none(), "{calendar}");
+
+    let cash = serde_json::to_value(Weight::cash(Decimal::ONE)).unwrap();
+    assert!(cash.get("symbol").is_none(), "{cash}");
+
+    // `Disclosures` is required on an account application, so an all-default one
+    // is a shape Alpaca really sees.
+    let disclosures = serde_json::to_value(alpaca_sdk::broker::Disclosures::default()).unwrap();
+    assert_eq!(
+        disclosures.as_object().map(serde_json::Map::len),
+        Some(0),
+        "an unset disclosure set should send nothing, got {disclosures}"
+    );
+}

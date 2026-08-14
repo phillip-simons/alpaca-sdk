@@ -64,6 +64,12 @@ behaviour changes are worth reading before the first release rather than after.
 - **`Calendar` round-trips.** `Serialize` was derived over a hand-written
   `Deserialize`, so `to_string` → `from_str` failed and caching a calendar did
   not work. It is now the deserializer's inverse.
+- **Request bodies omit the fields they were not given** rather than sending a
+  `null` for each. `AccountConfiguration` was the case that prompted it — see
+  below — but the same hazard reached `Disclosures` (required on every account
+  application), `Contact`, `Identity`, `Agreement`, `Weight` and
+  `RebalancingCondition`, the last two through constructors that leave a field
+  unset by design.
 - **`AccountConfiguration` no longer PATCHes `null`.** Three optional fields had
   no `skip_serializing_if`, so the only possible usage pattern —
   read-modify-write, forced because every other field is non-`Option` — sent two
@@ -133,6 +139,10 @@ behaviour changes are worth reading before the first release rather than after.
   silently truncated list. The walk deduplicates on order id rather than assuming
   the cursor is exclusive, because Alpaca's cursors are inclusive on some routes
   and the reference does not say which this is.
+- `Default` for the frame-convertible market data records — `Bar`, `Quote`,
+  `Trade`, `Auction`, `DailyAuctions`, `ForexRate`. They are `#[non_exhaustive]`
+  like every other response model, which removes the struct literal; building one
+  for a backtest or a fixture is a real need, and this is the way through.
 - `StreamConfig::stable_session` and `TradingStream::stable_session`, which set
   how long a connection must stay up before it clears the reconnect failure
   count. Defaults to 30 seconds.

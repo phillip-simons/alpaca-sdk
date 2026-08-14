@@ -31,7 +31,11 @@ pub struct Contact {
     /// Primary email address.
     pub email_address: String,
     /// Primary phone number.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub phone_number: Option<String>,
     /// Street address lines.
     #[serde(
@@ -40,19 +44,39 @@ pub struct Contact {
     )]
     pub street_address: Vec<String>,
     /// Unit or apartment.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub unit: Option<String>,
     /// City.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub city: Option<String>,
     /// State or province.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub state: Option<String>,
     /// Postal code.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub postal_code: Option<String>,
     /// Country.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub country: Option<String>,
 }
 
@@ -63,27 +87,55 @@ pub struct Identity {
     /// Given name.
     pub given_name: String,
     /// Middle name.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub middle_name: Option<String>,
     /// Family name.
     pub family_name: String,
     /// Date of birth.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub date_of_birth: Option<NaiveDate>,
     /// Tax identification number.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub tax_id: Option<String>,
     /// Which national scheme the tax id belongs to.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub tax_id_type: Option<TaxIdType>,
     /// Country of citizenship.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub country_of_citizenship: Option<String>,
     /// Country of birth.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub country_of_birth: Option<String>,
     /// Country of tax residence.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub country_of_tax_residence: Option<String>,
     /// Where the account's funds come from.
     #[serde(
@@ -92,34 +144,46 @@ pub struct Identity {
     )]
     pub funding_source: Vec<FundingSource>,
     /// Annual income, lower bound.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub annual_income_min: Option<Decimal>,
     /// Annual income, upper bound.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub annual_income_max: Option<Decimal>,
     /// Liquid net worth, lower bound.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub liquid_net_worth_min: Option<Decimal>,
     /// Liquid net worth, upper bound.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub liquid_net_worth_max: Option<Decimal>,
     /// Total net worth, lower bound.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub total_net_worth_min: Option<Decimal>,
     /// Total net worth, upper bound.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub total_net_worth_max: Option<Decimal>,
     /// Visa category, for non-permanent residents.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub visa_type: Option<VisaType>,
     /// When the visa expires.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub visa_expiration_date: Option<NaiveDate>,
     /// Intended date of departure from the USA.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub date_of_departure_from_usa: Option<NaiveDate>,
     /// Whether the holder is a permanent resident.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permanent_resident: Option<bool>,
 }
 
@@ -128,22 +192,22 @@ pub struct Identity {
 #[non_exhaustive]
 pub struct Disclosures {
     /// Whether the holder controls a public company.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_control_person: Option<bool>,
     /// Whether the holder is affiliated with an exchange or FINRA.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_affiliated_exchange_or_finra: Option<bool>,
     /// Whether the holder is affiliated with an exchange or FINRA member.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_affiliated_exchange_or_iiroc: Option<bool>,
     /// Whether the holder is a politically exposed person.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_politically_exposed: Option<bool>,
     /// Whether an immediate family member is exposed.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub immediate_family_exposed: Option<bool>,
     /// Whether the account is discretionary.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_discretionary: Option<bool>,
     /// Employment status.
     ///
@@ -153,16 +217,32 @@ pub struct Disclosures {
     /// rather than `employed`, and the application 400'd. It carries an
     /// `Unknown(String)` variant, so a value this crate does not know still
     /// decodes.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub employment_status: Option<EmploymentStatus>,
     /// Employer name.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub employer_name: Option<String>,
     /// Employer address.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub employer_address: Option<String>,
     /// Employment position.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub employment_position: Option<String>,
 }
 
@@ -175,10 +255,18 @@ pub struct Agreement {
     /// When it was signed.
     pub signed_at: DateTime<Utc>,
     /// The IP address it was signed from.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ip_address: Option<String>,
     /// The agreement revision.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub revision: Option<String>,
 }
 
@@ -733,7 +821,11 @@ pub struct Weight {
     #[serde(rename = "type")]
     pub weight_type: WeightType,
     /// The security, for asset lines.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub symbol: Option<String>,
     /// The share of the portfolio, as a percentage.
     ///
@@ -864,10 +956,18 @@ pub struct RebalancingCondition {
     /// The specific trigger, from the set the type implies.
     pub sub_type: RebalancingSubType,
     /// The drift threshold, for drift band conditions.
-    #[serde(default, with = "crate::types::option_decimal")]
+    #[serde(
+        default,
+        with = "crate::types::option_decimal",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub percent: Option<Decimal>,
     /// The day the calendar condition fires on.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub day: Option<String>,
 }
 

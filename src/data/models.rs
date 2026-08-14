@@ -256,7 +256,7 @@ pub struct Auction {
 }
 
 /// One day's opening and closing auctions for a symbol.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct DailyAuctions {
     /// The symbol these auctions are for, filled in from the response key.
@@ -301,6 +301,100 @@ pub struct ForexRate {
     /// The last ask price in the timeframe.
     #[serde(rename = "ap")]
     pub ask_price: f64,
+}
+
+// ---------------------------------------------------------------------------
+// `Default` for the frame-convertible records.
+//
+// These types are `#[non_exhaustive]` — Alpaca adds fields to market data
+// payloads without a version bump, and that is exactly the class the attribute
+// exists for. But it also stops an external caller building one, and building
+// one is a real need: a backtest harness, a fixture, a `ToFrame` conversion over
+// synthetic rows. `Default` plus public fields is the way through that a struct
+// literal no longer provides, and it costs nothing on the wire because none of
+// these is ever sent as a request.
+//
+// Written out rather than derived because `DateTime<Utc>`, `NaiveDate` and the
+// `wire_enum!` exchange codes have no `Default` of their own. The epoch is the
+// neutral timestamp: deterministic, and obviously a placeholder if one is ever
+// left unset by mistake.
+
+/// The zero timestamp these defaults use.
+fn epoch() -> DateTime<Utc> {
+    DateTime::from_timestamp(0, 0).unwrap_or_default()
+}
+
+impl Default for Bar {
+    fn default() -> Self {
+        Self {
+            symbol: String::new(),
+            timestamp: epoch(),
+            open: 0.0,
+            high: 0.0,
+            low: 0.0,
+            close: 0.0,
+            volume: 0.0,
+            trade_count: None,
+            vwap: None,
+        }
+    }
+}
+
+impl Default for Quote {
+    fn default() -> Self {
+        Self {
+            symbol: String::new(),
+            timestamp: epoch(),
+            bid_price: 0.0,
+            bid_size: 0.0,
+            bid_exchange: None,
+            ask_price: 0.0,
+            ask_size: 0.0,
+            ask_exchange: None,
+            conditions: None,
+            tape: None,
+        }
+    }
+}
+
+impl Default for Trade {
+    fn default() -> Self {
+        Self {
+            symbol: String::new(),
+            timestamp: epoch(),
+            exchange: None,
+            price: 0.0,
+            size: 0.0,
+            id: None,
+            conditions: None,
+            tape: None,
+            taker_side: None,
+        }
+    }
+}
+
+impl Default for Auction {
+    fn default() -> Self {
+        Self {
+            timestamp: epoch(),
+            exchange: Exchange::Unknown(String::new()),
+            price: 0.0,
+            size: None,
+            condition: String::new(),
+        }
+    }
+}
+
+impl Default for ForexRate {
+    fn default() -> Self {
+        Self {
+            currency_pair: String::new(),
+            timestamp: epoch(),
+            bid_price: 0.0,
+            mid_price: 0.0,
+            ask_price: 0.0,
+        }
+    }
 }
 
 /// Multi-pair forex rates keyed by currency pair.

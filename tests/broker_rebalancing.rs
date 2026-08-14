@@ -208,9 +208,12 @@ async fn creating_a_portfolio_sends_its_weights_as_strings() {
             "name": "My Portfolio",
             "description": "Some description",
             "cooldown_days": 2,
+            // A cash weight has no symbol, so the key is *omitted* rather than
+            // sent as `null` — the same rule `AccountConfiguration` needed,
+            // where a `null` reached a field the schema does not document.
             "weights": [
                 { "type": "asset", "symbol": "AAPL", "percent": "35" },
-                { "type": "cash", "symbol": null, "percent": "65" }
+                { "type": "cash", "percent": "65" }
             ]
         })))
         .respond_with(ResponseTemplate::new(200).set_body_json(fixture(

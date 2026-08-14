@@ -256,7 +256,7 @@ async fn a_non_json_error_body_survives_as_the_message() {
 // ------------------------------------------------------------- transport
 
 #[tokio::test]
-async fn a_connection_failure_is_a_transport_error_and_is_retryable() {
+async fn a_connection_failure_is_a_transport_error_and_is_transient() {
     let credentials = alpaca_sdk::Credentials::new("key", "secret").unwrap();
     // Port 1 refuses connections everywhere.
     let client = RestClient::new(

@@ -266,3 +266,42 @@ fn an_empty_collection_still_has_its_columns() {
         &DataType::List(Box::new(DataType::String))
     );
 }
+
+/// A caller can build a market data record without going through the wire form.
+///
+/// These types are `#[non_exhaustive]`, which is right — Alpaca adds fields to
+/// them — but it also removes the struct literal, and building a synthetic bar
+/// is a real need: a backtest harness, a fixture, a frame over rows that did not
+/// come from the API. `Default` plus public fields is the replacement, and this
+/// pins that it exists. Without it the only route is `serde_json`, which is a
+/// workaround every downstream user would have to reinvent.
+#[test]
+fn market_data_records_can_be_built_without_json() {
+    let mut bar = Bar::default();
+    bar.symbol = "AAPL".to_owned();
+    bar.timestamp = timestamp("2024-04-26T13:30:00Z");
+    bar.open = 100.0;
+    bar.high = 105.0;
+    bar.low = 99.0;
+    bar.close = 104.0;
+    bar.volume = 1_000.0;
+
+    let frame = [bar].as_slice().df().unwrap();
+    assert_eq!(frame.height(), 1);
+    assert_eq!(
+        frame.column("close").unwrap().f64().unwrap().get(0),
+        Some(104.0)
+    );
+
+    // And the other four the frame conversion accepts.
+    let mut quote = Quote::default();
+    quote.ask_price = 1.5;
+    let mut rate = ForexRate::default();
+    rate.currency_pair = "EURUSD".to_owned();
+    let mut day = DailyAuctions::default();
+    day.symbol = "AAPL".to_owned();
+
+    assert_eq!(quote.ask_price, 1.5);
+    assert_eq!(rate.currency_pair, "EURUSD");
+    assert!(day.opening.is_empty());
+}
