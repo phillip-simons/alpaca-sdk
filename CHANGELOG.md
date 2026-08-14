@@ -27,12 +27,18 @@ behaviour changes are worth reading before the first release rather than after.
   success. A segment that is exactly `.`, `..`, or empty is now refused with
   `Error::InvalidRequest`, because no encoding survives a URL parser's dot-segment
   removal.
-- **A 504 no longer replays a `POST` or `PATCH`.** The retry policy was a set of
+- **A 504 no longer replays a request that acts.** The retry policy was a set of
   status codes and nothing else, so one gateway timeout on `submit_order` sent
   four orders and then handed back `RetriesExhausted` — telling the caller none
   had been placed. Retries are now gated on the method as well: idempotent
   methods replay, `POST` and `PATCH` do not, and a 429 replays whatever the
   method because the rate limiter refuses the request before anything acts on it.
+
+  The method is not quite the whole answer. `DELETE /v2/positions/{asset}` and
+  `DELETE /v2/positions` — and their two broker twins — are idempotent to HTTP
+  and not in effect: they submit liquidating market orders. A replayed one sells
+  the same quantity twice and puts the caller short, so those four are excluded
+  by route rather than by verb.
 - **Credentials no longer follow a cross-host redirect.** The event-stream client
   put the Alpaca key pair in `default_headers` and allowed ten redirects. reqwest
   strips `Authorization` on a cross-host hop and nothing else, so the custom
@@ -233,6 +239,10 @@ Decisions that become expensive after the first release, settled now.
 - **`GetAggregatePositionsRequest::firm_accounts` is `Option<bool>`.** It was a
   comma-separated id list; Alpaca parses it as a boolean, so the report came back
   silently missing the firm inventory.
+- **`CIPInfo::created_at` and `updated_at` are `Option<DateTime<Utc>>`.** The
+  type is both a response and the body of the CIP upload, and on the upload side
+  the timestamps are Alpaca's to assign — a required field there forced the
+  caller's clock into a KYC record. A response still always carries them.
 - **`Disclosures::employment_status` is `EmploymentStatus`**, and the market-data
   exchange fields are `data::Exchange`. Both enums existed, were exported, and
   were referenced by nothing.

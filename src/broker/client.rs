@@ -1415,8 +1415,12 @@ impl BrokerClient {
     ) -> Result<Vec<crate::trading::ClosePositionResponse>> {
         let path = format!("/trading/accounts/{account_id}/positions");
         match cancel_orders {
-            Some(cancel) => self.rest.delete(&path, &[("cancel_orders", cancel)]).await,
-            None => self.rest.delete(&path, &Empty).await,
+            Some(cancel) => {
+                self.rest
+                    .delete_effectful(&path, &[("cancel_orders", cancel)])
+                    .await
+            }
+            None => self.rest.delete_effectful(&path, &Empty).await,
         }
     }
 
@@ -1435,8 +1439,8 @@ impl BrokerClient {
             asset.as_path_segment()?
         );
         match close {
-            Some(close) => self.rest.delete(&path, &close.to_query()).await,
-            None => self.rest.delete(&path, &Empty).await,
+            Some(close) => self.rest.delete_effectful(&path, &close.to_query()).await,
+            None => self.rest.delete_effectful(&path, &Empty).await,
         }
     }
 

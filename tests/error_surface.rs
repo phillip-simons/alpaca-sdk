@@ -276,7 +276,10 @@ async fn a_connection_failure_is_a_transport_error_and_is_transient() {
         error.is_transient(),
         "a refused connection is worth retrying: nothing was sent"
     );
-    assert!(error.source().is_some(), "the reqwest error is the source");
+    assert!(
+        error.source().is_some(),
+        "the transport error continues the chain"
+    );
 }
 
 // ----------------------------------------------------------- credentials

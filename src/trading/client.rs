@@ -256,10 +256,10 @@ impl TradingClient {
         match cancel_orders {
             Some(cancel) => {
                 self.rest
-                    .delete("/positions", &[("cancel_orders", cancel)])
+                    .delete_effectful("/positions", &[("cancel_orders", cancel)])
                     .await
             }
-            None => self.rest.delete("/positions", &Empty).await,
+            None => self.rest.delete_effectful("/positions", &Empty).await,
         }
     }
 
@@ -274,8 +274,8 @@ impl TradingClient {
     ) -> Result<Order> {
         let path = format!("/positions/{}", asset.as_path_segment()?);
         match close {
-            Some(close) => self.rest.delete(&path, &close.to_query()).await,
-            None => self.rest.delete(&path, &Empty).await,
+            Some(close) => self.rest.delete_effectful(&path, &close.to_query()).await,
+            None => self.rest.delete_effectful(&path, &Empty).await,
         }
     }
 

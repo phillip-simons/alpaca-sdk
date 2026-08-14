@@ -144,22 +144,46 @@ pub struct Identity {
     )]
     pub funding_source: Vec<FundingSource>,
     /// Annual income, lower bound.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub annual_income_min: Option<Decimal>,
     /// Annual income, upper bound.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub annual_income_max: Option<Decimal>,
     /// Liquid net worth, lower bound.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub liquid_net_worth_min: Option<Decimal>,
     /// Liquid net worth, upper bound.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub liquid_net_worth_max: Option<Decimal>,
     /// Total net worth, lower bound.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub total_net_worth_min: Option<Decimal>,
     /// Total net worth, upper bound.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub total_net_worth_max: Option<Decimal>,
     /// Visa category, for non-permanent residents.
     #[serde(

@@ -63,8 +63,31 @@ pub(crate) fn retry_after(headers: &HeaderMap) -> Option<Duration> {
 /// Alpaca's reference names the mechanism that would make a `POST` replayable:
 /// *"Always supply `Idempotency-Key` when creating journals"*. Until this crate
 /// sends one, not replaying is the only safe answer.
-fn replay_is_safe(method: &Method, status: u16) -> bool {
-    status == 429 || method.is_idempotent()
+fn replay_is_safe(method: &Method, replay: Replay, status: u16) -> bool {
+    if status == 429 {
+        return true;
+    }
+    replay == Replay::ByMethod && method.is_idempotent()
+}
+
+/// Whether a route may be replayed on the strength of its HTTP method.
+///
+/// Almost all of them may: the method is what HTTP defines idempotency by, and
+/// for `GET`, `PUT` and `DELETE` that definition holds here too.
+///
+/// The exception is a `DELETE` that is not idempotent in *effect*.
+/// `DELETE /v2/positions/{asset}` and `DELETE /v2/positions` do not delete a
+/// record — they submit liquidating market orders. If Alpaca accepts the order
+/// and the gateway then drops the response, the position is still open when the
+/// replay arrives, so the replay submits a second full-size liquidation and
+/// sells the caller into a short. That is the same failure `POST` is excluded
+/// for, wearing a different verb.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Replay {
+    /// HTTP's answer is the right one for this route.
+    ByMethod,
+    /// This route acts, whatever its verb says. Never replay it.
+    Never,
 }
 
 /// A request with no query parameters or body.
@@ -236,8 +259,14 @@ impl RestClient {
     {
         self.decode(
             path,
-            self.send(Method::GET, path, Some(query), None::<&Empty>)
-                .await?,
+            self.send(
+                Method::GET,
+                Replay::ByMethod,
+                path,
+                Some(query),
+                None::<&Empty>,
+            )
+            .await?,
         )
     }
 
@@ -255,8 +284,43 @@ impl RestClient {
     {
         self.decode(
             path,
-            self.send(Method::DELETE, path, Some(query), None::<&Empty>)
-                .await?,
+            self.send(
+                Method::DELETE,
+                Replay::ByMethod,
+                path,
+                Some(query),
+                None::<&Empty>,
+            )
+            .await?,
+        )
+    }
+
+    /// Issues a `DELETE` that must never be replayed.
+    ///
+    /// For the routes whose verb says "remove a record" and whose effect is
+    /// "submit an order": `DELETE /v2/positions/{asset}` and
+    /// `DELETE /v2/positions`, plus their broker twins. HTTP calls a `DELETE`
+    /// idempotent and for those four it is not — a replayed liquidation sells
+    /// the same quantity twice. A timeout on one is reported, not retried; a 429
+    /// still is, because the rate limiter refused it before anything acted.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn delete_effectful<T, Q>(&self, path: &str, query: &Q) -> Result<T>
+    where
+        T: DeserializeOwned,
+        Q: Serialize + ?Sized,
+    {
+        self.decode(
+            path,
+            self.send(
+                Method::DELETE,
+                Replay::Never,
+                path,
+                Some(query),
+                None::<&Empty>,
+            )
+            .await?,
         )
     }
 
@@ -271,8 +335,14 @@ impl RestClient {
     {
         self.decode(
             path,
-            self.send(Method::POST, path, None::<&Empty>, Some(body))
-                .await?,
+            self.send(
+                Method::POST,
+                Replay::ByMethod,
+                path,
+                None::<&Empty>,
+                Some(body),
+            )
+            .await?,
         )
     }
 
@@ -287,8 +357,14 @@ impl RestClient {
     {
         self.decode(
             path,
-            self.send(Method::PUT, path, None::<&Empty>, Some(body))
-                .await?,
+            self.send(
+                Method::PUT,
+                Replay::ByMethod,
+                path,
+                None::<&Empty>,
+                Some(body),
+            )
+            .await?,
         )
     }
 
@@ -303,8 +379,14 @@ impl RestClient {
     {
         self.decode(
             path,
-            self.send(Method::PATCH, path, None::<&Empty>, Some(body))
-                .await?,
+            self.send(
+                Method::PATCH,
+                Replay::ByMethod,
+                path,
+                None::<&Empty>,
+                Some(body),
+            )
+            .await?,
         )
     }
 
@@ -329,7 +411,11 @@ impl RestClient {
         Q: Serialize + ?Sized,
         B: Serialize + ?Sized,
     {
-        self.decode(path, self.send(method, path, query, body).await?)
+        self.decode(
+            path,
+            self.send(method, Replay::ByMethod, path, query, body)
+                .await?,
+        )
     }
 
     /// Issues a `GET` and returns the response body as bytes.
@@ -345,7 +431,8 @@ impl RestClient {
         Q: Serialize + ?Sized,
     {
         let request = self.http.get(self.url(path)).query(query);
-        self.execute_bytes(&Method::GET, request, path).await
+        self.execute_bytes(&Method::GET, Replay::ByMethod, request, path)
+            .await
     }
 
     /// Issues a request and returns the raw response body without deserializing.
@@ -363,7 +450,7 @@ impl RestClient {
         Q: Serialize + ?Sized,
         B: Serialize + ?Sized,
     {
-        self.send(method, path, query, body).await
+        self.send(method, Replay::ByMethod, path, query, body).await
     }
 
     /// Builds the absolute URL for `path`.
@@ -382,6 +469,7 @@ impl RestClient {
     async fn send<Q, B>(
         &self,
         method: Method,
+        replay: Replay,
         path: &str,
         query: Option<&Q>,
         body: Option<&B>,
@@ -397,17 +485,18 @@ impl RestClient {
         if let Some(body) = body {
             request = request.json(body);
         }
-        self.execute(&method, request, path).await
+        self.execute(&method, replay, request, path).await
     }
 
     /// Runs the retry loop and reads the successful body as text.
     async fn execute(
         &self,
         method: &Method,
+        replay: Replay,
         request: RequestBuilder,
         path: &str,
     ) -> Result<String> {
-        self.execute_response(method, request, path)
+        self.execute_response(method, replay, request, path)
             .await?
             .text()
             .await
@@ -418,11 +507,12 @@ impl RestClient {
     async fn execute_bytes(
         &self,
         method: &Method,
+        replay: Replay,
         request: RequestBuilder,
         path: &str,
     ) -> Result<Vec<u8>> {
         Ok(self
-            .execute_response(method, request, path)
+            .execute_response(method, replay, request, path)
             .await?
             .bytes()
             .await
@@ -435,6 +525,7 @@ impl RestClient {
     async fn execute_response(
         &self,
         method: &Method,
+        replay: Replay,
         request: RequestBuilder,
         path: &str,
     ) -> Result<reqwest::Response> {
@@ -471,7 +562,7 @@ impl RestClient {
             let api_error = ApiError::from_body(status, path, body);
 
             let last_attempt = attempt == total_attempts;
-            if !retry.should_retry(status) || !replay_is_safe(method, status) {
+            if !retry.should_retry(status) || !replay_is_safe(method, replay, status) {
                 return Err(Error::Api(api_error));
             }
             if last_attempt {
