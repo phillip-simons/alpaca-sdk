@@ -33,6 +33,7 @@ use alpaca_sdk::types::{AssetIdent, SupportedCurrencies};
 use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use rust_decimal::Decimal;
 use serde_json::json;
+use std::future::Future;
 use uuid::Uuid;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -59,8 +60,25 @@ fn other() -> Uuid {
     Uuid::parse_str(OTHER).unwrap()
 }
 
-/// Mounts the one route the call under test must reach.
-async fn expect_route(http_method: &str, http_path: &str) -> MockServer {
+/// Mounts the one route the call under test must reach, runs the call against a
+/// client pointed at it, and returns the requests the mock recorded.
+///
+/// The call is a closure rather than the server being handed back so that each
+/// server drops — which is where its `expect(1)` is verified — before the next
+/// one starts. A `let server = ...` per route keeps every server in the test
+/// alive until it returns, and seventy-odd listeners and runtimes across
+/// nineteen concurrent tests exhausts the file descriptor limit of a stock
+/// macOS shell. That failed as an unroutable request rather than as `EMFILE`:
+/// the mock reported no request arrived, on a different set of routes each run.
+async fn expect_route<F, Fut, T, E>(
+    http_method: &str,
+    http_path: &str,
+    call: F,
+) -> Vec<wiremock::Request>
+where
+    F: FnOnce(BrokerClient) -> Fut,
+    Fut: Future<Output = Result<T, E>>,
+{
     let server = MockServer::start().await;
     Mock::given(method(http_method))
         .and(path(http_path.to_owned()))
@@ -68,142 +86,135 @@ async fn expect_route(http_method: &str, http_path: &str) -> MockServer {
         .expect(1)
         .mount(&server)
         .await;
-    server
+    assert!(
+        call(client(&server)).await.is_err(),
+        "{http_method} {http_path} did not return the 404 the mock answers with"
+    );
+    server.received_requests().await.unwrap()
 }
 
 // --------------------------------------------------------------- accounts
 
 #[tokio::test]
 async fn account_scoped_reads_nest_under_the_account_id() {
-    let server = expect_route("GET", &format!("/v1/accounts/{ACCOUNT}/recipient_banks")).await;
-    assert!(
-        client(&server)
-            .get_banks_for_account(account())
-            .await
-            .is_err()
-    );
+    expect_route(
+        "GET",
+        &format!("/v1/accounts/{ACCOUNT}/recipient_banks"),
+        |broker| async move { broker.get_banks_for_account(account()).await },
+    )
+    .await;
 
-    let server = expect_route("GET", &format!("/v1/trading/accounts/{ACCOUNT}/limits")).await;
-    assert!(client(&server).get_trading_limits(account()).await.is_err());
+    expect_route(
+        "GET",
+        &format!("/v1/trading/accounts/{ACCOUNT}/limits"),
+        |broker| async move { broker.get_trading_limits(account()).await },
+    )
+    .await;
 
     // `v2beta1`, matching the activities *stream* rather than the client's v1:
     // one event and the stream of them live on the same version.
-    let server = expect_route(
+    expect_route(
         "GET",
         &format!("/v2beta1/accounts/{ACCOUNT}/events/activities/evt-1"),
+        |broker| async move { broker.get_account_activity_event(account(), "evt-1").await },
     )
     .await;
-    assert!(
-        client(&server)
-            .get_account_activity_event(account(), "evt-1")
-            .await
-            .is_err()
-    );
 
-    let server = expect_route("GET", &format!("/v1/accounts/{ACCOUNT}/onfido/sdk/tokens")).await;
-    assert!(
-        client(&server)
-            .get_onfido_token(account(), None)
-            .await
-            .is_err()
-    );
+    expect_route(
+        "GET",
+        &format!("/v1/accounts/{ACCOUNT}/onfido/sdk/tokens"),
+        |broker| async move { broker.get_onfido_token(account(), None).await },
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn the_account_wide_reads_take_no_id() {
-    let server = expect_route("GET", "/v1/accounts/ira_excess_contributions").await;
-    assert!(
-        client(&server)
-            .get_ira_excess_contributions()
-            .await
-            .is_err()
-    );
+    expect_route(
+        "GET",
+        "/v1/accounts/ira_excess_contributions",
+        |broker| async move { broker.get_ira_excess_contributions().await },
+    )
+    .await;
 
-    let server = expect_route("GET", "/v1/accounts/options/approvals").await;
-    assert!(client(&server).get_options_approvals(None).await.is_err());
+    expect_route(
+        "GET",
+        "/v1/accounts/options/approvals",
+        |broker| async move { broker.get_options_approvals(None).await },
+    )
+    .await;
 }
 
 /// Two ids in one path, which is the shape a transposition hides in.
 #[tokio::test]
 async fn two_id_paths_put_them_in_the_documented_order() {
-    let server = expect_route(
+    expect_route(
         "GET",
         &format!("/v1/trading/accounts/{ACCOUNT}/watchlists/{OTHER}"),
+        |broker| async move {
+            broker
+                .get_watchlist_for_account_by_id(account(), other())
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .get_watchlist_for_account_by_id(account(), other())
-            .await
-            .is_err()
-    );
 
-    let server = expect_route(
+    expect_route(
         "GET",
         &format!("/v1/accounts/{ACCOUNT}/tokenization/requests/{OTHER}"),
+        |broker| async move {
+            broker
+                .get_tokenization_request_for_account(account(), other())
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .get_tokenization_request_for_account(account(), other())
-            .await
-            .is_err()
-    );
 
-    let server = expect_route(
+    expect_route(
         "GET",
         &format!("/v1/accounts/{ACCOUNT}/documents/w8ben/{OTHER}/download"),
+        |broker| async move { broker.download_w8ben_document(account(), other()).await },
     )
     .await;
-    assert!(
-        client(&server)
-            .download_w8ben_document(account(), other())
-            .await
-            .is_err()
-    );
 }
 
 // -------------------------------------------------------- instant funding
 
 #[tokio::test]
 async fn the_instant_funding_routes_hang_off_one_prefix() {
-    let server = expect_route("GET", "/v1/instant_funding").await;
-    assert!(client(&server).get_instant_funding(None).await.is_err());
+    expect_route("GET", "/v1/instant_funding", |broker| async move {
+        broker.get_instant_funding(None).await
+    })
+    .await;
 
-    let server = expect_route("GET", "/v1/instant_funding/fund-1").await;
-    assert!(
-        client(&server)
-            .get_instant_funding_by_id("fund-1")
-            .await
-            .is_err()
-    );
+    expect_route("GET", "/v1/instant_funding/fund-1", |broker| async move {
+        broker.get_instant_funding_by_id("fund-1").await
+    })
+    .await;
 
-    let server = expect_route("GET", "/v1/instant_funding/limits").await;
-    assert!(client(&server).get_instant_funding_limits().await.is_err());
+    expect_route("GET", "/v1/instant_funding/limits", |broker| async move {
+        broker.get_instant_funding_limits().await
+    })
+    .await;
 
-    let server = expect_route("GET", "/v1/instant_funding/reports").await;
-    assert!(
-        client(&server)
-            .get_instant_funding_reports(None)
-            .await
-            .is_err()
-    );
+    expect_route("GET", "/v1/instant_funding/reports", |broker| async move {
+        broker.get_instant_funding_reports(None).await
+    })
+    .await;
 
-    let server = expect_route("GET", "/v1/instant_funding/settlements").await;
-    assert!(
-        client(&server)
-            .get_instant_funding_settlements(None)
-            .await
-            .is_err()
-    );
+    expect_route(
+        "GET",
+        "/v1/instant_funding/settlements",
+        |broker| async move { broker.get_instant_funding_settlements(None).await },
+    )
+    .await;
 
-    let server = expect_route("GET", &format!("/v1/instant_funding/settlements/{OTHER}")).await;
-    assert!(
-        client(&server)
-            .get_instant_funding_settlement(other())
-            .await
-            .is_err()
-    );
+    expect_route(
+        "GET",
+        &format!("/v1/instant_funding/settlements/{OTHER}"),
+        |broker| async move { broker.get_instant_funding_settlement(other()).await },
+    )
+    .await;
 }
 
 // -------------------------------------------------------------------- JIT
@@ -212,56 +223,74 @@ async fn the_instant_funding_routes_hang_off_one_prefix() {
 /// `/jit` — a split that reads like a mistake and is not.
 #[tokio::test]
 async fn jit_ledgers_and_jit_settlements_are_different_prefixes() {
-    let server = expect_route("GET", "/v1/transfers/jit/ledgers").await;
-    assert!(client(&server).get_jit_ledgers().await.is_err());
+    expect_route("GET", "/v1/transfers/jit/ledgers", |broker| async move {
+        broker.get_jit_ledgers().await
+    })
+    .await;
 
-    let server = expect_route("GET", "/v1/transfers/jit/limits").await;
-    assert!(client(&server).get_jit_trading_limits().await.is_err());
+    expect_route("GET", "/v1/transfers/jit/limits", |broker| async move {
+        broker.get_jit_trading_limits().await
+    })
+    .await;
 
-    let server = expect_route("GET", "/v1/transfers/jit/ledger-1/balances").await;
-    assert!(
-        client(&server)
-            .get_jit_ledger_balances("ledger-1", None)
-            .await
-            .is_err()
-    );
+    expect_route(
+        "GET",
+        "/v1/transfers/jit/ledger-1/balances",
+        |broker| async move { broker.get_jit_ledger_balances("ledger-1", None).await },
+    )
+    .await;
 
-    let server = expect_route("GET", "/v1/jit/settlements").await;
-    assert!(client(&server).get_jit_settlements(None).await.is_err());
+    expect_route("GET", "/v1/jit/settlements", |broker| async move {
+        broker.get_jit_settlements(None).await
+    })
+    .await;
 
-    let server = expect_route("GET", &format!("/v1/jit/settlements/{OTHER}")).await;
-    assert!(client(&server).get_jit_settlement(other()).await.is_err());
+    expect_route(
+        "GET",
+        &format!("/v1/jit/settlements/{OTHER}"),
+        |broker| async move { broker.get_jit_settlement(other()).await },
+    )
+    .await;
 }
 
 // ------------------------------------------------------------------- FPSL
 
 #[tokio::test]
 async fn the_fpsl_routes_reach_their_own_prefix() {
-    let server = expect_route("GET", "/v1/fpsl/loans").await;
-    assert!(client(&server).get_fpsl_loans(None).await.is_err());
+    expect_route("GET", "/v1/fpsl/loans", |broker| async move {
+        broker.get_fpsl_loans(None).await
+    })
+    .await;
 
-    let server = expect_route("GET", "/v1/fpsl/tiers").await;
-    assert!(client(&server).get_fpsl_tiers().await.is_err());
+    expect_route("GET", "/v1/fpsl/tiers", |broker| async move {
+        broker.get_fpsl_tiers().await
+    })
+    .await;
 
     // The account id is in the middle of this one, not at the end.
-    let server = expect_route("GET", &format!("/v1/fpsl/analytics/{ACCOUNT}/loans")).await;
-    assert!(
-        client(&server)
-            .get_fpsl_analytics(account(), None)
-            .await
-            .is_err()
-    );
+    expect_route(
+        "GET",
+        &format!("/v1/fpsl/analytics/{ACCOUNT}/loans"),
+        |broker| async move { broker.get_fpsl_analytics(account(), None).await },
+    )
+    .await;
 }
 
 // -------------------------------------------------------------- reporting
 
 #[tokio::test]
 async fn the_reporting_routes_reach_their_own_prefix() {
-    let server = expect_route("GET", "/v1/reporting/eod/cash_interest").await;
-    assert!(client(&server).get_eod_cash_interest(None).await.is_err());
+    expect_route(
+        "GET",
+        "/v1/reporting/eod/cash_interest",
+        |broker| async move { broker.get_eod_cash_interest(None).await },
+    )
+    .await;
 
-    let server = expect_route("GET", "/v1/cash_interest/apr_tiers").await;
-    assert!(client(&server).get_apr_tiers().await.is_err());
+    expect_route("GET", "/v1/cash_interest/apr_tiers", |broker| async move {
+        broker.get_apr_tiers().await
+    })
+    .await;
 }
 
 // ---------------------------------------------------------------- funding
@@ -270,120 +299,110 @@ async fn the_reporting_routes_reach_their_own_prefix() {
 /// exact class of mistake that shipped the retired event streams.
 #[tokio::test]
 async fn the_funding_wallet_routes_are_v1beta_not_v1() {
-    let server = expect_route(
+    expect_route(
         "GET",
         &format!("/v1beta/accounts/{ACCOUNT}/funding_wallet/recipient_bank"),
+        |broker| async move { broker.get_recipient_bank(account()).await },
     )
     .await;
-    assert!(client(&server).get_recipient_bank(account()).await.is_err());
 
-    let server = expect_route(
+    expect_route(
         "GET",
         &format!("/v1beta/accounts/{ACCOUNT}/funding_wallet/transfers"),
+        |broker| async move { broker.get_funding_wallet_transfers(account()).await },
     )
     .await;
-    assert!(
-        client(&server)
-            .get_funding_wallet_transfers(account())
-            .await
-            .is_err()
-    );
 
-    let server = expect_route(
+    expect_route(
         "GET",
         &format!("/v1beta/accounts/{ACCOUNT}/funding_wallet/transfers/{OTHER}"),
+        |broker| async move { broker.get_funding_wallet_transfer(account(), other()).await },
     )
     .await;
-    assert!(
-        client(&server)
-            .get_funding_wallet_transfer(account(), other())
-            .await
-            .is_err()
-    );
 
-    let server = expect_route(
+    expect_route(
         "GET",
         &format!("/v1beta/accounts/{ACCOUNT}/funding_wallet/funding_details"),
+        |broker| async move { broker.get_funding_details(account(), None).await },
     )
     .await;
-    assert!(
-        client(&server)
-            .get_funding_details(account(), None)
-            .await
-            .is_err()
-    );
 }
 
 // ----------------------------------------------------------- crypto wallets
 
 #[tokio::test]
 async fn the_crypto_wallet_routes_nest_under_wallets() {
-    let server = expect_route("GET", &format!("/v1/accounts/{ACCOUNT}/wallets")).await;
-    assert!(
-        client(&server)
-            .get_crypto_wallets_for_account(account(), None)
-            .await
-            .is_err()
-    );
-
-    let server = expect_route("GET", &format!("/v1/accounts/{ACCOUNT}/wallets/transfers")).await;
-    assert!(
-        client(&server)
-            .get_crypto_transfers_for_account(account())
-            .await
-            .is_err()
-    );
-
-    let server = expect_route(
+    expect_route(
         "GET",
-        &format!("/v1/accounts/{ACCOUNT}/wallets/transfers/transfer-1"),
+        &format!("/v1/accounts/{ACCOUNT}/wallets"),
+        |broker| async move { broker.get_crypto_wallets_for_account(account(), None).await },
     )
     .await;
-    assert!(
-        client(&server)
-            .get_crypto_transfer_for_account(account(), "transfer-1")
-            .await
-            .is_err()
-    );
 
-    let server = expect_route("GET", &format!("/v1/accounts/{ACCOUNT}/wallets/whitelists")).await;
-    assert!(
-        client(&server)
-            .get_whitelisted_addresses_for_account(account())
-            .await
-            .is_err()
-    );
+    expect_route(
+        "GET",
+        &format!("/v1/accounts/{ACCOUNT}/wallets/transfers"),
+        |broker| async move { broker.get_crypto_transfers_for_account(account()).await },
+    )
+    .await;
+
+    expect_route(
+        "GET",
+        &format!("/v1/accounts/{ACCOUNT}/wallets/transfers/transfer-1"),
+        |broker| async move {
+            broker
+                .get_crypto_transfer_for_account(account(), "transfer-1")
+                .await
+        },
+    )
+    .await;
+
+    expect_route(
+        "GET",
+        &format!("/v1/accounts/{ACCOUNT}/wallets/whitelists"),
+        |broker| async move {
+            broker
+                .get_whitelisted_addresses_for_account(account())
+                .await
+        },
+    )
+    .await;
 }
 
 // ------------------------------------------------------------------ other
 
 #[tokio::test]
 async fn the_remaining_reads_reach_their_documented_paths() {
-    let server = expect_route("GET", &format!("/v1/rebalancing/portfolios/{OTHER}")).await;
-    assert!(client(&server).get_portfolio_by_id(other()).await.is_err());
-
-    let server = expect_route("GET", "/v1/ipos/offer-1").await;
-    assert!(client(&server).get_ipo_offering("offer-1").await.is_err());
-
-    let server = expect_route("GET", &format!("/v1/oauth/clients/{OTHER}")).await;
-    assert!(
-        client(&server)
-            .get_oauth_client(other(), None)
-            .await
-            .is_err()
-    );
-
-    // Deprecated by Alpaca and still answering, so it still has to route.
-    let server = expect_route(
+    expect_route(
         "GET",
-        &format!("/v1/corporate_actions/announcements/{OTHER}"),
+        &format!("/v1/rebalancing/portfolios/{OTHER}"),
+        |broker| async move { broker.get_portfolio_by_id(other()).await },
     )
     .await;
-    #[allow(deprecated)]
-    let called = client(&server)
-        .get_corporate_announcement_by_id(other())
-        .await;
-    assert!(called.is_err());
+
+    expect_route("GET", "/v1/ipos/offer-1", |broker| async move {
+        broker.get_ipo_offering("offer-1").await
+    })
+    .await;
+
+    expect_route(
+        "GET",
+        &format!("/v1/oauth/clients/{OTHER}"),
+        |broker| async move { broker.get_oauth_client(other(), None).await },
+    )
+    .await;
+
+    // Deprecated by Alpaca and still answering, so it still has to route.
+    expect_route(
+        "GET",
+        &format!("/v1/corporate_actions/announcements/{OTHER}"),
+        |broker| async move {
+            #[allow(deprecated)]
+            let called = broker.get_corporate_announcement_by_id(other()).await;
+            called
+        },
+    )
+    .await;
 }
 
 // ------------------------------------------------------------ event streams
@@ -392,17 +411,25 @@ async fn the_remaining_reads_reach_their_documented_paths() {
 /// activities is `v2beta1` and the other three are `v2`, on a `v1` client.
 #[tokio::test]
 async fn the_newer_event_streams_carry_their_own_version_segments() {
-    let server = expect_route("GET", "/v2beta1/events/activities").await;
-    assert!(client(&server).get_activity_events(None).await.is_err());
+    expect_route("GET", "/v2beta1/events/activities", |broker| async move {
+        broker.get_activity_events(None).await
+    })
+    .await;
 
-    let server = expect_route("GET", "/v2/events/admin-actions").await;
-    assert!(client(&server).get_admin_action_events(None).await.is_err());
+    expect_route("GET", "/v2/events/admin-actions", |broker| async move {
+        broker.get_admin_action_events(None).await
+    })
+    .await;
 
-    let server = expect_route("GET", "/v2/events/ipos").await;
-    assert!(client(&server).get_ipo_events(None).await.is_err());
+    expect_route("GET", "/v2/events/ipos", |broker| async move {
+        broker.get_ipo_events(None).await
+    })
+    .await;
 
-    let server = expect_route("GET", "/v2/events/system").await;
-    assert!(client(&server).get_system_events(None).await.is_err());
+    expect_route("GET", "/v2/events/system", |broker| async move {
+        broker.get_system_events(None).await
+    })
+    .await;
 }
 
 // ------------------------------------------------------- writes on behalf
@@ -411,174 +438,173 @@ async fn the_newer_event_streams_carry_their_own_version_segments() {
 /// wrong verb is a 405 in production and compiles perfectly.
 #[tokio::test]
 async fn the_trading_writes_use_the_verb_alpaca_documents() {
-    let server = expect_route(
+    expect_route(
         "DELETE",
         &format!("/v1/trading/accounts/{ACCOUNT}/positions"),
+        |broker| async move {
+            broker
+                .close_all_positions_for_account(account(), Some(true))
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .close_all_positions_for_account(account(), Some(true))
-            .await
-            .is_err()
-    );
 
-    let server = expect_route(
+    expect_route(
         "DELETE",
         &format!("/v1/trading/accounts/{ACCOUNT}/positions/AAPL"),
+        |broker| async move {
+            broker
+                .close_position_for_account(account(), &AssetIdent::from("AAPL"), None)
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .close_position_for_account(account(), &AssetIdent::from("AAPL"), None)
-            .await
-            .is_err()
-    );
 
-    let server = expect_route("DELETE", &format!("/v1/trading/accounts/{ACCOUNT}/orders")).await;
-    assert!(
-        client(&server)
-            .cancel_orders_for_account(account())
-            .await
-            .is_err()
-    );
+    expect_route(
+        "DELETE",
+        &format!("/v1/trading/accounts/{ACCOUNT}/orders"),
+        |broker| async move { broker.cancel_orders_for_account(account()).await },
+    )
+    .await;
 
-    let server = expect_route(
+    expect_route(
         "PATCH",
         &format!("/v1/trading/accounts/{ACCOUNT}/orders/{OTHER}"),
+        |broker| async move {
+            broker
+                .replace_order_for_account_by_id(
+                    account(),
+                    other(),
+                    Some(&ReplaceOrderRequest::new()),
+                )
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .replace_order_for_account_by_id(account(), other(), Some(&ReplaceOrderRequest::new()))
-            .await
-            .is_err()
-    );
 
-    let server = expect_route(
+    expect_route(
         "POST",
         &format!("/v1/trading/accounts/{ACCOUNT}/orders/estimation"),
+        |broker| async move {
+            broker
+                .estimate_order(account(), &EstimateOrderRequest::default())
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .estimate_order(account(), &EstimateOrderRequest::default())
-            .await
-            .is_err()
-    );
 
-    let server = expect_route(
+    expect_route(
         "POST",
         &format!("/v1/trading/accounts/{ACCOUNT}/positions/AAPL240119C00150000/do-not-exercise"),
+        |broker| async move {
+            broker
+                .do_not_exercise(account(), &AssetIdent::from("AAPL240119C00150000"))
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .do_not_exercise(account(), &AssetIdent::from("AAPL240119C00150000"))
-            .await
-            .is_err()
-    );
 }
 
 /// The four watchlist verbs on one path pair. `POST` adds an asset and `PUT`
 /// replaces the list — swapping them silently rewrites a caller's watchlist.
 #[tokio::test]
 async fn the_watchlist_verbs_are_not_interchangeable() {
-    let server = expect_route(
+    expect_route(
         "POST",
         &format!("/v1/trading/accounts/{ACCOUNT}/watchlists"),
+        |broker| async move {
+            broker
+                .create_watchlist_for_account(
+                    account(),
+                    &CreateWatchlistRequest::new("mine", vec![]),
+                )
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .create_watchlist_for_account(account(), &CreateWatchlistRequest::new("mine", vec![]))
-            .await
-            .is_err()
-    );
 
-    let server = expect_route(
+    expect_route(
         "PUT",
         &format!("/v1/trading/accounts/{ACCOUNT}/watchlists/{OTHER}"),
+        |broker| async move {
+            broker
+                .update_watchlist_for_account_by_id(
+                    account(),
+                    other(),
+                    &UpdateWatchlistRequest::new().name("renamed"),
+                )
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .update_watchlist_for_account_by_id(
-                account(),
-                other(),
-                &UpdateWatchlistRequest::new().name("renamed")
-            )
-            .await
-            .is_err()
-    );
 
-    let server = expect_route(
+    expect_route(
         "POST",
         &format!("/v1/trading/accounts/{ACCOUNT}/watchlists/{OTHER}"),
+        |broker| async move {
+            broker
+                .add_asset_to_watchlist_for_account_by_id(account(), other(), "AAPL")
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .add_asset_to_watchlist_for_account_by_id(account(), other(), "AAPL")
-            .await
-            .is_err()
-    );
 
-    let server = expect_route(
+    expect_route(
         "DELETE",
         &format!("/v1/trading/accounts/{ACCOUNT}/watchlists/{OTHER}/AAPL"),
+        |broker| async move {
+            broker
+                .remove_asset_from_watchlist_for_account_by_id(account(), other(), "AAPL")
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .remove_asset_from_watchlist_for_account_by_id(account(), other(), "AAPL")
-            .await
-            .is_err()
-    );
 }
 
 // -------------------------------------------------- instant funding writes
 
 #[tokio::test]
 async fn the_instant_funding_writes_reach_their_paths() {
-    let server = expect_route("DELETE", "/v1/instant_funding/fund-1").await;
-    assert!(
-        client(&server)
-            .cancel_instant_funding("fund-1")
-            .await
-            .is_err()
-    );
+    expect_route(
+        "DELETE",
+        "/v1/instant_funding/fund-1",
+        |broker| async move { broker.cancel_instant_funding("fund-1").await },
+    )
+    .await;
 
     // This one could not be called at all until the list was comma-joined: a
     // bare `Vec` in a query struct fails reqwest's builder with "unsupported
     // value", so the request never left the process and the mock below saw
     // nothing. The 404 it now gets is the improvement.
-    let server = expect_route("GET", "/v1/instant_funding/limits/accounts").await;
-    assert!(
-        client(&server)
-            .get_instant_funding_account_limits(&GetAccountLimitsRequest::new(vec![
-                "9001".to_owned(),
-                "9002".to_owned(),
-            ]))
-            .await
-            .is_err()
-    );
-    let sent = &server.received_requests().await.unwrap()[0];
-    assert_eq!(sent.url.query(), Some("account_numbers=9001%2C9002"));
+    let sent = expect_route(
+        "GET",
+        "/v1/instant_funding/limits/accounts",
+        |broker| async move {
+            broker
+                .get_instant_funding_account_limits(&GetAccountLimitsRequest::new(vec![
+                    "9001".to_owned(),
+                    "9002".to_owned(),
+                ]))
+                .await
+        },
+    )
+    .await;
+    assert_eq!(sent[0].url.query(), Some("account_numbers=9001%2C9002"));
 
     // The settlement must name at least one transfer — an empty one is rejected
     // before it is sent, and would leave this mock never called.
-    let server = expect_route("POST", "/v1/instant_funding/settlements").await;
-    let settlement = CreateInstantFundingSettlementRequest::new(vec![SettlementTransfer {
-        instant_transfer_id: other(),
-        transmitter_info: TransmitterInfo::default(),
-    }]);
-    assert!(
-        client(&server)
-            .create_instant_funding_settlement(&settlement)
-            .await
-            .is_err()
-    );
+    expect_route(
+        "POST",
+        "/v1/instant_funding/settlements",
+        |broker| async move {
+            let settlement = CreateInstantFundingSettlementRequest::new(vec![SettlementTransfer {
+                instant_transfer_id: other(),
+                transmitter_info: TransmitterInfo::default(),
+            }]);
+            broker.create_instant_funding_settlement(&settlement).await
+        },
+    )
+    .await;
 }
 
 // ----------------------------------------------------------- funding wallet
@@ -587,76 +613,80 @@ async fn the_instant_funding_writes_reach_their_paths() {
 /// whether an account id is present.
 #[tokio::test]
 async fn the_funding_wallet_writes_are_v1beta() {
-    let server = expect_route("POST", "/v1beta/accounts/funding_wallet").await;
-    assert!(
-        client(&server)
-            .batch_create_funding_wallets(&BatchCreateFundingWalletsRequest::new(vec![account()]))
-            .await
-            .is_err()
-    );
+    expect_route(
+        "POST",
+        "/v1beta/accounts/funding_wallet",
+        |broker| async move {
+            broker
+                .batch_create_funding_wallets(&BatchCreateFundingWalletsRequest::new(vec![
+                    account(),
+                ]))
+                .await
+        },
+    )
+    .await;
 
-    let server = expect_route(
+    expect_route(
         "POST",
         &format!("/v1beta/accounts/{ACCOUNT}/funding_wallet"),
+        |broker| async move { broker.create_funding_wallet(account()).await },
     )
     .await;
-    assert!(
-        client(&server)
-            .create_funding_wallet(account())
-            .await
-            .is_err()
-    );
 
-    let server = expect_route(
+    expect_route(
         "DELETE",
         &format!("/v1beta/accounts/{ACCOUNT}/funding_wallet/recipient_bank"),
+        |broker| async move { broker.delete_recipient_bank(account()).await },
     )
     .await;
-    assert!(
-        client(&server)
-            .delete_recipient_bank(account())
-            .await
-            .is_err()
-    );
 
-    let server = expect_route("POST", "/v1beta/demo/banking/funding").await;
-    assert!(
-        client(&server)
-            .create_demo_funding(&DemoFundingRequest::new(
-                Decimal::ONE,
-                SupportedCurrencies::Usd,
-                "9001"
-            ))
-            .await
-            .is_err()
-    );
+    expect_route(
+        "POST",
+        "/v1beta/demo/banking/funding",
+        |broker| async move {
+            broker
+                .create_demo_funding(&DemoFundingRequest::new(
+                    Decimal::ONE,
+                    SupportedCurrencies::Usd,
+                    "9001",
+                ))
+                .await
+        },
+    )
+    .await;
 }
 
 // -------------------------------------------------------------- onboarding
 
 #[tokio::test]
 async fn the_onboarding_writes_reach_their_paths() {
-    let server = expect_route("POST", &format!("/v1/accounts/{ACCOUNT}/options/approval")).await;
-    assert!(
-        client(&server)
-            .request_options_approval(
-                account(),
-                &RequestOptionsApprovalRequest::new(OptionsLevel::Two).unwrap()
-            )
-            .await
-            .is_err()
-    );
+    expect_route(
+        "POST",
+        &format!("/v1/accounts/{ACCOUNT}/options/approval"),
+        |broker| async move {
+            broker
+                .request_options_approval(
+                    account(),
+                    &RequestOptionsApprovalRequest::new(OptionsLevel::Two).unwrap(),
+                )
+                .await
+        },
+    )
+    .await;
 
-    let server = expect_route("PATCH", &format!("/v1/accounts/{ACCOUNT}/onfido/sdk")).await;
-    assert!(
-        client(&server)
-            .update_onfido_outcome(
-                account(),
-                &UpdateOnfidoOutcomeRequest::new("tok", "USER_EXITED")
-            )
-            .await
-            .is_err()
-    );
+    expect_route(
+        "PATCH",
+        &format!("/v1/accounts/{ACCOUNT}/onfido/sdk"),
+        |broker| async move {
+            broker
+                .update_onfido_outcome(
+                    account(),
+                    &UpdateOnfidoOutcomeRequest::new("tok", "USER_EXITED"),
+                )
+                .await
+        },
+    )
+    .await;
 }
 
 // ------------------------------------------------------------ tokenization
@@ -665,79 +695,76 @@ async fn the_onboarding_writes_reach_their_paths() {
 /// URL-encoding the colon would 404.
 #[tokio::test]
 async fn the_tokenization_routes_keep_their_colons() {
-    let server = expect_route("POST", &format!("/v1/accounts/{ACCOUNT}/tokenization/mint")).await;
-    assert!(
-        client(&server)
-            .mint_token_for_account(
-                account(),
-                &MintTokenRequest::new(
-                    "AAPL",
-                    Decimal::ONE,
-                    TokenizationIssuer::Xstocks,
-                    TokenizationNetwork::Ethereum,
-                    "0xabc",
+    expect_route(
+        "POST",
+        &format!("/v1/accounts/{ACCOUNT}/tokenization/mint"),
+        |broker| async move {
+            broker
+                .mint_token_for_account(
+                    account(),
+                    &MintTokenRequest::new(
+                        "AAPL",
+                        Decimal::ONE,
+                        TokenizationIssuer::Xstocks,
+                        TokenizationNetwork::Ethereum,
+                        "0xabc",
+                    ),
                 )
-            )
-            .await
-            .is_err()
-    );
+                .await
+        },
+    )
+    .await;
 
-    let server = expect_route(
+    expect_route(
         "GET",
         &format!("/v1/accounts/{ACCOUNT}/tokenization/requests"),
+        |broker| async move {
+            broker
+                .get_tokenization_requests_for_account(account(), None)
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .get_tokenization_requests_for_account(account(), None)
-            .await
-            .is_err()
-    );
 
-    let server = expect_route(
+    expect_route(
         "GET",
         &format!("/v1/accounts/{ACCOUNT}/tokenization/requests:by_client_request_id"),
+        |broker| async move {
+            broker
+                .get_tokenization_request_by_client_id_for_account(
+                    account(),
+                    &ByClientRequestId::new("req-1"),
+                )
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .get_tokenization_request_by_client_id_for_account(
-                account(),
-                &ByClientRequestId::new("req-1")
-            )
-            .await
-            .is_err()
-    );
 
-    let server = expect_route(
+    expect_route(
         "GET",
         &format!("/v1/accounts/{ACCOUNT}/tokenization/requests:by_issuer_request_id"),
+        |broker| async move {
+            broker
+                .get_tokenization_request_by_issuer_id_for_account(account(), "iss-1")
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .get_tokenization_request_by_issuer_id_for_account(account(), "iss-1")
-            .await
-            .is_err()
-    );
 
     for callback in ["mint", "redeem"] {
-        let server = expect_route(
+        expect_route(
             "POST",
             &format!("/v1/accounts/{ACCOUNT}/tokenization/callback/{callback}"),
+            |broker| async move {
+                let body = json!({});
+                if callback == "mint" {
+                    broker.tokenization_mint_callback(account(), &body).await
+                } else {
+                    broker.tokenization_redeem_callback(account(), &body).await
+                }
+            },
         )
         .await;
-        let body = json!({});
-        let called = if callback == "mint" {
-            client(&server)
-                .tokenization_mint_callback(account(), &body)
-                .await
-        } else {
-            client(&server)
-                .tokenization_redeem_callback(account(), &body)
-                .await
-        };
-        assert!(called.is_err());
     }
 }
 
@@ -745,88 +772,89 @@ async fn the_tokenization_routes_keep_their_colons() {
 
 #[tokio::test]
 async fn the_crypto_wallet_writes_reach_their_paths() {
-    let server = expect_route("POST", &format!("/v1/accounts/{ACCOUNT}/wallets/transfers")).await;
-    assert!(
-        client(&server)
-            .create_crypto_transfer_for_account(account(), &json!({}))
-            .await
-            .is_err()
-    );
+    expect_route(
+        "POST",
+        &format!("/v1/accounts/{ACCOUNT}/wallets/transfers"),
+        |broker| async move {
+            broker
+                .create_crypto_transfer_for_account(account(), &json!({}))
+                .await
+        },
+    )
+    .await;
 
-    let server = expect_route(
+    expect_route(
         "POST",
         &format!("/v1/accounts/{ACCOUNT}/wallets/whitelists"),
+        |broker| async move {
+            broker
+                .create_whitelisted_address_for_account(
+                    account(),
+                    &CreateWhitelistedAddressRequest::new("0xabc", "ETH", CryptoChain::Eth),
+                )
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .create_whitelisted_address_for_account(
-                account(),
-                &CreateWhitelistedAddressRequest::new("0xabc", "ETH", CryptoChain::Eth)
-            )
-            .await
-            .is_err()
-    );
 
-    let server = expect_route(
+    expect_route(
         "DELETE",
         &format!("/v1/accounts/{ACCOUNT}/wallets/whitelists/addr-1"),
+        |broker| async move {
+            broker
+                .delete_whitelisted_address_for_account(account(), "addr-1")
+                .await
+        },
     )
     .await;
-    assert!(
-        client(&server)
-            .delete_whitelisted_address_for_account(account(), "addr-1")
-            .await
-            .is_err()
-    );
 
-    let server = expect_route("GET", "/v1/wallets/fees/estimate").await;
-    assert!(
-        client(&server)
+    expect_route("GET", "/v1/wallets/fees/estimate", |broker| async move {
+        broker
             .estimate_crypto_transfer_fee(&TransferFeeEstimateRequest::new(
                 "ETH",
                 "0xfrom",
                 "0xto",
-                Decimal::ONE
+                Decimal::ONE,
             ))
             .await
-            .is_err()
-    );
+    })
+    .await;
 }
 
 // --------------------------------------------------------------- remaining
 
 #[tokio::test]
 async fn the_last_few_reads_reach_their_paths() {
-    let server = expect_route("GET", "/v1/rebalancing/runs").await;
-    assert!(
-        client(&server)
+    expect_route("GET", "/v1/rebalancing/runs", |broker| async move {
+        broker
             .get_all_runs(Some(&GetRunsRequest::default()), Some(1))
             .await
-            .is_err()
-    );
+    })
+    .await;
 
-    let server = expect_route("GET", "/v1/reporting/eod/aggregate_positions").await;
-    assert!(
-        client(&server)
-            .get_aggregate_positions(&GetAggregatePositionsRequest::new(
-                "2024-04-26".parse().unwrap()
-            ))
-            .await
-            .is_err()
-    );
+    expect_route(
+        "GET",
+        "/v1/reporting/eod/aggregate_positions",
+        |broker| async move {
+            broker
+                .get_aggregate_positions(&GetAggregatePositionsRequest::new(
+                    "2024-04-26".parse().unwrap(),
+                ))
+                .await
+        },
+    )
+    .await;
 
-    let server = expect_route("POST", "/v1/oauth/authorize").await;
-    assert!(
-        client(&server)
+    expect_route("POST", "/v1/oauth/authorize", |broker| async move {
+        broker
             .authorize_oauth(&OAuthRequest::new(
                 account(),
                 "client",
                 "secret",
                 "https://example.test/cb",
-                "account:write"
+                "account:write",
             ))
             .await
-            .is_err()
-    );
+    })
+    .await;
 }
