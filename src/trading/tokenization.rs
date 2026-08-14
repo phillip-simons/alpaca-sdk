@@ -91,6 +91,7 @@ pub struct TokenizationRequest {
     /// The token's symbol.
     pub token_symbol: String,
     /// How many units.
+    #[serde(with = "crate::types::decimal")]
     pub qty: Decimal,
     /// Who issues the token.
     pub issuer: TokenizationIssuer,
@@ -100,7 +101,7 @@ pub struct TokenizationRequest {
     #[serde(default)]
     pub wallet_address: Option<String>,
     /// Fees charged.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub fees: Option<Decimal>,
     /// The on-chain transaction, once there is one.
     #[serde(default)]

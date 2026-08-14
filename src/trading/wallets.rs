@@ -105,10 +105,10 @@ pub struct CryptoTransfer {
     #[serde(default)]
     pub asset: Option<String>,
     /// How much.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub amount: Option<Decimal>,
     /// What it was worth in USD.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub usd_value: Option<Decimal>,
     /// The chain.
     #[serde(default)]
@@ -126,10 +126,10 @@ pub struct CryptoTransfer {
     #[serde(default)]
     pub to_address: Option<String>,
     /// Alpaca's fee.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub fees: Option<Decimal>,
     /// The chain's own fee.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub network_fee: Option<Decimal>,
     /// The on-chain transaction.
     #[serde(default)]
@@ -168,10 +168,10 @@ pub struct WhitelistedAddress {
 #[non_exhaustive]
 pub struct TransferFeeEstimate {
     /// Alpaca's fee.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub fee: Option<Decimal>,
     /// The chain's own fee.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub network_fee: Option<Decimal>,
 }
 

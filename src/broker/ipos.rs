@@ -43,8 +43,10 @@ pub struct IpoOffering {
     /// `Available` and refuse new orders while it prices.
     pub no_new_orders: bool,
     /// The bottom of the price band.
+    #[serde(with = "crate::types::decimal")]
     pub min_price: Decimal,
     /// The top of it.
+    #[serde(with = "crate::types::decimal")]
     pub max_price: Decimal,
     /// The ticker it will trade under.
     #[serde(default)]

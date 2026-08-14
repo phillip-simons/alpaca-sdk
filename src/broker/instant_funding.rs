@@ -79,6 +79,7 @@ pub struct InstantFundingFee {
     #[serde(rename = "type")]
     pub fee_type: InstantFundingFeeType,
     /// How much.
+    #[serde(with = "crate::types::decimal")]
     pub amount: Decimal,
 }
 
@@ -91,6 +92,7 @@ pub struct InstantFundingInterest {
     /// The day it accrued for.
     pub date: NaiveDate,
     /// How much.
+    #[serde(with = "crate::types::decimal")]
     pub amount: Decimal,
     /// Where the charge stands.
     pub status: InstantFundingStatus,
@@ -112,10 +114,13 @@ pub struct InstantFunding {
     /// The account the money is owed from.
     pub source_account_no: String,
     /// How much was advanced.
+    #[serde(with = "crate::types::decimal")]
     pub amount: Decimal,
     /// How much is still owed.
+    #[serde(with = "crate::types::decimal")]
     pub remaining_payable: Decimal,
     /// Interest accrued so far.
+    #[serde(with = "crate::types::decimal")]
     pub total_interest: Decimal,
     /// Where the advance stands.
     pub status: InstantFundingStatus,
@@ -144,13 +149,13 @@ pub struct InstantFunding {
 #[non_exhaustive]
 pub struct InstantFundingLimits {
     /// The ceiling.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub amount_limit: Option<Decimal>,
     /// How much of it is committed.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub amount_in_use: Option<Decimal>,
     /// How much is left.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub amount_available: Option<Decimal>,
 }
 
@@ -161,10 +166,13 @@ pub struct AccountInstantFundingLimits {
     /// The account.
     pub account_no: String,
     /// Its ceiling.
+    #[serde(with = "crate::types::decimal")]
     pub amount_limit: Decimal,
     /// How much of it is committed.
+    #[serde(with = "crate::types::decimal")]
     pub amount_in_use: Decimal,
     /// How much is left.
+    #[serde(with = "crate::types::decimal")]
     pub amount_available: Decimal,
 }
 
@@ -179,8 +187,10 @@ pub struct InstantFundingReport {
     /// The settlement deadline.
     pub deadline: NaiveDate,
     /// Everything owed on that day.
+    #[serde(with = "crate::types::decimal")]
     pub total_amount_owed: Decimal,
     /// Interest charged for missing the deadline.
+    #[serde(with = "crate::types::decimal")]
     pub total_interest_penalty: Decimal,
     /// The advances behind the total.
     #[serde(

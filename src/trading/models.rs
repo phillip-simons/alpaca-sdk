@@ -742,7 +742,11 @@ pub struct AccountConfiguration {
     /// Whether the account may trade fractional shares.
     pub fractional_trading: bool,
     /// Maximum margin multiplier, between 1 and 4.
-    pub max_margin_multiplier: String,
+    ///
+    /// The same quantity as [`TradeAccount::multiplier`], so it carries the
+    /// same type rather than being left as the `"4"` the wire sends.
+    #[serde(with = "crate::types::decimal")]
+    pub max_margin_multiplier: Decimal,
     /// Whether the account is restricted to long-only.
     pub no_shorting: bool,
     /// Pattern Day Trader check.
@@ -874,10 +878,17 @@ pub struct OptionContract {
     #[serde(with = "crate::types::decimal")]
     pub strike_price: Decimal,
     /// Contract size, usually 100.
-    pub size: String,
+    ///
+    /// Sent as a string — `"100"` in the captured contract responses — so it
+    /// goes through the integer codec rather than being kept as text.
+    #[serde(with = "crate::types::int")]
+    pub size: i64,
     /// Open interest in the contract.
-    #[serde(default, with = "crate::types::option_decimal")]
-    pub open_interest: Option<Decimal>,
+    ///
+    /// Also a string-integer on the wire (`"0"`), so it shares `size`'s shape
+    /// rather than being modelled as a decimal.
+    #[serde(default, with = "crate::types::option_int")]
+    pub open_interest: Option<i64>,
     /// Date the open interest figure is from.
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub open_interest_date: Option<NaiveDate>,

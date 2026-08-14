@@ -85,9 +85,10 @@ pub struct Settlement {
     /// Where it stands.
     pub status: SettlementStatus,
     /// The amount settled.
+    #[serde(with = "crate::types::decimal")]
     pub total_amount: Decimal,
     /// Interest included in that amount.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub interest_amount: Option<Decimal>,
     /// Which book it belongs to.
     #[serde(default)]

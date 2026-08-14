@@ -377,10 +377,10 @@ pub struct EntryRequirement {
     /// The symbol.
     pub symbol: String,
     /// The margin requirement for a long position, as a fraction.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub regt_long: Option<Decimal>,
     /// The margin requirement for a short position, as a fraction.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub regt_short: Option<Decimal>,
 }
 

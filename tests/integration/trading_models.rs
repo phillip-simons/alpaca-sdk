@@ -74,7 +74,9 @@ fn account_configuration_deserializes() {
         parse("trading/test_account_routes__test_get_account_configurations__01.json");
 
     assert!(!config.no_shorting);
-    assert_eq!(config.max_margin_multiplier, "4");
+    // A decimal now, matching `TradeAccount::multiplier`; the wire form is
+    // still the string `"4"`, which is what the rendering asserts.
+    assert_eq!(config.max_margin_multiplier.to_string(), "4");
 }
 
 #[test]

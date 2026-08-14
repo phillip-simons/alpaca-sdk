@@ -55,19 +55,19 @@ pub struct AggregatePosition {
     #[serde(default)]
     pub num_accounts: Option<i64>,
     /// Shares held long.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub long_qty: Option<Decimal>,
     /// What those are worth.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub long_market_value: Option<Decimal>,
     /// Shares held short.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub short_qty: Option<Decimal>,
     /// What those are worth.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub short_market_value: Option<Decimal>,
     /// The closing price used.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub closing_price: Option<Decimal>,
 }
 
@@ -85,16 +85,16 @@ pub struct CashInterestDetail {
     #[serde(default)]
     pub currency: Option<crate::types::SupportedCurrencies>,
     /// The cash it was earned on.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub cash_balance: Option<Decimal>,
     /// What the account earned.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub account_accrued_interest: Option<Decimal>,
     /// At what rate, in basis points.
     #[serde(default)]
     pub account_rate_bps: Option<i64>,
     /// What the correspondent took.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub correspondent_fee: Option<Decimal>,
     /// At what rate, in basis points.
     #[serde(default)]
@@ -133,7 +133,7 @@ pub struct AprTierDetails {
     #[serde(default)]
     pub total_accounts: Option<i64>,
     /// How much cash between them.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub total_balance: Option<Decimal>,
 }
 

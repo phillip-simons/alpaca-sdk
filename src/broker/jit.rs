@@ -92,10 +92,10 @@ pub struct JitLedgerTransaction {
     #[serde(default)]
     pub description: Option<String>,
     /// How much moved.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub amount: Option<Decimal>,
     /// The balance after it.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub balance: Option<Decimal>,
     /// The business day.
     #[serde(default)]
@@ -116,13 +116,13 @@ pub struct JitLedgerBalances {
     #[serde(default)]
     pub ledger_no: Option<String>,
     /// The balance at the start of the window.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub starting_balance: Option<Decimal>,
     /// The balance at the end of it.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub ending_balance: Option<Decimal>,
     /// The net of everything in between.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub activity_amount: Option<Decimal>,
     /// The movements.
     #[serde(
@@ -140,25 +140,25 @@ pub struct JitTradingLimits {
     #[serde(default)]
     pub correspondent: Option<String>,
     /// The net ceiling for the day.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub daily_net_limit: Option<Decimal>,
     /// How much of it is committed.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub in_use_limit: Option<Decimal>,
     /// Cash on hand.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub cash_held: Option<Decimal>,
     /// Buys already filled.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub executed_buys: Option<Decimal>,
     /// Sells already filled.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub executed_sells: Option<Decimal>,
     /// Buys still working.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub open_buys: Option<Decimal>,
     /// Sells still working.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub open_sells: Option<Decimal>,
 }
 

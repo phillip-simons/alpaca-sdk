@@ -62,13 +62,13 @@ pub struct Locate {
     #[serde(default)]
     pub located_qty: Option<i64>,
     /// The fee per share paid. Absent when rejected.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub located_price: Option<Decimal>,
     /// The highest fee per share the request would accept.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub limit_price: Option<Decimal>,
     /// The total fee for the locate.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub total_fee: Option<Decimal>,
     /// Whether the request required the full quantity or nothing.
     #[serde(default)]
@@ -107,7 +107,7 @@ pub struct LocateQuote {
     /// Shares available to borrow.
     pub available_qty: i64,
     /// The fee per share.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub price: Option<Decimal>,
     /// When the quote was taken.
     pub quoted_at: DateTime<Utc>,

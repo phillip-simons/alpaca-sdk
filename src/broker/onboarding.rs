@@ -285,16 +285,16 @@ pub struct IraExcessContribution {
 #[non_exhaustive]
 pub struct TradingLimitsUsd {
     /// The ceiling for the day.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub daily_net_limit: Option<Decimal>,
     /// How much is committed.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub used: Option<Decimal>,
     /// How much is left.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub available: Option<Decimal>,
     /// How much is held against open orders.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub held: Option<Decimal>,
 }
 
@@ -303,19 +303,19 @@ pub struct TradingLimitsUsd {
 #[non_exhaustive]
 pub struct TradingLimits {
     /// The ceiling for the day.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub daily_net_limit: Option<Decimal>,
     /// How much is committed.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub used: Option<Decimal>,
     /// How much is left.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub available: Option<Decimal>,
     /// How much is held against open orders.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub held: Option<Decimal>,
     /// The rate used to convert, on a non-USD account.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub swap_rate: Option<Decimal>,
     /// The same figures in USD, on a non-USD account.
     #[serde(default)]

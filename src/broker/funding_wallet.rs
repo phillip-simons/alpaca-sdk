@@ -169,6 +169,7 @@ pub struct FundingFee {
     #[serde(rename = "type")]
     pub fee_type: FundingFeeType,
     /// How much.
+    #[serde(with = "crate::types::decimal")]
     pub amount: Decimal,
     /// In what currency.
     pub currency: crate::types::SupportedCurrencies,
@@ -181,6 +182,7 @@ pub struct FundingFee {
 #[non_exhaustive]
 pub struct UsdAmount {
     /// How much, in USD.
+    #[serde(with = "crate::types::decimal")]
     pub amount: Decimal,
 }
 
@@ -204,10 +206,10 @@ pub struct FundingWalletTransfer {
     #[serde(default)]
     pub payment_type: Option<PaymentType>,
     /// What was asked for.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub requested_amount: Option<Decimal>,
     /// What arrived, before conversion.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub original_amount: Option<Decimal>,
     /// In what currency.
     #[serde(default)]
@@ -262,7 +264,7 @@ pub struct RecipientBank {
     pub routing_code: Option<String>,
     /// Which scheme that code belongs to.
     #[serde(default)]
-    pub routing_code_type: Option<String>,
+    pub routing_code_type: Option<RoutingCodeType>,
     /// The holder's first name, for an individual.
     #[serde(default)]
     pub first_name: Option<String>,
