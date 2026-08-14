@@ -2480,10 +2480,7 @@ impl BrokerClient {
         account_id: Uuid,
         transfer_id: Uuid,
     ) -> Result<FundingWalletTransfer> {
-        let path = format!(
-            "/accounts/{account_id}/funding_wallet/transfers/{}",
-            transfer_id
-        );
+        let path = format!("/accounts/{account_id}/funding_wallet/transfers/{transfer_id}");
         self.rest.at_version("v1beta").get(&path, &Empty).await
     }
 
@@ -2702,10 +2699,7 @@ impl BrokerClient {
         account_id: Uuid,
         request_id: Uuid,
     ) -> Result<crate::trading::TokenizationRequest> {
-        let path = format!(
-            "/accounts/{account_id}/tokenization/requests/{}",
-            request_id
-        );
+        let path = format!("/accounts/{account_id}/tokenization/requests/{request_id}");
         self.rest.get(&path, &Empty).await
     }
 

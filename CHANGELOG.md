@@ -83,6 +83,13 @@ behaviour changes are worth reading before the first release rather than after.
   ambient runtime handle, which is present both inside an async fn (where
   blocking panics) and inside `spawn_blocking` (where it is fine). The supported
   bridge from an async program into the façade was the one path it rejected.
+
+  The guard is now tokio's own answer, caught and converted. **On a
+  `panic = "abort"` profile that recovery does not exist**, so calling the façade
+  from an async context aborts the process where it used to return an error.
+  There is no cheaper pre-check — nothing distinguishes an async fn from a
+  `spawn_blocking` closure — so this is a deliberate trade of a misuse-path
+  error for the supported path working. It is written up on `Blocking` itself.
 - **`oto_take_profit` and `oto_stop_loss` replace rather than accumulate.**
   Chaining both produced an `oto` order carrying two exit legs that `validate`
   accepted.
@@ -101,15 +108,9 @@ behaviour changes are worth reading before the first release rather than after.
   accepts and immediately hangs up, about one connection a second at an endpoint
   that allows one per account. So a session clears the count when it delivered
   data or stayed up past `stable_session`.
-- **The blocking façade re-raises panics it did not cause.** `catch_unwind`
-  reported *every* escaping panic as "you called this from an async context",
-  which would have hidden a genuine bug in the caller's own future.
 - **`get_option_chain` and `get_market_movers` encode their path segments.** Both
   interpolate a request *field* rather than a bare argument, so the first
   encoding sweep missed them.
-- **`OneOrMany` reports the real decode error.** As an untagged enum it discarded
-  both branches' errors on exactly the routes whose payloads have never been
-  seen.
 - **`JitReport` reports the real decode error too.** It was the other untagged
   enum on an unobserved route, and it was discarding the carefully worded error
   its own inline arm produces.
@@ -139,12 +140,13 @@ behaviour changes are worth reading before the first release rather than after.
 Decisions that become expensive after the first release, settled now.
 
 - **Response models are `#[non_exhaustive]`,** across every module rather than
-  the three model files — 80 further types, including all fourteen corporate
+  the three model files — 88 further types, including all fourteen corporate
   action shapes and the funding, JIT, reporting, IPO, OAuth and locate responses.
   Request structs carry it too, as CONTRIBUTING states — the exemptions are
-  clients, and the handful of caller-constructed value types where the attribute
-  costs something and buys nothing: `OrderAmount`, `Trail`, `StopLimit`,
-  `SettlementTransfer`, `W8BenDocument` and `StreamConfig`. `CHANGELOG` stated the policy as a guarantee; `trading/models.rs`, `broker/models.rs` and `data/models.rs` had it
+  clients, and the caller-constructed value types where the attribute costs
+  something and buys nothing: `OrderAmount`, `Trail`, `StopLimit`, `Symbols`,
+  `TimeFrame`, `Codes`, `SettlementTransfer`, `JitSettlementAccount`,
+  `TransmitterInfo`, `W8BenDocument` and `StreamConfig`. `CHANGELOG` stated the policy as a guarantee; `trading/models.rs`, `broker/models.rs` and `data/models.rs` had it
   on nothing. Alpaca adds fields without a version bump, and without the
   attribute the crate cannot follow an *additive* upstream change without a major
   release of its own. Several request-body components gain constructors as a

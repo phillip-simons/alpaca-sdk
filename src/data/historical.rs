@@ -231,6 +231,9 @@ impl StockHistoricalDataClient {
 
     /// The latest trade for each symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_stock_latest_trade(
@@ -247,6 +250,9 @@ impl StockHistoricalDataClient {
     }
 
     /// The latest quote for each symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -265,6 +271,9 @@ impl StockHistoricalDataClient {
 
     /// The latest bar for each symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_stock_latest_bar(
@@ -281,6 +290,9 @@ impl StockHistoricalDataClient {
     }
 
     /// A snapshot of the latest trade, quote, and bars for each symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -300,6 +312,9 @@ impl StockHistoricalDataClient {
     }
 
     /// Historical opening and closing auctions, keyed by symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
     ///
     /// Only the `sip` feed serves auctions.
     ///
@@ -596,6 +611,9 @@ impl CryptoHistoricalDataClient {
 
     /// Historical bars, keyed by symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_crypto_bars(
@@ -609,6 +627,9 @@ impl CryptoHistoricalDataClient {
     }
 
     /// Historical quotes, keyed by symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -624,6 +645,9 @@ impl CryptoHistoricalDataClient {
 
     /// Historical trades, keyed by symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_crypto_trades(
@@ -637,6 +661,9 @@ impl CryptoHistoricalDataClient {
     }
 
     /// The latest trade for each symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -652,6 +679,9 @@ impl CryptoHistoricalDataClient {
 
     /// The latest quote for each symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_crypto_latest_quote(
@@ -665,6 +695,9 @@ impl CryptoHistoricalDataClient {
     }
 
     /// The latest bar for each symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -680,6 +713,9 @@ impl CryptoHistoricalDataClient {
 
     /// The latest orderbook for each symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_crypto_latest_orderbook(
@@ -693,6 +729,9 @@ impl CryptoHistoricalDataClient {
     }
 
     /// A snapshot of the latest data for each symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -743,6 +782,9 @@ impl OptionHistoricalDataClient {
 
     /// Historical bars, keyed by contract symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_option_bars(&self, request: &OptionBarsRequest) -> Result<BarSet> {
@@ -757,6 +799,9 @@ impl OptionHistoricalDataClient {
 
     /// Historical trades, keyed by contract symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_option_trades(&self, request: &TimeseriesRequest) -> Result<TradeSet> {
@@ -770,6 +815,9 @@ impl OptionHistoricalDataClient {
     }
 
     /// The latest quote for each contract.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -788,6 +836,9 @@ impl OptionHistoricalDataClient {
 
     /// The latest trade for each contract.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_option_latest_trade(
@@ -805,6 +856,9 @@ impl OptionHistoricalDataClient {
 
     /// A snapshot of the latest data for each contract.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_option_snapshot(
@@ -821,6 +875,9 @@ impl OptionHistoricalDataClient {
     }
 
     /// Every contract in an underlying's option chain.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -905,6 +962,9 @@ impl ForexDataClient {
 
     /// Historical rates, keyed by currency pair.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_forex_rates(&self, request: &ForexRatesRequest) -> Result<ForexRateSet> {
@@ -918,6 +978,9 @@ impl ForexDataClient {
     }
 
     /// The latest rate for each currency pair.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty list.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.

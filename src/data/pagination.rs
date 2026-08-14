@@ -127,16 +127,23 @@ pub(crate) async fn get_marketdata<Q: Serialize>(
     // `Value::Array` and is only joined into a string later by `stringify`;
     // the request types that carry a plain comma-separated field arrive as a
     // `Value::String`. Testing only the string form made this guard dead code.
-    if let Some(symbols) = params.get("symbols") {
-        let empty = match symbols {
+    //
+    // And both *keys*: the forex requests rename the same `Symbols` field to
+    // `currency_pairs` and go through this same loop, so checking `symbols`
+    // alone left half the hazard open.
+    for key in ["symbols", "currency_pairs"] {
+        let Some(value) = params.get(key) else {
+            continue;
+        };
+        let empty = match value {
             Value::Array(items) => items.is_empty(),
             Value::String(text) => text.is_empty(),
             _ => false,
         };
         if empty {
-            return Err(Error::InvalidRequest(
-                "at least one symbol is required".to_owned(),
-            ));
+            return Err(Error::InvalidRequest(format!(
+                "at least one entry is required in `{key}`"
+            )));
         }
     }
 

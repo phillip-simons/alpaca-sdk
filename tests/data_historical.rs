@@ -7,10 +7,10 @@ use std::collections::HashMap;
 
 use alpaca_sdk::data::{
     CorporateActionsClient, CorporateActionsRequest, CryptoBarsRequest, CryptoFeed,
-    CryptoHistoricalDataClient, CryptoLatestRequest, MarketMoversRequest, MarketType,
-    MostActivesRequest, NewsClient, NewsRequest, OptionChainRequest, OptionHistoricalDataClient,
-    OptionLatestRequest, ScreenerClient, StockBarsRequest, StockHistoricalDataClient,
-    StockLatestRequest, TimeFrame, TimeFrameUnit,
+    CryptoHistoricalDataClient, CryptoLatestRequest, ForexDataClient, ForexRatesRequest,
+    MarketMoversRequest, MarketType, MostActivesRequest, NewsClient, NewsRequest,
+    OptionChainRequest, OptionHistoricalDataClient, OptionLatestRequest, ScreenerClient,
+    StockBarsRequest, StockHistoricalDataClient, StockLatestRequest, TimeFrame, TimeFrameUnit,
 };
 use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use serde_json::json;
@@ -817,6 +817,26 @@ async fn an_empty_symbol_list_never_reaches_the_network() {
         server.received_requests().await.unwrap().is_empty(),
         "an empty symbol list must not reach the network"
     );
+}
+
+/// The same hazard under the other key: the forex requests rename the same
+/// `Symbols` field to `currency_pairs`, so a guard that only checked `symbols`
+/// left half of it open.
+#[tokio::test]
+async fn an_empty_currency_pair_list_never_reaches_the_network() {
+    let server = MockServer::start().await;
+
+    let client = ForexDataClient::with_config(&credentials(), config(&server, "v1beta1")).unwrap();
+    let err = client
+        .get_forex_rates(&ForexRatesRequest::new(Vec::<String>::new()))
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, alpaca_sdk::Error::InvalidRequest(_)),
+        "expected InvalidRequest, got {err:?}"
+    );
+    assert!(server.received_requests().await.unwrap().is_empty());
 }
 
 /// The two path routes whose symbol is interpolated from a request *field*
