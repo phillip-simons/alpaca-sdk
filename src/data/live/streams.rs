@@ -41,11 +41,16 @@ trait AsUnknown {
 }
 
 macro_rules! as_unknown {
-    ($($ty:ty),+ $(,)?) => {
+    ($($ty:ident),+ $(,)?) => {
         $(
             impl AsUnknown for $ty {
                 fn is_unknown(&self) -> bool {
-                    Self::is_unknown(self)
+                    // Matched on the variant rather than delegating to the
+                    // inherent `is_unknown`: `Self::is_unknown(self)` picks the
+                    // inherent method only by precedence, so renaming or
+                    // removing it would turn this into silent infinite
+                    // recursion rather than a compile error.
+                    matches!(self, $ty::Unknown(_))
                 }
                 fn wire(&self) -> &str {
                     self.as_str()

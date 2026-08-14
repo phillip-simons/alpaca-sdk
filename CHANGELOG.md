@@ -167,14 +167,21 @@ Decisions that become expensive after the first release, settled now.
 - **Response models are `#[non_exhaustive]`,** across every module rather than
   the three model files — 88 further types, including all fourteen corporate
   action shapes and the funding, JIT, reporting, IPO, OAuth and locate responses.
-  Request structs carry it too, as CONTRIBUTING states — the exemptions are
+  Request structs carry it too, as CONTRIBUTING states. The exemptions are the
   clients, and the caller-constructed value types where the attribute costs
   something and buys nothing — among them `OrderAmount`, `Trail`, `StopLimit`,
   `AssetIdent`, `Symbols`, `TimeFrame`, `SettlementTransfer`, `W8BenDocument`
-  and `StreamConfig`. `tests/request_construction.rs` is the check that the line
-  between the two groups is drawn where it can actually be used from. `CHANGELOG` stated the policy as a guarantee; `trading/models.rs`, `broker/models.rs` and `data/models.rs` had it
-  on nothing. Alpaca adds fields without a version bump, and without the
-  attribute the crate cannot follow an *additive* upstream change without a major
+  and `StreamConfig`.
+
+  `tests/request_construction.rs` is the check that the line between the two
+  groups is drawn somewhere a caller can actually build from. It is an
+  integration test, and so an external crate, because that is the only place the
+  attribute is visible at all.
+
+  The policy was already stated here as a guarantee, and `trading/models.rs`,
+  `broker/models.rs` and `data/models.rs` carried it on nothing. Alpaca adds
+  fields without a version bump, and without the attribute the crate cannot
+  follow an *additive* upstream change without a major
   release of its own. Several request-body components gain constructors as a
   result: `Agreement::new`, `ManualACHRelationship::new`,
   `PlaidACHRelationship::new`, `RebalancingCondition::drift_band` /

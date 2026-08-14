@@ -173,6 +173,12 @@ fn request_bodies_omit_the_fields_they_do_not_set() {
     let encoded = serde_json::to_value(&cip).unwrap();
     assert!(encoded.get("document").is_none(), "{encoded}");
     assert!(encoded.get("photo").is_none(), "{encoded}");
+    // The three fields Alpaca assigns. An upload that invented a `created_at`
+    // would be putting the client's clock into a KYC record — and these two
+    // were the gap the rest of this assertion did not cover.
+    assert!(encoded.get("created_at").is_none(), "{encoded}");
+    assert!(encoded.get("updated_at").is_none(), "{encoded}");
+    assert!(encoded.get("provider_name").is_none(), "{encoded}");
     let kyc = &encoded["kyc"];
     assert_eq!(kyc["applicant_name"], "Jane Doe");
     assert!(kyc.get("risk_score").is_none(), "{kyc}");

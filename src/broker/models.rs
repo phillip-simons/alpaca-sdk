@@ -1769,9 +1769,15 @@ pub struct CIPInfo {
     )]
     pub provider_name: Vec<CIPProvider>,
     /// When the record was first uploaded.
-    pub created_at: DateTime<Utc>,
+    ///
+    /// `Option` because this type is both a response and an upload body, and on
+    /// the upload side the timestamps are Alpaca's to assign. A response always
+    /// carries them; a body built by [`CIPInfo::new`] does not, and omits them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<DateTime<Utc>>,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<DateTime<Utc>>,
     /// The KYC verdict.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kyc: Option<Box<CIPKycInfo>>,
@@ -1798,20 +1804,18 @@ impl CIPInfo {
     /// struct literal no longer provides. Set the check fields that apply on the
     /// result; Alpaca fills the rest.
     ///
-    /// `created_at` and `updated_at` are Alpaca's to assign. They are set to the
-    /// epoch rather than `now` so the body carries no client-invented time, and
-    /// they are omitted from an upload along with an empty `provider_name` — a
-    /// caller has nothing to say about any of the three, and no captured payload
-    /// or reference quote says the route ignores them.
+    /// `created_at`, `updated_at` and `provider_name` are left unset and are
+    /// omitted from the body: all three are Alpaca's to assign, a caller has
+    /// nothing to say about them, and inventing a timestamp to fill a required
+    /// field would put a client's clock into a KYC record.
     #[must_use]
     pub fn new(id: Uuid, account_id: Uuid) -> Self {
-        let unset = DateTime::from_timestamp(0, 0).unwrap_or_default();
         Self {
             id,
             account_id,
             provider_name: Vec::new(),
-            created_at: unset,
-            updated_at: unset,
+            created_at: None,
+            updated_at: None,
             kyc: None,
             document: None,
             photo: None,

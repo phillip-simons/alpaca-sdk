@@ -111,6 +111,13 @@ pub fn reconnect_delay(retries: u32, min_backoff: Duration, max_backoff: Duratio
 /// `Duration::MAX.as_secs_f64()` rounds up to just past `u64::MAX` seconds. A
 /// panic here fires inside an async task, in a crate that forbids unsafe code
 /// and never otherwise panics on caller input.
+///
+/// The saturated value is still whatever ceiling the caller asked for, so
+/// `RetryBackoff::Exponential { max: Duration::MAX }` now waits effectively
+/// forever between retries where it used to panic. That is the caller's own
+/// instruction rather than a defect — but it is quieter than a panic, so it is
+/// worth saying out loud: a retry ceiling is a ceiling, and `Duration::MAX`
+/// means "never give up".
 fn seconds_to_duration(seconds: f64, ceiling: Duration) -> Duration {
     Duration::try_from_secs_f64(seconds)
         .unwrap_or(ceiling)

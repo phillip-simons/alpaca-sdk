@@ -329,7 +329,11 @@ pub struct EstimateOrderRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbol: Option<String>,
     /// How much to spend, rather than how many shares.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub notional: Option<Decimal>,
     /// Which side.
     #[serde(default, skip_serializing_if = "Option::is_none")]
