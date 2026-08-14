@@ -456,6 +456,7 @@ pub struct CreateJitSettlementRequest {
 
 impl CreateJitSettlementRequest {
     /// Settles `accounts` in `currency` on the `asset_class` book.
+    #[must_use]
     pub fn new(
         accounts: Vec<JitSettlementAccount>,
         asset_class: SettlementAssetClass,

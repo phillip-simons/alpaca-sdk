@@ -105,6 +105,7 @@ pub struct TimeseriesRequest {
 
 impl TimeseriesRequest {
     /// A request for `symbols` with no other filters.
+    #[must_use]
     pub fn new(symbols: impl Into<Symbols>) -> Self {
         Self {
             symbol_or_symbols: symbols.into(),
@@ -174,6 +175,7 @@ pub struct StockBarsRequest {
 
 impl StockBarsRequest {
     /// Bars for `symbols` at `timeframe`.
+    #[must_use]
     pub fn new(symbols: impl Into<Symbols>, timeframe: TimeFrame) -> Self {
         Self {
             base: TimeseriesRequest::new(symbols),
@@ -340,6 +342,7 @@ pub struct StockLatestRequest {
 
 impl StockLatestRequest {
     /// The latest data for `symbols`.
+    #[must_use]
     pub fn new(symbols: impl Into<Symbols>) -> Self {
         Self {
             symbol_or_symbols: symbols.into(),

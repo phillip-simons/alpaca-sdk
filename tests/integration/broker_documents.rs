@@ -307,7 +307,10 @@ fn a_w8ben_may_not_be_uploaded_as_a_general_document() {
     // document through the W-8BEN one.
     let by_type =
         UploadDocumentRequest::new(DocumentType::W8ben, "QQ==", UploadDocumentMimeType::Pdf);
-    assert!(by_type.validate().is_err());
+    assert!(matches!(
+        by_type.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 
     let mut by_sub_type = UploadDocumentRequest::new(
         DocumentType::IdentityVerification,
@@ -315,7 +318,10 @@ fn a_w8ben_may_not_be_uploaded_as_a_general_document() {
         UploadDocumentMimeType::Pdf,
     );
     by_sub_type.document_sub_type = Some(UploadDocumentSubType::FormW8Ben);
-    assert!(by_sub_type.validate().is_err());
+    assert!(matches!(
+        by_sub_type.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 }
 
 fn w8ben() -> W8BenDocument {
@@ -358,15 +364,24 @@ fn a_w8ben_upload_takes_content_or_fields_but_not_both() {
 
     let mut both = as_fields.clone();
     both.content = Some("QQ==".to_owned());
-    assert!(both.validate().is_err());
+    assert!(matches!(
+        both.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 
     let mut neither = as_fields.clone();
     neither.content_data = None;
-    assert!(neither.validate().is_err());
+    assert!(matches!(
+        neither.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 
     let mut wrong_mime = as_fields;
     wrong_mime.mime_type = UploadDocumentMimeType::Pdf;
-    assert!(wrong_mime.validate().is_err());
+    assert!(matches!(
+        wrong_mime.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 }
 
 #[test]
@@ -374,7 +389,10 @@ fn a_w8ben_must_identify_the_applicant_for_tax() {
     // If neither tax id is given, the form has to say one is not required.
     let mut anonymous = w8ben();
     anonymous.foreign_tax_id = None;
-    assert!(anonymous.validate().is_err());
+    assert!(matches!(
+        anonymous.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 
     anonymous.ftin_not_required = Some(true);
     assert!(anonymous.validate().is_ok());

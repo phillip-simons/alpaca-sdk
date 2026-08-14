@@ -488,6 +488,7 @@ pub struct GetEntryRequirementsRequest {
 
 impl GetEntryRequirementsRequest {
     /// Requirements for `symbols`.
+    #[must_use]
     pub fn new(symbols: Vec<String>) -> Self {
         Self { symbols }
     }

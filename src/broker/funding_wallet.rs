@@ -387,6 +387,7 @@ impl CreateRecipientBankRequest {
     /// undocumented one is left to the server — and the same reasoning
     /// [`CreateBankRequest::validate`](crate::broker::CreateBankRequest::validate)
     /// applies to international bank addresses.
+    #[must_use]
     pub fn new(
         account_number: impl Into<String>,
         bank_name: impl Into<String>,

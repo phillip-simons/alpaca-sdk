@@ -202,6 +202,7 @@ impl<C> Blocking<C> {
 
     /// The wrapped client, for anything this façade does not cover — including
     /// the streams, which stay async.
+    #[must_use]
     pub fn inner(&self) -> &C {
         &self.client
     }

@@ -216,6 +216,7 @@ pub struct GetLocateQuotesRequest {
 
 impl GetLocateQuotesRequest {
     /// Quotes for `symbols`.
+    #[must_use]
     pub fn new(symbols: Vec<String>) -> Self {
         Self { symbols }
     }
@@ -243,6 +244,7 @@ pub struct CreateLocateRequest {
 
 impl CreateLocateRequest {
     /// Locate `qty` shares of `symbol`.
+    #[must_use]
     pub fn new(symbol: impl Into<String>, qty: i64) -> Self {
         Self {
             symbol: symbol.into(),

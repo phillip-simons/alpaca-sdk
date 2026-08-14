@@ -8,6 +8,7 @@ authors = ["Phillip Simons <phillip@simons.gg>"]
 license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/phillip-simons/alpaca-sdk"
+homepage = "https://github.com/phillip-simons/alpaca-sdk"
 documentation = "https://docs.rs/alpaca-sdk"
 keywords = ["alpaca", "trading", "stocks", "crypto", "finance"]
 categories = ["api-bindings", "finance"]
@@ -18,7 +19,7 @@ categories = ["api-bindings", "finance"]
 # What is excluded is what cannot work, or has no meaning, outside a clone:
 # `scripts/` needs other SDKs' checkouts and downloaded specs, `RELEASING.md`
 # describes publishing this crate, and `.github/` is CI.
-exclude = [".github/", "scripts/", "RELEASING.md"]
+exclude = [".github/", ".githooks/", "scripts/", "RELEASING.md"]
 
 [features]
 default = ["trading", "data", "rustls-tls"]

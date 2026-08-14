@@ -114,11 +114,17 @@ fn cash_and_security_journals_may_not_borrow_each_others_fields() {
 
     let mut cash_with_symbol = cash.clone();
     cash_with_symbol.symbol = Some("AAPL".to_owned());
-    assert!(cash_with_symbol.validate().is_err());
+    assert!(matches!(
+        cash_with_symbol.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 
     let mut cash_without_amount = cash;
     cash_without_amount.amount = None;
-    assert!(cash_without_amount.validate().is_err());
+    assert!(matches!(
+        cash_without_amount.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 
     let security =
         CreateJournalRequest::security(from_account(), to_account(), "AAPL", Decimal::from(2));
@@ -126,11 +132,17 @@ fn cash_and_security_journals_may_not_borrow_each_others_fields() {
 
     let mut security_with_amount = security.clone();
     security_with_amount.amount = Some(Decimal::from(50));
-    assert!(security_with_amount.validate().is_err());
+    assert!(matches!(
+        security_with_amount.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 
     let mut security_without_qty = security;
     security_without_qty.qty = None;
-    assert!(security_without_qty.validate().is_err());
+    assert!(matches!(
+        security_without_qty.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 }
 
 #[tokio::test]

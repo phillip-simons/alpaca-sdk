@@ -226,7 +226,7 @@ built:
   that reaches SIP; they are per-product entitlements.
 
 Treat a decode failure on a first real payload in those areas as expected work
-rather than a regression — and please [report it](.github/CONTRIBUTING.md#reporting-a-bug)
+rather than a regression — and please [report it](https://github.com/phillip-simons/alpaca-sdk/blob/main/.github/CONTRIBUTING.md#reporting-a-bug)
 with the raw body.
 
 ## Minimum supported Rust version
@@ -236,9 +236,9 @@ by default — a convenience feature does not get to set the crate's floor.
 
 ## Contributing
 
-See [CONTRIBUTING.md](.github/CONTRIBUTING.md). The most useful contribution is
+See [CONTRIBUTING.md](https://github.com/phillip-simons/alpaca-sdk/blob/main/.github/CONTRIBUTING.md). The most useful contribution is
 usually a captured API response or a precise bug report rather than a large
-patch. Security issues: [SECURITY.md](.github/SECURITY.md).
+patch. Security issues: [SECURITY.md](https://github.com/phillip-simons/alpaca-sdk/blob/main/.github/SECURITY.md).
 
 Release notes are in [CHANGELOG.md](CHANGELOG.md).
 

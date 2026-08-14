@@ -149,6 +149,7 @@ pub struct MintTokenRequest {
 
 impl MintTokenRequest {
     /// Mints `qty` of `underlying_symbol` to `wallet_address`.
+    #[must_use]
     pub fn new(
         underlying_symbol: impl Into<String>,
         qty: Decimal,
@@ -239,6 +240,7 @@ pub struct ByClientRequestId {
 
 impl ByClientRequestId {
     /// A lookup for `client_request_id`.
+    #[must_use]
     pub fn new(client_request_id: impl Into<String>) -> Self {
         Self {
             client_request_id: client_request_id.into(),

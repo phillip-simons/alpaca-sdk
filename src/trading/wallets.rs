@@ -226,6 +226,7 @@ pub struct CreateWhitelistedAddressRequest {
 
 impl CreateWhitelistedAddressRequest {
     /// Allowlists `address` for `asset` on `chain`.
+    #[must_use]
     pub fn new(address: impl Into<String>, asset: impl Into<String>, chain: CryptoChain) -> Self {
         Self {
             address: address.into(),
@@ -259,6 +260,7 @@ pub struct TransferFeeEstimateRequest {
 
 impl TransferFeeEstimateRequest {
     /// An estimate for moving `amount` of `asset` between two addresses.
+    #[must_use]
     pub fn new(
         asset: impl Into<String>,
         from_address: impl Into<String>,

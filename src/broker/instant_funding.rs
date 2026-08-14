@@ -362,6 +362,7 @@ pub struct GetAccountLimitsRequest {
 
 impl GetAccountLimitsRequest {
     /// Limits for `account_numbers`.
+    #[must_use]
     pub fn new(account_numbers: Vec<String>) -> Self {
         Self { account_numbers }
     }

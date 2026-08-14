@@ -230,6 +230,7 @@ pub struct UpdateOnfidoOutcomeRequest {
 
 impl UpdateOnfidoOutcomeRequest {
     /// Reports `outcome` for the verification run under `token`.
+    #[must_use]
     pub fn new(token: impl Into<String>, outcome: impl Into<String>) -> Self {
         Self {
             token: token.into(),
