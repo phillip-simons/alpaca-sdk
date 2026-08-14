@@ -346,6 +346,7 @@ async fn capture_the_routes_no_sdk_tests_cover() {
         let result = rest
             .request_raw(
                 reqwest::Method::GET,
+                alpaca_sdk::Replay::ByMethod,
                 candidate.path,
                 Some(candidate.query),
                 None::<&Empty>,

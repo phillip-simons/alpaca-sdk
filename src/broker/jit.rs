@@ -238,8 +238,8 @@ impl<'de> Deserialize<'de> for JitReport {
 /// `Default` is deliberately absent. The deserializer refuses a body with no
 /// report key, so a derived `Default` would hand out a value that will not
 /// round-trip through its own codec — the same asymmetry the `Calendar`
-/// serializer in this crate exists to remove. `Serialize` stays because
-/// [`JitReport`] derives it.
+/// serializer in this crate exists to remove. `Serialize` stays because [`JitReport`]'s own
+/// hand-written one delegates to it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[non_exhaustive]
 pub struct JitReportInline {

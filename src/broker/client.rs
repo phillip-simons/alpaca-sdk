@@ -187,7 +187,13 @@ impl BrokerClient {
         body: Option<&B>,
     ) -> Result<()> {
         self.rest
-            .request_raw(method, path, None::<&Empty>, body)
+            .request_raw(
+                method,
+                crate::rest::Replay::ByMethod,
+                path,
+                None::<&Empty>,
+                body,
+            )
             .await?;
         Ok(())
     }

@@ -95,7 +95,13 @@ impl TradingClient {
     /// answers with a bare string that is not JSON.
     async fn send_void(&self, method: Method, path: &str) -> Result<()> {
         self.rest
-            .request_raw(method, path, None::<&Empty>, None::<&Empty>)
+            .request_raw(
+                method,
+                crate::rest::Replay::ByMethod,
+                path,
+                None::<&Empty>,
+                None::<&Empty>,
+            )
             .await?;
         Ok(())
     }
@@ -635,6 +641,7 @@ impl TradingClient {
         self.rest
             .request(
                 Method::PUT,
+                crate::rest::Replay::ByMethod,
                 "/watchlists:by_name",
                 Some(&[("name", name)]),
                 Some(update),
@@ -654,6 +661,7 @@ impl TradingClient {
         self.rest
             .request(
                 Method::POST,
+                crate::rest::Replay::ByMethod,
                 "/watchlists:by_name",
                 Some(&[("name", name)]),
                 Some(&serde_json::json!({ "symbol": symbol })),

@@ -715,6 +715,14 @@ pub struct TradeAccount {
 }
 
 /// Configuration options for a trading account.
+///
+/// Deliberately has no constructor: this is the one request body a caller is not
+/// meant to build. Every field but three is required, so the route is a
+/// read-modify-write — fetch it with
+/// [`get_account_configurations`](crate::trading::TradingClient::get_account_configurations),
+/// change what you mean to change, and send it back. A constructor would invite
+/// building one from nothing and silently resetting every setting it did not
+/// name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct AccountConfiguration {

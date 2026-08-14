@@ -210,6 +210,11 @@ Decisions that become expensive after the first release, settled now.
   else. Transposing them compiled and produced a legal order Alpaca accepted, so
   nothing errored anywhere — a protective sell stop-limit simply armed a dollar
   late and rested above its trigger.
+- **`RestClient::request` and `request_raw` take a `Replay`.** They are the
+  escape hatch for routes this crate does not wrap, which is exactly where an
+  *acting* `DELETE` would otherwise pick up the replay hazard the wrapped routes
+  were just protected from. The wrapped routes have their answer chosen for
+  them; here it is the caller's, and it has to be stated.
 - **`Error::Transport` carries `TransportError`,** an opaque newtype, rather than
   `reqwest::Error`. reqwest is a `0.x` crate, so exposing it made every
   `0.13 → 0.14` bump a breaking change here, for a dependency unrelated to

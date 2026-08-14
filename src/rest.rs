@@ -83,7 +83,7 @@ fn replay_is_safe(method: &Method, replay: Replay, status: u16) -> bool {
 /// sells the caller into a short. That is the same failure `POST` is excluded
 /// for, wearing a different verb.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Replay {
+pub enum Replay {
     /// HTTP's answer is the right one for this route.
     ByMethod,
     /// This route acts, whatever its verb says. Never replay it.
@@ -392,6 +392,11 @@ impl RestClient {
 
     /// Issues a request with both a query string and a body.
     ///
+    /// `replay` decides what happens on a retryable status. [`Replay::ByMethod`]
+    /// is right for almost everything; pass [`Replay::Never`] for a route whose
+    /// effect contradicts its verb — one that submits an order or moves money
+    /// behind a `PUT` or a `DELETE`.
+    ///
     /// The six methods above cover routes that take one or the other, which is
     /// nearly all of them. A handful take both — `PUT /v2/watchlists:by_name`
     /// names the watchlist in the query and carries the update in the body —
@@ -402,6 +407,7 @@ impl RestClient {
     pub async fn request<T, Q, B>(
         &self,
         method: Method,
+        replay: Replay,
         path: &str,
         query: Option<&Q>,
         body: Option<&B>,
@@ -411,11 +417,7 @@ impl RestClient {
         Q: Serialize + ?Sized,
         B: Serialize + ?Sized,
     {
-        self.decode(
-            path,
-            self.send(method, Replay::ByMethod, path, query, body)
-                .await?,
-        )
+        self.decode(path, self.send(method, replay, path, query, body).await?)
     }
 
     /// Issues a `GET` and returns the response body as bytes.
@@ -437,11 +439,17 @@ impl RestClient {
 
     /// Issues a request and returns the raw response body without deserializing.
     ///
+    /// This is the escape hatch for a route this crate does not wrap, which
+    /// makes `replay` load-bearing: the wrapped routes have their answer chosen
+    /// for them, and here it is yours. [`Replay::Never`] for anything that acts
+    /// — a replayed liquidation sells twice.
+    ///
     /// # Errors
     /// Propagates transport and API failures.
     pub async fn request_raw<Q, B>(
         &self,
         method: Method,
+        replay: Replay,
         path: &str,
         query: Option<&Q>,
         body: Option<&B>,
@@ -450,7 +458,7 @@ impl RestClient {
         Q: Serialize + ?Sized,
         B: Serialize + ?Sized,
     {
-        self.send(method, Replay::ByMethod, path, query, body).await
+        self.send(method, replay, path, query, body).await
     }
 
     /// Builds the absolute URL for `path`.

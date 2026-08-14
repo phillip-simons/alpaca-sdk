@@ -19,6 +19,7 @@ use alpaca_sdk::broker::{
 };
 use alpaca_sdk::types::SupportedCurrencies;
 use alpaca_sdk::{Decimal, trading};
+use serde_json::json;
 use uuid::Uuid;
 
 #[test]
@@ -152,8 +153,10 @@ fn request_bodies_omit_the_fields_they_do_not_set() {
     let cash = serde_json::to_value(Weight::cash(Decimal::ONE)).unwrap();
     assert!(cash.get("symbol").is_none(), "{cash}");
 
-    // `Disclosures` is required on an account application, so an all-default one
-    // is a shape Alpaca really sees.
+    // `Disclosures` is required on an account application, so what it puts on
+    // the wire matters. Alpaca rejects an empty one — the exposure booleans are
+    // required — but that is its call to make, and inventing ten `null`s to
+    // avoid it would be ours.
     let disclosures = serde_json::to_value(alpaca_sdk::broker::Disclosures::default()).unwrap();
     assert_eq!(
         disclosures.as_object().map(serde_json::Map::len),
@@ -192,4 +195,35 @@ fn request_bodies_omit_the_fields_they_do_not_set() {
         Some(1),
         "a trusted contact should send only what was set, got {encoded}"
     );
+}
+
+/// The deliberate exception: `AccountConfiguration` has no constructor.
+///
+/// It is a read-modify-write body — every field but three is required — so the
+/// only correct way to get one is from the API. This test exists so the absence
+/// reads as a decision rather than an oversight the next sweep should "fix".
+#[test]
+fn account_configuration_is_obtained_from_the_api_not_built() {
+    // The shape a `GET` returns, which is the only source a caller has.
+    let fetched: alpaca_sdk::trading::AccountConfiguration = serde_json::from_value(json!({
+        "no_shorting": false,
+        "suspend_trade": false,
+        "fractional_trading": true,
+        "max_margin_multiplier": "4",
+        "trade_confirm_email": "all",
+        "ptp_no_exception_entry": false
+    }))
+    .unwrap();
+
+    let mut edited = fetched.clone();
+    edited.suspend_trade = true;
+
+    // Round-tripping it changes only what was named — no `null`s invented for
+    // the three fields the current response shape omits.
+    let sent = serde_json::to_value(&edited).unwrap();
+    assert_eq!(sent["suspend_trade"], true);
+    assert_eq!(sent["fractional_trading"], true);
+    assert!(sent.get("dtbp_check").is_none(), "{sent}");
+    assert!(sent.get("pdt_check").is_none(), "{sent}");
+    assert!(sent.get("max_options_trading_level").is_none(), "{sent}");
 }

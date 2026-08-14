@@ -109,6 +109,6 @@ pub use rust_decimal::Decimal;
 pub use auth::Credentials;
 pub use config::{BaseUrl, RetryBackoff, RetryConfig};
 pub use error::{ApiError, Error, Result, TransportError};
-pub use rest::{RestClient, RestConfig};
+pub use rest::{Replay, RestClient, RestConfig};
 #[cfg(feature = "_sse")]
 pub use sse::{Event as SseEvent, EventStreamRequest};
