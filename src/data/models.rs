@@ -627,8 +627,8 @@ pub struct Movers {
 ///
 /// A plain map is the natural shape, and the `polars` feature adds `.df()`
 /// through the
-/// [`ToFrame`](crate::data::ToFrame) extension trait — an alias cannot take an
-/// inherent `impl`, so the method arrives with a `use` rather than for free.
+/// `ToFrame` extension trait — an alias cannot take an inherent `impl`, so the
+/// method arrives with a `use` rather than for free.
 pub type BarSet = HashMap<String, Vec<Bar>>;
 
 /// Multi-symbol quotes keyed by symbol.

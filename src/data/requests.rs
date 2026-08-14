@@ -430,13 +430,12 @@ pub struct OptionChainRequest {
     pub contract_type: Option<ContractType>,
     /// Only contracts struck at or above this price.
     ///
-    /// `Decimal`, matching [`OptionContract::strike_price`] and the identical
+    /// `Decimal`, matching `trading::OptionContract::strike_price` and the identical
     /// filter on the trading API's own option-contracts request. It was the one
     /// `f64` money field in this crate's request surface, so paging from a
     /// contract into this filter meant a `to_f64` round trip through the exact
     /// type the crate exists to avoid.
     ///
-    /// [`OptionContract::strike_price`]: crate::trading::OptionContract::strike_price
     #[serde(
         default,
         with = "crate::types::option_decimal",

@@ -787,7 +787,7 @@ pub struct GetOrdersRequest {
 /// Filters for listing account activities.
 ///
 /// The broker API documents the same filters plus an `account_id`, and carries
-/// [its own copy](crate::broker::GetAccountActivitiesRequest) for that reason.
+/// its own copy, `broker::GetAccountActivitiesRequest`, for that reason.
 /// The two cannot share a struct the way `broker::Order` shares
 /// `trading::Order`: that works by `#[serde(flatten)]`, and a flattened struct
 /// cannot be serialized into a query string — `serde_urlencoded` rejects it at

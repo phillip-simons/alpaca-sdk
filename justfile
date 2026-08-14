@@ -41,6 +41,13 @@ doc:
     # These lints only fire here — clippy does not run rustdoc, so without this
     # recipe `missing_docs` and the intra-doc link lints are decoration.
     RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --locked
+    # And once per surface. An intra-doc link that crosses a feature boundary
+    # resolves under --all-features and dangles everywhere else, so the
+    # all-features build alone cannot see it — nor can CI or docs.rs, which both
+    # build all-features too. Anyone running `cargo doc --features trading` can.
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked --no-default-features --features trading,rustls-tls
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked --no-default-features --features data,rustls-tls
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked --no-default-features --features broker,rustls-tls
 
 # Build and open the docs, to review a module's public surface.
 doc-open:
@@ -66,19 +73,24 @@ fix:
 features:
     # This crate is heavily cfg-gated, and a missing `#[cfg(feature = ...)]`
     # compiles fine under --all-features and only fails here.
-    cargo check --no-default-features --features rustls-tls
-    cargo check --no-default-features --features trading,rustls-tls
-    cargo check --no-default-features --features data,rustls-tls
-    cargo check --no-default-features --features broker,rustls-tls
+    #
+    # `--all-targets` because plain `cargo check` builds only the library: an
+    # unguarded *test* file is just as broken under a reduced feature set, and
+    # without this the matrix cannot see it. `tests/enum_parity.rs` was in
+    # exactly that state.
+    cargo check --all-targets --no-default-features --features rustls-tls
+    cargo check --all-targets --no-default-features --features trading,rustls-tls
+    cargo check --all-targets --no-default-features --features data,rustls-tls
+    cargo check --all-targets --no-default-features --features broker,rustls-tls
     # `polars` alone, to pin the implication: it enables `data`, because the
     # frame conversion is for the market data collections and the feature would
     # otherwise compile all of polars and expose nothing.
-    cargo check --no-default-features --features polars,rustls-tls
+    cargo check --all-targets --no-default-features --features polars,rustls-tls
     # `blocking` alone. It is generic over the client rather than a mirrored API,
     # so it compiles without any surface enabled — which is worth knowing stays
     # true, since a mirrored one would not.
-    cargo check --no-default-features --features blocking,rustls-tls
-    cargo check --no-default-features --features trading,data,broker,blocking,polars,native-tls
+    cargo check --all-targets --no-default-features --features blocking,rustls-tls
+    cargo check --all-targets --no-default-features --features trading,data,broker,blocking,polars,native-tls
 
 # Build against the MSRV. Needs `rustup toolchain install 1.88.0`.
 msrv:

@@ -411,9 +411,23 @@ async fn a_non_positive_transfer_never_reaches_the_network() {
     assert!(server.received_requests().await.unwrap().is_empty());
 }
 
-fn transfer_page(count: usize) -> serde_json::Value {
+/// A page of `count` distinct transfers, numbered from `first`.
+///
+/// The ids have to differ. The walk drops a transfer it has already collected,
+/// because a server that ignores `offset` and repeats a page is otherwise
+/// indistinguishable from one with more to give — so a page of clones would
+/// arrive as a single transfer and test nothing about paging.
+fn transfer_page(first: usize, count: usize) -> serde_json::Value {
     let one = fixture("broker/test_funding_routes__test_create_transfer_for_account__01.json");
-    serde_json::Value::Array(vec![one; count])
+    serde_json::Value::Array(
+        (first..first + count)
+            .map(|n| {
+                let mut transfer = one.clone();
+                transfer["id"] = json!(format!("00000000-0000-4000-8000-{n:012}"));
+                transfer
+            })
+            .collect(),
+    )
 }
 
 #[tokio::test]
@@ -424,14 +438,14 @@ async fn walking_the_transfer_pages_stops_on_the_first_empty_one() {
     Mock::given(method("GET"))
         .and(path(format!("/v1/accounts/{ACCOUNT_ID}/transfers")))
         .and(query_param("offset", "0"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(2)))
+        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(0, 2)))
         .expect(1)
         .mount(&server)
         .await;
     Mock::given(method("GET"))
         .and(path(format!("/v1/accounts/{ACCOUNT_ID}/transfers")))
         .and(query_param("offset", "2"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(1)))
+        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(2, 1)))
         .expect(1)
         .mount(&server)
         .await;
@@ -457,7 +471,7 @@ async fn max_items_truncates_mid_page_and_stops_requesting() {
     Mock::given(method("GET"))
         .and(path(format!("/v1/accounts/{ACCOUNT_ID}/transfers")))
         .and(query_param("offset", "0"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(5)))
+        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(0, 5)))
         .expect(1)
         .mount(&server)
         .await;
@@ -482,7 +496,7 @@ async fn one_page_of_transfers_honours_the_filter_as_given() {
         .and(query_param("direction", "INCOMING"))
         .and(query_param("limit", "10"))
         .and(query_param("offset", "20"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(1)))
+        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(0, 1)))
         .expect(1)
         .mount(&server)
         .await;
@@ -516,4 +530,28 @@ async fn cancelling_a_transfer_tolerates_an_empty_body() {
         .cancel_transfer_for_account(account_id(), Uuid::parse_str(TRANSFER_ID).unwrap())
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn the_transfers_walk_stops_when_the_server_ignores_the_offset() {
+    // This route has no token and no total, so an empty page is the only ending
+    // it can express. A server that ignores `offset` never sends one — the walk
+    // has to notice for itself that it has stopped learning anything.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/accounts/{ACCOUNT_ID}/transfers")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(0, 2)))
+        .mount(&server)
+        .await;
+
+    let transfers = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        client(&server).get_all_transfers_for_account(account_id(), None, None),
+    )
+    .await
+    .expect("the transfers walk never terminated against a server that ignores the offset")
+    .unwrap();
+
+    assert_eq!(transfers.len(), 2);
+    assert_eq!(server.received_requests().await.unwrap().len(), 2);
 }

@@ -379,7 +379,12 @@ where
     deserializer.deserialize_option(StringOrList)
 }
 
-#[cfg(test)]
+// `trading` as well as `test`: every case here goes through `Leg`, which is
+// built from this crate's order enums, so the module does not compile with the
+// surface switched off. The helpers themselves are generic over `Deserialize`
+// and are exercised by the data and broker models too -- what is trading-
+// specific is the fixture, not the behaviour under test.
+#[cfg(all(test, feature = "trading"))]
 mod tests {
     use serde::Deserialize;
     use uuid::Uuid;

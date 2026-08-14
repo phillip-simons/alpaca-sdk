@@ -124,7 +124,7 @@ impl TradingStream {
     ///
     /// The delay starts at `min`, doubles on each consecutive failure, and is
     /// capped at `max`. Mirrors
-    /// [`StreamConfig::backoff`](crate::data::StreamConfig::backoff), so the two
+    /// `data::StreamConfig::backoff`, so the two
     /// streams are configured the same way.
     ///
     /// # Errors

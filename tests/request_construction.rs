@@ -3,8 +3,10 @@
 //! `#[non_exhaustive]` is applied broadly here, and it is invisible from inside:
 //! a struct literal in `src/` compiles whether or not the attribute is present,
 //! and only an external crate — which is what an integration test is — sees the
-//! difference. Two request-body types were caught unbuildable by this file: `RebalancingCondition`, the element type of a portfolio's
-//! `rebalance_conditions`, and `CIPInfo`, the body of the CIP upload.
+//! difference. Two request-body types were caught unbuildable by this file:
+//! `RebalancingCondition`, the element type of a portfolio's
+//! `rebalance_conditions`, and `CIPInfo`, the body of the CIP upload — the
+//! latter dragging in five nested check types that were unbuildable with it.
 //!
 //! Nothing here asserts on behaviour. It asserts that the *shape* of the public
 //! API is reachable, which no unit test in `src/` can do.
@@ -226,4 +228,45 @@ fn account_configuration_is_obtained_from_the_api_not_built() {
     assert!(sent.get("dtbp_check").is_none(), "{sent}");
     assert!(sent.get("pdt_check").is_none(), "{sent}");
     assert!(sent.get("max_options_trading_level").is_none(), "{sent}");
+}
+
+/// The filter and request types no other integration test builds.
+///
+/// The tests above cover the types a caller reaches by following a worked
+/// example. These are the rest of the input surface: every `#[non_exhaustive]`
+/// type a public method takes that no other external test happens to construct.
+/// Each is one line, and one line is enough — the assertion is that the code
+/// below compiles from outside this crate, which is the only place
+/// `#[non_exhaustive]` can be observed.
+///
+/// A type that grows a required field, or loses its `Default`, fails here rather
+/// than in a caller's crate after release.
+#[test]
+fn every_input_type_is_reachable_from_outside_the_crate() {
+    use alpaca_sdk::broker::{
+        GetCashInterestRequest, GetEodPositionsRequest, GetFpslAnalyticsRequest,
+        GetFpslLoansRequest, GetFundingDetailsRequest, GetInstantFundingReportRequest,
+        GetInstantFundingRequest, GetJitBalancesRequest, GetOAuthClientRequest,
+        GetOnfidoTokenRequest, GetOptionsApprovalsRequest, GetSettlementsRequest, KycResults,
+    };
+    use alpaca_sdk::trading::{
+        GetCalendarRequest, GetMarketCalendarRequest, GetPortfolioHistoryRequest,
+    };
+
+    let _ = GetCashInterestRequest::default();
+    let _ = GetEodPositionsRequest::default();
+    let _ = GetFpslAnalyticsRequest::default();
+    let _ = GetFpslLoansRequest::default();
+    let _ = GetFundingDetailsRequest::default();
+    let _ = GetInstantFundingReportRequest::default();
+    let _ = GetInstantFundingRequest::default();
+    let _ = GetJitBalancesRequest::default();
+    let _ = GetOAuthClientRequest::default();
+    let _ = GetOnfidoTokenRequest::default();
+    let _ = GetOptionsApprovalsRequest::default();
+    let _ = GetSettlementsRequest::default();
+    let _ = KycResults::default();
+    let _ = GetCalendarRequest::default();
+    let _ = GetMarketCalendarRequest::default();
+    let _ = GetPortfolioHistoryRequest::default();
 }

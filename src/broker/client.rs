@@ -6,6 +6,7 @@
 
 use futures_util::Stream;
 use reqwest::Method;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 use crate::auth::Credentials;
@@ -89,6 +90,38 @@ fn activity_id(activity: &Activity) -> &str {
 /// The page size assumed for the token-paginated broker routes when the caller
 /// sets none. Alpaca's own default for these is 100.
 const DEFAULT_PAGE_SIZE: u32 = 100;
+
+/// Moves a page into `collected`, skipping anything already seen, and reports
+/// whether the page taught the walk anything.
+///
+/// Every walker on this client derives its next cursor from data the server
+/// controls — a last-id, a running offset, an echoed page token — and ends on an
+/// empty page. A server that does not advance therefore spins the walk forever
+/// with `collected` growing on every pass. That is not hypothetical: the
+/// activities route is documented to ignore paging entirely when `date` is set,
+/// which is exactly a non-empty page that never advances.
+///
+/// Progress is measured in *new* items rather than in cursor movement, because a
+/// cursor comparison would miss a server cycling between two pages. `seen`
+/// already knows the answer. This mirrors `walk_orders` in the trading client,
+/// where the same reasoning is spelled out at length.
+fn extend_with_new<T, K>(
+    collected: &mut Vec<T>,
+    seen: &mut HashSet<K>,
+    page: Vec<T>,
+    id_of: impl Fn(&T) -> K,
+) -> bool
+where
+    K: Eq + std::hash::Hash,
+{
+    let before = collected.len();
+    for item in page {
+        if seen.insert(id_of(&item)) {
+            collected.push(item);
+        }
+    }
+    collected.len() != before
+}
 
 /// The page size to ask for, given a cap on the total.
 ///
@@ -449,13 +482,18 @@ impl BrokerClient {
     ) -> Result<Vec<Transfer>> {
         let mut filter = filter.cloned().unwrap_or_default();
         let mut collected: Vec<Transfer> = Vec::new();
+        let mut seen: HashSet<Uuid> = HashSet::new();
+        // Counts rows the server has handed over, not rows kept. The two differ
+        // only when a page repeats something already collected, and the offset
+        // has to keep describing the server's own position rather than ours.
+        let mut fetched: usize = 0;
 
         loop {
             // The offset is the running count on every pass, including the
             // first, so a caller-supplied offset is overwritten once the walk
             // starts. Honouring it would make the cap mean something different
             // on the first page than on the rest.
-            filter.offset = Some(u32::try_from(collected.len()).map_err(|_| {
+            filter.offset = Some(u32::try_from(fetched).map_err(|_| {
                 crate::Error::InvalidRequest("too many transfers to page through".to_owned())
             })?);
 
@@ -470,12 +508,25 @@ impl BrokerClient {
                 break;
             }
 
-            collected.extend(page);
+            fetched += page.len();
+            let progressed =
+                extend_with_new(&mut collected, &mut seen, page, |transfer| transfer.id);
 
             if let Some(max_items) = max_items
                 && collected.len() >= max_items
             {
                 collected.truncate(max_items);
+                break;
+            }
+
+            // A server that ignores `offset` answers every request with the same
+            // non-empty page, which is not an ending this endpoint can express.
+            if !progressed {
+                tracing::warn!(
+                    account_id = %account_id,
+                    "the transfers walk stopped making progress; every transfer \
+                     on the last page had already been seen"
+                );
                 break;
             }
         }
@@ -750,8 +801,11 @@ impl BrokerClient {
     /// seen. An empty array ends the walk.
     ///
     /// Setting `date` on the filter changes the endpoint's behaviour — Alpaca
-    /// may then return everything in one response and ignore paging — so this
-    /// walk can finish in a single request. `max_items` still holds.
+    /// may then return everything in one response and ignore paging. The walk
+    /// stops on the second request in that case: the cursor has no effect, the
+    /// same activities come back, and a page that repeats what is already
+    /// collected ends the walk rather than restarting it. `max_items` still
+    /// holds.
     ///
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if the filter combines `category`
@@ -765,6 +819,7 @@ impl BrokerClient {
         filter.validate()?;
 
         let mut collected: Vec<Activity> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
 
         loop {
             if let Some(page_size) = page_limit(&filter.page_size, max_items, collected.len()) {
@@ -779,12 +834,22 @@ impl BrokerClient {
             // The cursor is the last activity's id, so it is taken before the
             // page is moved into the accumulator.
             let cursor = activity_id(last).to_owned();
-            collected.extend(page);
+            let progressed = extend_with_new(&mut collected, &mut seen, page, |activity| {
+                activity_id(activity).to_owned()
+            });
 
             if let Some(max_items) = max_items
                 && collected.len() >= max_items
             {
                 collected.truncate(max_items);
+                break;
+            }
+
+            if !progressed {
+                tracing::warn!(
+                    "the account activities walk stopped making progress; every \
+                     activity on the last page had already been seen"
+                );
                 break;
             }
 
@@ -1121,6 +1186,7 @@ impl BrokerClient {
     ) -> Result<Vec<Subscription>> {
         let mut filter = filter.cloned().unwrap_or_default();
         let mut collected: Vec<Subscription> = Vec::new();
+        let mut seen: HashSet<Uuid> = HashSet::new();
 
         loop {
             if let Some(limit) = page_limit(&filter.limit, max_items, collected.len()) {
@@ -1133,12 +1199,27 @@ impl BrokerClient {
             if page.subscriptions.is_empty() {
                 break;
             }
-            collected.extend(page.subscriptions);
+            let progressed = extend_with_new(
+                &mut collected,
+                &mut seen,
+                page.subscriptions,
+                |subscription| subscription.id,
+            );
 
             if let Some(max_items) = max_items
                 && collected.len() >= max_items
             {
                 collected.truncate(max_items);
+                break;
+            }
+
+            // A server echoing a token it has already sent would otherwise page
+            // in a circle; the token itself cannot be trusted to advance.
+            if !progressed {
+                tracing::warn!(
+                    "the subscriptions walk stopped making progress; every \
+                     subscription on the last page had already been seen"
+                );
                 break;
             }
 
@@ -1210,6 +1291,7 @@ impl BrokerClient {
     ) -> Result<Vec<RebalancingRun>> {
         let mut filter = filter.cloned().unwrap_or_default();
         let mut collected: Vec<RebalancingRun> = Vec::new();
+        let mut seen: HashSet<Uuid> = HashSet::new();
 
         loop {
             if let Some(limit) = page_limit(&filter.limit, max_items, collected.len()) {
@@ -1221,12 +1303,22 @@ impl BrokerClient {
             if page.runs.is_empty() {
                 break;
             }
-            collected.extend(page.runs);
+            let progressed = extend_with_new(&mut collected, &mut seen, page.runs, |run| run.id);
 
             if let Some(max_items) = max_items
                 && collected.len() >= max_items
             {
                 collected.truncate(max_items);
+                break;
+            }
+
+            // As with subscriptions: an echoed token cannot end the walk on its
+            // own, so progress is measured in new runs.
+            if !progressed {
+                tracing::warn!(
+                    "the rebalancing runs walk stopped making progress; every \
+                     run on the last page had already been seen"
+                );
                 break;
             }
 

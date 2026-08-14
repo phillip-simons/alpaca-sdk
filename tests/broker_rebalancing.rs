@@ -23,6 +23,10 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const PORTFOLIO_ID: &str = "57d4ec79-9658-4916-9eb1-7c672be97e3e";
 const SUBSCRIPTION_ID: &str = "9341be15-8786-4d23-ba1a-fc10ef4f90f4";
+// The walk drops a subscription it has already collected, so a page of clones
+// would arrive as one subscription and assert nothing about paging.
+const OTHER_SUBSCRIPTION_ID: &str = "9341be15-8786-4d23-ba1a-fc10ef4f90f5";
+const THIRD_SUBSCRIPTION_ID: &str = "9341be15-8786-4d23-ba1a-fc10ef4f90f6";
 const RUN_ID: &str = "2ad28f83-796c-4c4d-895e-d360aeb95297";
 const ACCOUNT_ID: &str = "bf2b0f93-f296-4276-a9cf-288586cf4fb7";
 
@@ -361,7 +365,7 @@ async fn walking_subscriptions_follows_the_token_until_it_is_absent() {
         .and(path("/v1/rebalancing/subscriptions"))
         .and(query_param("page_token", "page-two"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "subscriptions": [subscription(SUBSCRIPTION_ID)],
+            "subscriptions": [subscription(THIRD_SUBSCRIPTION_ID)],
             "next_page_token": null
         })))
         .expect(1)
@@ -371,7 +375,7 @@ async fn walking_subscriptions_follows_the_token_until_it_is_absent() {
     Mock::given(method("GET"))
         .and(path("/v1/rebalancing/subscriptions"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "subscriptions": [subscription(SUBSCRIPTION_ID), subscription(SUBSCRIPTION_ID)],
+            "subscriptions": [subscription(SUBSCRIPTION_ID), subscription(OTHER_SUBSCRIPTION_ID)],
             "next_page_token": "page-two"
         })))
         .expect(1)
@@ -417,7 +421,7 @@ async fn max_items_narrows_the_page_size_rather_than_over_fetching() {
         .and(path("/v1/rebalancing/subscriptions"))
         .and(query_param("limit", "2"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "subscriptions": [subscription(SUBSCRIPTION_ID), subscription(SUBSCRIPTION_ID)],
+            "subscriptions": [subscription(SUBSCRIPTION_ID), subscription(OTHER_SUBSCRIPTION_ID)],
             "next_page_token": "page-two"
         })))
         .expect(1)
@@ -546,4 +550,57 @@ async fn a_subscriptions_filter_reaches_the_query_string() {
         .get_subscriptions(Some(&filter))
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn the_subscriptions_walk_stops_when_the_token_never_changes() {
+    // An echoed token pages in a circle. The token cannot be trusted to advance,
+    // so the walk measures progress in subscriptions it had not already seen.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/rebalancing/subscriptions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "subscriptions": [subscription(SUBSCRIPTION_ID), subscription(OTHER_SUBSCRIPTION_ID)],
+            "next_page_token": "the-same-token-forever"
+        })))
+        .mount(&server)
+        .await;
+
+    let subscriptions = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        client(&server).get_all_subscriptions(None, None),
+    )
+    .await
+    .expect("the subscriptions walk never terminated against a repeated page token")
+    .unwrap();
+
+    assert_eq!(subscriptions.len(), 2);
+    assert_eq!(server.received_requests().await.unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn the_runs_walk_stops_when_the_token_never_changes() {
+    let server = MockServer::start().await;
+    let one = fixture("broker/test_rebalancing_routes__test_get_run_by_id__01.json");
+    let mut other = one.clone();
+    other["id"] = json!("00000000-0000-4000-8000-000000000001");
+    Mock::given(method("GET"))
+        .and(path("/v1/rebalancing/runs"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "runs": [one, other],
+            "next_page_token": "the-same-token-forever"
+        })))
+        .mount(&server)
+        .await;
+
+    let runs = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        client(&server).get_all_runs(None, None),
+    )
+    .await
+    .expect("the rebalancing runs walk never terminated against a repeated page token")
+    .unwrap();
+
+    assert_eq!(runs.len(), 2);
+    assert_eq!(server.received_requests().await.unwrap().len(), 2);
 }

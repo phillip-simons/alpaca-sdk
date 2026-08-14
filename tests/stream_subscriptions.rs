@@ -227,10 +227,11 @@ fn an_unknown_feed_is_refused_rather_than_put_in_the_endpoint() {
     assert!(StockDataStream::new(creds(), DataFeed::Otc).is_err());
 }
 
-/// The known feeds still build. This is the half that would catch
-/// `known_feed` over-refusing, and — with the test above — pins that the
-/// `is_unknown` dispatch inside the `as_unknown!` macro resolves to the
-/// inherent method rather than recursing into itself.
+/// The known feeds still build.
+///
+/// The test above refuses an unknown feed; on its own, a `known_feed` that
+/// refused *everything* would satisfy it. This is the other half, and the pair
+/// is what pins the boundary rather than one side of it.
 #[test]
 fn the_known_feeds_still_construct() {
     let creds = || Credentials::new("key", "secret").unwrap();

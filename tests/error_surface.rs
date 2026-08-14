@@ -276,9 +276,25 @@ async fn a_connection_failure_is_a_transport_error_and_is_transient() {
         error.is_transient(),
         "a refused connection is worth retrying: nothing was sent"
     );
-    assert!(
-        error.source().is_some(),
-        "the transport error continues the chain"
+    // `Error::Transport` holds `TransportError` as its `#[source]`, so this much
+    // is true by construction and worth stating only as the first link.
+    let transport = error
+        .source()
+        .expect("the transport error continues the chain");
+
+    // The link that is a decision rather than a derivation: `TransportError`
+    // reports its inner error's *cause* rather than the inner error itself,
+    // because `Display` already delegates and a formatter walking the chain
+    // would otherwise print the same sentence twice. Both halves are checked —
+    // that the chain reaches past reqwest at all, and that it says something new
+    // when it does.
+    let cause = transport
+        .source()
+        .expect("TransportError reports its inner error's cause, not the inner error");
+    assert_ne!(
+        transport.to_string(),
+        cause.to_string(),
+        "a link that repeats the text above it is the link this skips"
     );
 }
 

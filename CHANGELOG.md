@@ -23,8 +23,10 @@ behaviour changes are worth reading before the first release rather than after.
   `/v2/positions/BTC/USD` and 404'd. Alpaca's reference asks for the encoded form
   (`/v2/assets/BTC%2FUSDT`) and now gets it. The same defect let `..` in a symbol
   reach a route the caller never named — `close_position("../positions")` issued
-  `DELETE /v2/positions`, the close-all route, and returned a normal-looking
-  success. A segment that is exactly `.`, `..`, or empty is now refused with
+  `DELETE /v2/positions`, the close-all route, liquidating every position, and
+  then failed to decode the array it answered with, so the caller could not tell
+  from the error what had just been done. A segment that is exactly `.`, `..`,
+  or empty is now refused with
   `Error::InvalidRequest`, because no encoding survives a URL parser's dot-segment
   removal.
 - **A 504 no longer replays a request that acts.** The retry policy was a set of
@@ -75,8 +77,8 @@ behaviour changes are worth reading before the first release rather than after.
   `null` for each. `AccountConfiguration` was the case that prompted it — see
   below — but the same hazard reached `Disclosures` (required on every account
   application), `Contact`, `Identity`, `Agreement`, `Weight` and
-  `RebalancingCondition`, the last two through constructors that leave a field
-  unset by design.
+  `RebalancingCondition` — `Weight` through a constructor that leaves a field
+  unset by design, the rest through ordinary struct literals.
 - **`AccountConfiguration` no longer PATCHes `null`.** Three optional fields had
   no `skip_serializing_if`, so the only possible usage pattern —
   read-modify-write, forced because every other field is non-`Option` — sent two
@@ -345,8 +347,16 @@ gap.
   adds values without warning, and a new order status should cost a caller a
   match arm rather than a decode.
 - **Unknown response fields are ignored.** Alpaca sends fields no model declares.
-- **Paginated endpoints offer two methods** — `get_x` for one page, `get_all_x`
-  to walk every page with an optional cap.
+- **Most paginated endpoints offer two methods** — `get_x` for one page,
+  `get_all_x` to walk every page with an optional cap. Six do: orders (twice),
+  account activities, transfers, rebalancing subscriptions and runs. Five
+  paginated routes have no walker yet and page by hand — `get_locates`,
+  `get_fpsl_loans`, `get_ipo_offerings`, `get_eod_positions` and
+  `get_options_approvals`; each returns a page type carrying `next_page_token`.
+  Note also that `get_all_x` does not always mean "walk": `get_all_positions`,
+  `get_all_assets`, `get_all_accounts_positions`, `get_all_positions_for_account`
+  and `get_all_portfolios` are single-request routes that return everything,
+  named for the endpoint rather than for a walk.
 - **Retries follow Alpaca's own rate-limit guidance**: 429 and 504, three
   retries after the first request, waiting about a second and doubling to a
   30-second ceiling, jittered. A response carrying `Retry-After` overrides the
@@ -411,6 +421,12 @@ And the ones a compiler will:
   crate. Construct with `new` or `default` and assign fields.
 - Two client methods changed signature and five request structs gained fields
   when twelve documented query parameters that were never being sent were added.
+- `impl From<reqwest::Error> for Error` is gone, along with the public
+  `reqwest::Error` it converted into. `?` on a `reqwest::Error` in a function
+  returning this crate's `Result` no longer compiles. There is deliberately no
+  replacement conversion: constructing a transport error is the transport
+  layer's job, and re-exposing the type would undo the reason `TransportError`
+  exists.
 
 ### Packaging
 

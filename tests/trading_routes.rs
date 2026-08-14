@@ -746,7 +746,9 @@ async fn a_crypto_pair_addresses_one_path_segment() {
 /// The traversal case. `..` cannot be expressed as a literal path segment by any
 /// encoding — a URL parser removes it — so it is refused rather than sent.
 /// Unrefused, `close_position` reached `DELETE /v2/positions`, the close-all
-/// route, and returned a normal-looking success.
+/// route, liquidating every position — and then failed to decode the array it
+/// answers with into the single `Order` the caller asked for, so the error told
+/// the caller nothing about what had just happened to their account.
 #[tokio::test]
 async fn a_dot_segment_symbol_is_refused_before_any_request_is_made() {
     let server = MockServer::start().await;

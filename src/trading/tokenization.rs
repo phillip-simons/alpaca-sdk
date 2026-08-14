@@ -5,7 +5,7 @@
 //! published reference and are unverified against a live response.
 //!
 //! The broker API carries the same four routes under an account id; see
-//! [`BrokerClient`](crate::broker::BrokerClient). The models are shared.
+//! `broker::BrokerClient`. The models are shared.
 
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;

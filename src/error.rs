@@ -171,7 +171,7 @@ impl Error {
 /// has nothing to do with Alpaca. Callers on `0.1.x` would be pinned to
 /// reqwest 0.13 for the life of the line.
 ///
-/// This crate already re-exports [`crate::polars`] and [`crate::rust_decimal`]
+/// This crate already re-exports `polars` and [`crate::rust_decimal`]
 /// with two paragraphs each explaining why
 /// a version-skewed type is worth avoiding. reqwest got neither; now it does not
 /// need one.

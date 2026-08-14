@@ -10,6 +10,11 @@
 //! Removing one is almost always wrong: `just enums-drift` lists the values the
 //! specs no longer document, and the API still serves several of them.
 
+// `broker` implies `trading`, so naming the two surfaces this file actually
+// draws enums from is enough. Without this the file is a compile error under
+// every reduced feature set -- which `just features` could not see, because
+// `cargo check` alone never builds test targets.
+#![cfg(all(feature = "broker", feature = "data"))]
 #![allow(clippy::too_many_lines)]
 
 use alpaca_sdk::broker::{

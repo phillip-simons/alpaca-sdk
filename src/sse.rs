@@ -32,7 +32,7 @@ use crate::error::{ApiError, Error, Result};
 /// The window an event stream replays before going live.
 ///
 /// **Not interchangeable with the broker's
-/// [`GetEventsRequest`](crate::broker::GetEventsRequest)**, and the difference
+/// `broker::GetEventsRequest`**, and the difference
 /// is not cosmetic: the five older streams bound their window by *date*, while
 /// every stream found in the reference sweep — admin actions, IPO events, system
 /// events, account activities, corporate actions — bounds it by *timestamp*. Sending a bare date to a route that parses RFC-3339 is how a

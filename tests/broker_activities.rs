@@ -297,3 +297,32 @@ async fn cip_records_round_trip_through_both_routes() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn the_activities_walk_stops_when_the_server_ignores_the_cursor() {
+    // Setting `date` makes this endpoint answer with everything and ignore
+    // paging, which the walk sees as a full page whose cursor has no effect.
+    // Ending only on an empty page would spin here forever, collecting the same
+    // activities on every pass until the process ran out of memory.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/accounts/activities"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!([activity("a::1"), activity("a::2")])),
+        )
+        .mount(&server)
+        .await;
+
+    let activities = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        client(&server).get_all_account_activities(None, None),
+    )
+    .await
+    .expect("the activities walk never terminated against a server that ignores the cursor")
+    .unwrap();
+
+    // The repeated page is recognised as ground already covered, so the second
+    // request ends the walk rather than extending it.
+    assert_eq!(activities.len(), 2);
+    assert_eq!(server.received_requests().await.unwrap().len(), 2);
+}

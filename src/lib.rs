@@ -31,8 +31,8 @@
 //! | `trading` | yes | The trading REST client and trade-update stream |
 //! | `data` | yes | Historical and live market data |
 //! | `broker` | no | The broker API, including its SSE event streams |
-//! | `blocking` | no | A synchronous façade over the async clients, via [`blocking::Blocking`] |
-//! | `polars` | no | `DataFrame` conversion for market data collections, via [`data::ToFrame`]. Implies `data` |
+//! | `blocking` | no | A synchronous façade over the async clients, via `blocking::Blocking` |
+//! | `polars` | no | `DataFrame` conversion for market data collections, via `data::ToFrame`. Implies `data` |
 //! | `rustls-tls` | yes | TLS via rustls |
 //! | `native-tls` | no | TLS via the platform library |
 //!
@@ -75,7 +75,7 @@ pub use polars;
 
 /// The `rust_decimal` this crate was built against.
 ///
-/// Re-exported for the same reason as [`polars`]: every price, quantity and
+/// Re-exported for the same reason as the `polars` re-export: every price, quantity and
 /// balance in this crate is a `rust_decimal::Decimal`, and a caller who depends
 /// on a different `rust_decimal` version gets two incompatible `Decimal` types
 /// with the same name and an error that does not explain itself. Reach for this

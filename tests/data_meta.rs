@@ -130,9 +130,18 @@ async fn the_single_symbol_route_returns_a_bare_list_with_the_symbol_beside_it()
         .await
         .unwrap();
 
-    assert_eq!(bars.len(), 2);
+    // Expectations are read back out of the fixture rather than pinned to the
+    // prices that happened to be live when it was captured: `just capture`
+    // refreshes these files, and a hard-coded price turns every refresh into a
+    // spurious test failure. What is under test is the *decode* -- that the
+    // list came out of `bars` and the symbol was filled in from the path -- so
+    // the fixture stays the source of truth for the values themselves.
+    let raw = fixture("live/stocks_bars_single.json");
+    let expected = raw["bars"].as_array().unwrap();
+
+    assert_eq!(bars.len(), expected.len());
     assert_eq!(bars[0].symbol, "AAPL");
-    assert_eq!(bars[0].close, 308.26);
+    assert_eq!(bars[0].close, expected[0]["c"].as_f64().unwrap());
 }
 
 #[tokio::test]
@@ -154,10 +163,17 @@ async fn the_single_symbol_latest_route_returns_one_record_under_a_singular_key(
         .unwrap();
 
     // The record is under a *singular* key with the symbol beside it, so the
-    // symbol comes from the path rather than from a map key.
+    // symbol comes from the path rather than from a map key. The price and
+    // condition count come back out of the fixture for the same reason as in
+    // the bars test above -- `just capture` rewrites them.
+    let raw = fixture("live/stocks_latest_trade_single.json");
+
     assert_eq!(trade.symbol, "AAPL");
-    assert_eq!(trade.price, 301.3);
-    assert_eq!(trade.conditions.as_deref().map(<[_]>::len), Some(3));
+    assert_eq!(trade.price, raw["trade"]["p"].as_f64().unwrap());
+    assert_eq!(
+        trade.conditions.as_deref().map(<[_]>::len),
+        Some(raw["trade"]["c"].as_array().unwrap().len()),
+    );
 }
 
 #[tokio::test]
