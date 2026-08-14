@@ -10,7 +10,8 @@ use alpaca_sdk::data::{
     CryptoHistoricalDataClient, CryptoLatestRequest, ForexDataClient, ForexRatesRequest,
     MarketMoversRequest, MarketType, MostActivesRequest, NewsClient, NewsRequest,
     OptionChainRequest, OptionHistoricalDataClient, OptionLatestRequest, ScreenerClient,
-    StockBarsRequest, StockHistoricalDataClient, StockLatestRequest, TimeFrame, TimeFrameUnit,
+    SingleSymbolRequest, StockBarsRequest, StockHistoricalDataClient, StockLatestRequest,
+    TimeFrame, TimeFrameUnit,
 };
 use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use serde_json::json;
@@ -882,4 +883,63 @@ async fn an_unknown_market_type_cannot_escape_its_path_segment() {
         "/v1beta1/screener/..%2F..%2Fv2%2Faccount/movers",
         "the market type must stay inside its own segment"
     );
+}
+
+/// The same rule on the *multi-symbol list* path, which is the shape the
+/// shipped fixture actually has.
+///
+/// `into_sets` and `into_latest` are separate helpers with separate call sites,
+/// and only the latter was covered — so half the fix could have been deleted
+/// without a test noticing.
+#[tokio::test]
+async fn a_null_symbol_is_skipped_on_the_multi_symbol_list_path() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v2/stocks/bars"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "bars": {
+                "AAPL": [{
+                    "t": "2024-04-26T13:30:00Z",
+                    "o": 1.0, "h": 2.0, "l": 0.5, "c": 1.5, "v": 100.0
+                }],
+                "INVALID": null
+            },
+            "next_page_token": null
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let request = StockBarsRequest::new(["AAPL", "INVALID"], TimeFrame::day());
+    let bars = stock_client(&server)
+        .get_stock_bars(&request)
+        .await
+        .expect("a null entry must not fail the response");
+
+    assert_eq!(bars.len(), 1, "expected only AAPL, got {bars:?}");
+    assert!(bars.contains_key("AAPL"));
+}
+
+/// And on the single-symbol path, where the payload sits under a key rather than
+/// being keyed by symbol.
+#[tokio::test]
+async fn a_null_payload_is_an_empty_result_on_the_single_symbol_path() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v2/stocks/INVALID/bars"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "symbol": "INVALID",
+            "bars": null,
+            "next_page_token": null
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let bars = stock_client(&server)
+        .get_stock_bars_for_symbol("INVALID", &SingleSymbolRequest::new())
+        .await
+        .expect("a null payload is an empty result, not a decode failure");
+
+    assert!(bars.is_empty(), "expected no bars, got {bars:?}");
 }

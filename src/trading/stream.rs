@@ -135,18 +135,7 @@ impl TradingStream {
     /// Returns [`Error::InvalidRequest`] if `min` is zero — which would spin —
     /// or if `max` is smaller than `min`.
     pub fn backoff(mut self, min: Duration, max: Duration) -> Result<Self> {
-        if min.is_zero() {
-            return Err(Error::InvalidRequest(
-                "min_backoff must be a positive duration; zero reconnects \
-                 continuously rather than immediately"
-                    .to_owned(),
-            ));
-        }
-        if max < min {
-            return Err(Error::InvalidRequest(
-                "max_backoff must be at least min_backoff".to_owned(),
-            ));
-        }
+        crate::backoff::check_window(min, max)?;
         self.min_backoff = min;
         self.max_backoff = max;
         Ok(self)
@@ -163,11 +152,7 @@ impl TradingStream {
     /// Returns [`Error::InvalidRequest`] if the duration is zero, which would
     /// treat a connection that dropped instantly as healthy.
     pub fn stable_session(mut self, after: Duration) -> Result<Self> {
-        if after.is_zero() {
-            return Err(Error::InvalidRequest(
-                "stable_session must be a positive duration".to_owned(),
-            ));
-        }
+        crate::backoff::check_stable_session(after)?;
         self.stable_session = after;
         Ok(self)
     }

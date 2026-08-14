@@ -313,31 +313,67 @@ pub struct AccountDocument {
 #[non_exhaustive]
 pub struct TrustedContact {
     /// Given name.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub given_name: Option<String>,
     /// Family name.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub family_name: Option<String>,
     /// Email address.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub email_address: Option<String>,
     /// Phone number.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub phone_number: Option<String>,
     /// Street address.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub street_address: Option<String>,
     /// City.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub city: Option<String>,
     /// State.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub state: Option<String>,
     /// Postal code.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub postal_code: Option<String>,
     /// Country.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub country: Option<String>,
 }
 
@@ -1168,58 +1204,106 @@ pub struct CIPKycInfo {
     /// The provider's id for this check.
     pub id: String,
     /// The risk score assigned.
-    #[serde(default, with = "crate::types::serde_util::int::option")]
+    #[serde(
+        default,
+        with = "crate::types::serde_util::int::option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub risk_score: Option<i64>,
     /// The risk level assigned.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub risk_level: Option<String>,
     /// Which risk categories applied.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub risk_categories: Option<Vec<String>>,
     /// The applicant's name.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub applicant_name: Option<String>,
     /// The applicant's email address.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub email_address: Option<String>,
     /// The applicant's nationality.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub nationality: Option<String>,
     /// The applicant's date of birth.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date_of_birth: Option<DateTime<Utc>>,
     /// The applicant's address.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub address: Option<String>,
     /// The applicant's postal code.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub postal_code: Option<String>,
     /// The applicant's country of residency.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub country_of_residency: Option<String>,
     /// When KYC finished.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kyc_completed_at: Option<DateTime<Utc>>,
     /// The IP address the applicant used.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ip_address: Option<String>,
     /// When the check started.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub check_initiated_at: Option<DateTime<Utc>>,
     /// When the check finished.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub check_completed_at: Option<DateTime<Utc>>,
     /// Whether the applicant was approved.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub approval_status: Option<CIPApprovalStatus>,
     /// Who approved them.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub approved_by: Option<String>,
     /// Why.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub approved_reason: Option<String>,
     /// When.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approved_at: Option<DateTime<Utc>>,
 }
 
@@ -1246,64 +1330,128 @@ pub struct CIPDocument {
     /// The provider's id for this check.
     pub id: String,
     /// The overall result.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub result: Option<CIPResult>,
     /// Where the check is in its lifecycle.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub status: Option<CIPStatus>,
     /// When the check was created.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
     /// The date of birth on the document.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date_of_birth: Option<DateTime<Utc>>,
     /// When the document expires.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date_of_expiry: Option<DateTime<Utc>>,
     /// The numbers printed on the document.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub document_numbers: Option<Vec<String>>,
     /// What kind of document it is.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub document_type: Option<String>,
     /// The first name on the document.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub first_name: Option<String>,
     /// The last name on the document.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub last_name: Option<String>,
     /// The gender on the document.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub gender: Option<String>,
     /// The country that issued it.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub issuing_country: Option<String>,
     /// The nationality on the document.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub nationality: Option<String>,
     /// Whether the age checks out.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub age_validation: Option<CIPResult>,
     /// Whether the document is known to be compromised.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub compromised_document: Option<CIPResult>,
     /// Whether there is a police record against it.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub police_record: Option<CIPStatus>,
     /// Whether the data matches what was submitted.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub data_comparison: Option<CIPResult>,
     /// The detail behind that comparison.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub data_comparison_breakdown: Option<String>,
     /// Whether the image is intact.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub image_integrity: Option<CIPResult>,
     /// The detail behind that.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub image_integrity_breakdown: Option<String>,
     /// Whether the document looks genuine.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub visual_authenticity: Option<String>,
 }
 
@@ -1330,13 +1478,21 @@ pub struct CIPPhoto {
     /// The provider's id for this check.
     pub id: String,
     /// The overall result.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub result: Option<CIPResult>,
     /// Where the check is in its lifecycle.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub status: Option<CIPStatus>,
     /// When the check was created.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
     /// Whether the face matches the document.
     ///
@@ -1345,23 +1501,44 @@ pub struct CIPPhoto {
     #[serde(
         default,
         rename = "face_comparision",
-        deserialize_with = "empty_string_as_none"
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
     )]
     pub face_comparison: Option<CIPResult>,
     /// The detail behind that comparison.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub face_comparison_breakdown: Option<String>,
     /// Whether the image is intact.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub image_integrity: Option<CIPResult>,
     /// The detail behind that.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub image_integrity_breakdown: Option<String>,
     /// Whether the photo looks genuine.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub visual_authenticity: Option<CIPResult>,
     /// The detail behind that.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub visual_authenticity_breakdown: Option<String>,
 }
 
@@ -1388,43 +1565,91 @@ pub struct CIPIdentity {
     /// The provider's id for this check.
     pub id: String,
     /// The overall result.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub result: Option<CIPResult>,
     /// Where the check is in its lifecycle.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub status: Option<CIPStatus>,
     /// When the check was created.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
     /// Whether the address matched.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub matched_address: Option<CIPResult>,
     /// Which addresses matched.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub matched_addresses: Option<String>,
     /// Whether the sources agreed.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub sources: Option<CIPResult>,
     /// The detail behind that.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub sources_breakdown: Option<String>,
     /// Whether the address checks out.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub address: Option<CIPResult>,
     /// The detail behind that.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub address_breakdown: Option<String>,
     /// Whether the date of birth checks out.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub date_of_birth: Option<CIPResult>,
     /// The detail behind that.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub date_of_birth_breakdown: Option<String>,
     /// Whether the tax id checks out.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub tax_id: Option<CIPResult>,
     /// The detail behind that.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub tax_id_breakdown: Option<String>,
 }
 
@@ -1451,28 +1676,56 @@ pub struct CIPWatchlist {
     /// The provider's id for this check.
     pub id: String,
     /// The overall result.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub result: Option<CIPResult>,
     /// Where the check is in its lifecycle.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub status: Option<CIPStatus>,
     /// When the check was created.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
     /// The records that matched.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub records: Option<String>,
     /// Whether the applicant is politically exposed.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub politically_exposed_person: Option<CIPResult>,
     /// Whether they appear on a sanctions list.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub sanction: Option<CIPResult>,
     /// Whether there is adverse media about them.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub adverse_media: Option<CIPResult>,
     /// Whether they appear on a monitored list.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub monitored_lists: Option<CIPResult>,
 }
 
@@ -1519,19 +1772,19 @@ pub struct CIPInfo {
     /// When it last changed.
     pub updated_at: DateTime<Utc>,
     /// The KYC verdict.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kyc: Option<Box<CIPKycInfo>>,
     /// The document checks.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub document: Option<Box<CIPDocument>>,
     /// The photo checks.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub photo: Option<Box<CIPPhoto>>,
     /// The identity database checks.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity: Option<Box<CIPIdentity>>,
     /// The watchlist checks.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub watchlist: Option<Box<CIPWatchlist>>,
 }
 

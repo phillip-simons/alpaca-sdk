@@ -141,18 +141,7 @@ impl StreamConfig {
     /// Returns [`Error::InvalidRequest`] if `min` is zero, or if `max` is
     /// smaller than `min`.
     pub fn set_backoff(&mut self, min: Duration, max: Duration) -> Result<&mut Self> {
-        if min.is_zero() {
-            return Err(Error::InvalidRequest(
-                "min_backoff must be a positive duration; zero reconnects \
-                 continuously rather than immediately"
-                    .to_owned(),
-            ));
-        }
-        if max < min {
-            return Err(Error::InvalidRequest(
-                "max_backoff must be at least min_backoff".to_owned(),
-            ));
-        }
+        crate::backoff::check_window(min, max)?;
         self.min_backoff = min;
         self.max_backoff = max;
         Ok(self)
@@ -204,11 +193,7 @@ impl StreamConfig {
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if the duration is zero.
     pub fn set_stable_session(&mut self, after: Duration) -> Result<&mut Self> {
-        if after.is_zero() {
-            return Err(Error::InvalidRequest(
-                "stable_session must be a positive duration".to_owned(),
-            ));
-        }
+        crate::backoff::check_stable_session(after)?;
         self.stable_session = after;
         Ok(self)
     }

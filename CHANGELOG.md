@@ -227,7 +227,10 @@ Decisions that become expensive after the first release, settled now.
   immediately" and was a hot loop, and a validator a field assignment can step
   around is not a validator — `data_timeout` was still `pub` and had the same
   hole. `TradingStream` gained `backoff` and the data streams gained `backoff`
-  and `stable_session`, so the two stream surfaces configure the same way.
+  and `stable_session`, so the two stream surfaces offer the same knobs — though
+  not the same call shape: `TradingStream`'s builders consume `self`, the data
+  streams' take `&mut self`, because a `DataStream` is configured after its
+  subscriptions are registered and a `TradingStream` has none to register.
 - **`CryptoDataStream::new` and `OptionDataStream::new` return `Result`,**
   matching `StockDataStream::new`. A `wire_enum`'s `Unknown(String)` variant is
   publicly constructible, so the feed name reached the endpoint URL unchecked.

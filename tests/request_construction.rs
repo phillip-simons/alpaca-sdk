@@ -161,4 +161,30 @@ fn request_bodies_omit_the_fields_they_do_not_set() {
         Some(0),
         "an unset disclosure set should send nothing, got {disclosures}"
     );
+
+    // The upload bodies this file constructs above. These were missed by the
+    // first sweep precisely because this test did not look at them: a `CIPInfo`
+    // with one check set sent four top-level nulls and eighteen more inside it.
+    let mut cip = CIPInfo::new(Uuid::nil(), Uuid::nil());
+    let mut kyc = CIPKycInfo::new("kyc-1");
+    kyc.applicant_name = Some("Jane Doe".to_owned());
+    cip.kyc = Some(Box::new(kyc));
+
+    let encoded = serde_json::to_value(&cip).unwrap();
+    assert!(encoded.get("document").is_none(), "{encoded}");
+    assert!(encoded.get("photo").is_none(), "{encoded}");
+    let kyc = &encoded["kyc"];
+    assert_eq!(kyc["applicant_name"], "Jane Doe");
+    assert!(kyc.get("risk_score").is_none(), "{kyc}");
+    assert!(kyc.get("approved_at").is_none(), "{kyc}");
+
+    // And the nested body on the account application.
+    let mut contact = alpaca_sdk::broker::TrustedContact::default();
+    contact.given_name = Some("Jane".to_owned());
+    let encoded = serde_json::to_value(&contact).unwrap();
+    assert_eq!(
+        encoded.as_object().map(serde_json::Map::len),
+        Some(1),
+        "a trusted contact should send only what was set, got {encoded}"
+    );
 }

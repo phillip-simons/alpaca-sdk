@@ -23,6 +23,52 @@ pub const DEFAULT_MIN_BACKOFF: Duration = Duration::from_secs(1);
 /// Ceiling the exponential growth is capped at.
 pub const DEFAULT_MAX_BACKOFF: Duration = Duration::from_secs(30);
 
+/// Checks a reconnect backoff window before it is stored.
+///
+/// Shared by [`StreamConfig`](crate::data::StreamConfig) and
+/// [`TradingStream`](crate::trading::TradingStream), which offer the same knob
+/// behind different receivers — three copies of these two rules, with three
+/// copies of the messages, is three places for them to drift.
+///
+/// Gated on `_ws`: without a stream feature there is no stream to configure,
+/// and an ungated helper is dead code in a `--features rustls-tls` build — which
+/// is exactly what `just features` exists to catch.
+///
+/// # Errors
+/// Returns [`Error::InvalidRequest`] if `min` is zero, which reconnects
+/// continuously rather than immediately, or if `max` is below `min`.
+#[cfg(feature = "_ws")]
+pub(crate) fn check_window(min: Duration, max: Duration) -> crate::error::Result<()> {
+    if min.is_zero() {
+        return Err(crate::Error::InvalidRequest(
+            "min_backoff must be a positive duration; zero reconnects \
+             continuously rather than immediately"
+                .to_owned(),
+        ));
+    }
+    if max < min {
+        return Err(crate::Error::InvalidRequest(
+            "max_backoff must be at least min_backoff".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+/// Checks a session-health threshold before it is stored.
+///
+/// # Errors
+/// Returns [`Error::InvalidRequest`] if the duration is zero, which would treat
+/// a connection that dropped instantly as healthy.
+#[cfg(feature = "_ws")]
+pub(crate) fn check_stable_session(after: Duration) -> crate::error::Result<()> {
+    if after.is_zero() {
+        return Err(crate::Error::InvalidRequest(
+            "stable_session must be a positive duration".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 /// Computes how long to wait before reconnect attempt number `retries`.
 ///
 /// `retries` counts consecutive failures and is 1-based; the first failure waits
