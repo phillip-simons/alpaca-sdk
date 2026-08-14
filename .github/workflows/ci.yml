@@ -108,11 +108,25 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # Each surface must build alone; a missing cfg gate only shows up here.
-      - run: cargo check --no-default-features --features rustls-tls
-      - run: cargo check --no-default-features --features trading,rustls-tls
-      - run: cargo check --no-default-features --features data,rustls-tls
-      - run: cargo check --no-default-features --features broker,rustls-tls
-      - run: cargo check --no-default-features --features trading,data,broker,blocking,polars,native-tls
+      #
+      # `--all-targets` because plain `cargo check` builds only the library: an
+      # unguarded *test* file is just as broken under a reduced feature set, and
+      # without this the matrix cannot see it. `tests/integration/enum_parity.rs`
+      # was in exactly that state, and this job as previously written would not
+      # have caught it — `just features` did, which is the wrong way round.
+      - run: cargo check --all-targets --no-default-features --features rustls-tls
+      - run: cargo check --all-targets --no-default-features --features trading,rustls-tls
+      - run: cargo check --all-targets --no-default-features --features data,rustls-tls
+      - run: cargo check --all-targets --no-default-features --features broker,rustls-tls
+      # `polars` alone, to pin the implication: it enables `data`, because the
+      # frame conversion is for the market data collections and the feature would
+      # otherwise compile all of polars and expose nothing.
+      - run: cargo check --all-targets --no-default-features --features polars,rustls-tls
+      # `blocking` alone. It is generic over the client rather than a mirrored
+      # API, so it compiles without any surface enabled — worth knowing stays
+      # true, since a mirrored one would not.
+      - run: cargo check --all-targets --no-default-features --features blocking,rustls-tls
+      - run: cargo check --all-targets --no-default-features --features trading,data,broker,blocking,polars,native-tls
 
   msrv:
     name: minimum supported rust version
@@ -150,6 +164,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --all-features --no-deps
+      # And once per surface. An intra-doc link that crosses a feature boundary
+      # resolves under --all-features and dangles everywhere else, so the
+      # all-features build above cannot see it. This moved out of `just check`,
+      # where it was two thirds of the rustdoc work on every commit, to here.
+      - run: cargo doc --no-deps --no-default-features --features trading,rustls-tls
+      - run: cargo doc --no-deps --no-default-features --features data,rustls-tls
+      - run: cargo doc --no-deps --no-default-features --features broker,rustls-tls
 
   # The single required status check.
   #

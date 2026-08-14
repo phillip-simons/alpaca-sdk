@@ -24,11 +24,24 @@ for a better source.
 git clone https://github.com/phillip-simons/alpaca-sdk
 cd alpaca-sdk
 just hooks     # installs the pre-commit credential guard, once per clone
-just check     # fmt, clippy, rustdoc, tests, feature combinations
+just check     # fmt, clippy, rustdoc, tests
 ```
 
-`just check` is the gate. Run it before every commit; CI runs it again along
-with the MSRV build and `cargo-deny`.
+`just check` is the gate. Run it before every commit. It holds what fires on an
+ordinary edit; CI holds the rest and runs both.
+
+`just ci` adds what CI checks and `just check` does not: the feature
+combinations, the per-surface rustdoc builds, the MSRV build and `cargo-deny`.
+Run it before opening a pull request, or just let CI do it.
+
+One CI job has no local equivalent. The `docs` job builds on nightly with
+`--cfg docsrs`, which is what turns on `feature(doc_cfg)` in `src/lib.rs`, so a
+malformed `doc(cfg(...))` attribute passes everything locally and fails there.
+Reproducing it needs a nightly toolchain:
+
+```sh
+RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc --no-deps --all-features
+```
 
 On a change that touches no Rust — documentation, issue templates, this file —
 CI skips those jobs. They still report as skipped, which counts as satisfied, so

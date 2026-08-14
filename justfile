@@ -17,12 +17,20 @@ alpaca_py := env_var_or_default("ALPACA_PY", "../alpaca-py")
 
 default: check
 
-# The gate. Run before every commit.
+# What is here catches something on an ordinary edit. What is in `ci` catches
+# something rarer, or something only a second toolchain can see.
 #
-# `features` is in here rather than only in `ci` because a missing cfg gate is
-# invisible to every other recipe — it compiles fine under --all-features and
-# fails only when a surface is built alone. It costs half a second warm.
-check: fmt-check clippy doc test features
+# `features` used to be in this list, on the argument that a missing cfg gate is
+# invisible to every other recipe and "costs half a second warm". That was true
+# when the test suite was 33 separate binaries and cargo could reuse almost all
+# of the work; it is not true now. Measured after a one-line edit to `src/`, it
+# was 98.9s of a 305s gate — a third of the wall clock to catch a bug class you
+# can only introduce while adding feature-specific code. CI runs it on every
+# push and pull request, and branch protection means a miss costs a fixup push
+# rather than a broken `main`.
+#
+# The gate. Run before every commit.
+check: fmt-check clippy doc test
 
 # Rewrite formatting in place.
 fmt:
@@ -39,12 +47,21 @@ clippy:
 # Build the docs with rustdoc lints denied.
 doc:
     # These lints only fire here — clippy does not run rustdoc, so without this
-    # recipe `missing_docs` and the intra-doc link lints are decoration.
+    # recipe `missing_docs` and the intra-doc link lints are decoration. This one
+    # is in `check` because any doc edit can trip it.
     RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --locked
-    # And once per surface. An intra-doc link that crosses a feature boundary
-    # resolves under --all-features and dangles everywhere else, so the
-    # all-features build alone cannot see it — nor can CI or docs.rs, which both
-    # build all-features too. Anyone running `cargo doc --features trading` can.
+
+# An intra-doc link that crosses a feature boundary resolves under
+# --all-features and dangles everywhere else, so the all-features build alone
+# cannot see it. Anyone running `cargo doc --features trading` can.
+#
+# In `ci` rather than `check`: it only fires on a link written across a feature
+# boundary, which is rare, and the `docs` job runs it on every push and pull
+# request. It was ~two thirds of the four rustdoc invocations `just doc` used
+# to make.
+#
+# Build the docs once per surface, which the all-features build cannot check.
+doc-surfaces:
     RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked --no-default-features --features trading,rustls-tls
     RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked --no-default-features --features data,rustls-tls
     RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked --no-default-features --features broker,rustls-tls
@@ -108,8 +125,16 @@ deny:
 semver:
     cargo semver-checks check-release
 
-# Everything CI runs.
-ci: check msrv deny
+# The nightly `docs` job is the one thing no recipe here reproduces.
+# `src/lib.rs` gates `feature(doc_cfg)` behind `--cfg docsrs`, and only the
+# workflow sets it, so a malformed `doc(cfg(...))` attribute compiles under
+# every recipe in this file and fails in CI. Reproducing it needs nightly:
+#
+#     RUSTDOCFLAGS="-D warnings --cfg docsrs" \
+#         cargo +nightly doc --no-deps --all-features
+#
+# Everything CI runs, bar that job.
+ci: check doc-surfaces features msrv deny
 
 # Install the repo's git hooks (once per clone).
 hooks:
