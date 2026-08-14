@@ -501,7 +501,11 @@ impl CreateWithdrawalRequest {
 #[non_exhaustive]
 pub struct DemoFundingRequest {
     /// How much to deposit.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub amount: Option<Decimal>,
     /// In what currency.
     #[serde(default, skip_serializing_if = "Option::is_none")]

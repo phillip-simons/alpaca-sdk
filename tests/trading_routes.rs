@@ -896,14 +896,27 @@ async fn get_all_orders_follows_the_id_cursor_across_pages() {
 
     let server = MockServer::start().await;
 
+    const SECOND: &str = "aaaaaaaa-0000-0000-0000-000000000001";
+
+    // wiremock matches in mount order, first match wins, so the cursor-bearing
+    // mocks go ahead of the general one.
+    //
+    // Page three: empty, which is what ends the walk. A *short* page does not,
+    // because a short page is also what a server silently capping `limit`
+    // returns — and stopping there is the truncation this walk exists to fix.
+    Mock::given(method("GET"))
+        .and(path("/v2/orders"))
+        .and(query_param("before_order_id", SECOND))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .expect(1)
+        .mount(&server)
+        .await;
+
     // Page two, reached only by sending the oldest id from page one.
     Mock::given(method("GET"))
         .and(path("/v2/orders"))
         .and(query_param("before_order_id", last_id))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(order_page(&["aaaaaaaa-0000-0000-0000-000000000001"])),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(order_page(&[SECOND])))
         .expect(1)
         .mount(&server)
         .await;
@@ -953,4 +966,47 @@ async fn get_all_orders_respects_max_items() {
         .await
         .unwrap();
     assert_eq!(orders.len(), 10);
+}
+
+/// A server that cycles between two pages does not hang the walk.
+///
+/// The first guard here compared consecutive cursors, which only catches a
+/// server repeating the *same* id. A server alternating between two pages moves
+/// the cursor every time and still teaches the walk nothing — and that spun
+/// forever. Progress is now measured in new orders, which `seen` already knows.
+#[tokio::test]
+async fn a_cycling_server_does_not_spin_the_order_walk() {
+    let page = |id: &str| {
+        let mut order = fixture("trading/test_order_routes__test_get_order_by_id__01.json");
+        order["id"] = json!(id);
+        serde_json::Value::Array(vec![order])
+    };
+    const A: &str = "aaaaaaaa-0000-0000-0000-00000000000a";
+    const B: &str = "bbbbbbbb-0000-0000-0000-00000000000b";
+
+    let server = MockServer::start().await;
+    // Asking for anything after B returns A; anything else returns B. Neither
+    // page is empty, and the cursor changes on every request.
+    Mock::given(method("GET"))
+        .and(path("/v2/orders"))
+        .and(query_param("before_order_id", B))
+        .respond_with(ResponseTemplate::new(200).set_body_json(page(A)))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v2/orders"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(page(B)))
+        .mount(&server)
+        .await;
+
+    let orders = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        client(&server).get_all_orders(None, None),
+    )
+    .await
+    .expect("the walk must terminate")
+    .unwrap();
+
+    // Both distinct orders, each once.
+    assert_eq!(orders.len(), 2, "expected A and B exactly once: {orders:?}");
 }

@@ -100,6 +100,15 @@ behaviour changes are worth reading before the first release rather than after.
   Chaining both produced an `oto` order carrying two exit legs that `validate`
   accepted.
 - **Empty `Symbols` is refused locally** instead of issuing `?symbols=`.
+- **Every money field in a request body uses this crate's decimal codec**, not
+  `rust_decimal`'s own `Serialize`. They agree today; pinning them means a
+  dependency bump cannot change the wire form of an amount underneath a transfer,
+  a settlement, a locate or a mint.
+- **`get_all_orders` ends its walk on an empty page, not a short one.** A short
+  page is also what a server silently capping `limit` returns — and stopping
+  there would reproduce the truncation the walk exists to fix. It also measures
+  progress in new orders rather than cursor movement, so a server cycling between
+  two pages terminates instead of spinning.
 - **`Error::Decode` carries the route and the payload** everywhere in the
   market-data client, including the three single-symbol "latest" routes and the
   news route, where it used to carry an empty body. Reporting the payload means
@@ -139,8 +148,9 @@ behaviour changes are worth reading before the first release rather than after.
   silently truncated list. The walk deduplicates on order id rather than assuming
   the cursor is exclusive, because Alpaca's cursors are inclusive on some routes
   and the reference does not say which this is.
-- `Default` for the frame-convertible market data records — `Bar`, `Quote`,
-  `Trade`, `Auction`, `DailyAuctions`, `ForexRate`. They are `#[non_exhaustive]`
+- `Default` for the market data records a caller might build — `Bar`, `Quote`,
+  `Trade`, `Auction`, `DailyAuctions`, `ForexRate`, `Snapshot`,
+  `OptionsSnapshot`, `Orderbook`, `OrderbookQuote`. They are `#[non_exhaustive]`
   like every other response model, which removes the struct literal; building one
   for a backtest or a fixture is a real need, and this is the way through.
 - `StreamConfig::stable_session` and `TradingStream::stable_session`, which set

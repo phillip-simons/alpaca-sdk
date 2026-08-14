@@ -937,8 +937,6 @@ where
     T: serde::de::DeserializeOwned,
     F: Fn(&T) -> Uuid,
 {
-    let page_size = crate::config::ORDERS_MAX_LIMIT as usize;
-
     /// Narrows the page size to what is still outstanding.
     ///
     /// Per page, not once: capping only the first request still pulled 1,000
@@ -965,12 +963,22 @@ where
         narrow(&mut request, max_items, all.len());
 
         let page = rest.get::<Vec<T>, _>(path, &request).await?;
-        let asked_for = request.limit.map_or(page_size, |limit| limit as usize);
-        let short_page = page.len() < asked_for;
+
+        // An *empty* page ends the walk, not a short one. A short page looks
+        // like the end, and usually is — but it is also what a server that
+        // silently caps `limit` below what was asked returns, and this route's
+        // documented default page size is 50 against the 500 we ask for. Ending
+        // on short would then reproduce the truncation this walk exists to fix,
+        // with no error. Ending on empty costs one extra request, which is the
+        // price of an endpoint that does not say whether more remain.
+        if page.is_empty() {
+            break;
+        }
 
         // The cursor is the oldest id on this page, and it has to be read
         // before the page is moved into the accumulator.
         let oldest = page.last().map(&id_of);
+        let before = all.len();
         for order in page {
             if seen.insert(id_of(&order)) {
                 all.push(order);
@@ -984,23 +992,20 @@ where
             break;
         }
 
-        // A page shorter than the maximum is the last one. An exactly-full
-        // final page costs one extra empty request, which is the price of an
-        // endpoint that does not say whether more remain.
-        if short_page {
+        // Progress is measured in *new* orders, not in cursor movement. A guard
+        // that only compared consecutive cursors would miss a server cycling
+        // between two pages — the walk would never terminate even though it had
+        // stopped learning anything. `seen` already knows the answer.
+        if all.len() == before {
+            tracing::warn!(
+                path,
+                "order walk stopped making progress; every order on the last \
+                 page had already been seen"
+            );
             break;
         }
 
         let Some(oldest) = oldest else { break };
-        // Defensive: an endpoint that kept returning the same last id would
-        // otherwise loop forever without adding anything.
-        if request.before_order_id == Some(oldest) {
-            tracing::warn!(
-                order_id = %oldest,
-                "order cursor stopped advancing; stopping the walk"
-            );
-            break;
-        }
         request.before_order_id = Some(oldest);
     }
 

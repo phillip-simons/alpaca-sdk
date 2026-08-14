@@ -249,7 +249,11 @@ pub struct TransferFeeEstimateRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub to_address: Option<String>,
     /// How much to move.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub amount: Option<Decimal>,
 }
 

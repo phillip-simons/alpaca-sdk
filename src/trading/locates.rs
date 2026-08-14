@@ -230,7 +230,11 @@ pub struct CreateLocateRequest {
     /// How many shares.
     pub qty: i64,
     /// The highest fee per share to accept.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub limit_price: Option<Decimal>,
     /// Whether to reject a partial fill.
     #[serde(default, skip_serializing_if = "Option::is_none")]

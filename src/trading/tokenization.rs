@@ -137,6 +137,7 @@ pub struct MintTokenRequest {
     /// The position to tokenize.
     pub underlying_symbol: String,
     /// How many units.
+    #[serde(with = "crate::types::decimal")]
     pub qty: Decimal,
     /// Who issues the token.
     pub issuer: TokenizationIssuer,

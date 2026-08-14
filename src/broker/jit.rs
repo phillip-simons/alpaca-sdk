@@ -433,6 +433,7 @@ pub struct JitSettlementAccount {
     /// The account.
     pub account_number: String,
     /// How much it settles.
+    #[serde(with = "crate::types::decimal")]
     pub amount: Decimal,
     /// Who sent the money, for travel-rule reporting.
     pub transmitter_info: TransmitterInfo,

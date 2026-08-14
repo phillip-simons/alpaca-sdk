@@ -631,13 +631,21 @@ async fn get_all_orders_for_account_follows_the_id_cursor() {
 
     let server = MockServer::start().await;
 
+    const SECOND: &str = "aaaaaaaa-0000-0000-0000-000000000001";
+
+    // The walk ends on an *empty* page, not a short one — see the trading twin.
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/trading/accounts/{ACCOUNT}/orders")))
+        .and(query_param("before_order_id", SECOND))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .expect(1)
+        .mount(&server)
+        .await;
+
     Mock::given(method("GET"))
         .and(path(format!("/v1/trading/accounts/{ACCOUNT}/orders")))
         .and(query_param("before_order_id", last_id.as_str()))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(json!([order("aaaaaaaa-0000-0000-0000-000000000001")])),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([order(SECOND)])))
         .expect(1)
         .mount(&server)
         .await;

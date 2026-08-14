@@ -252,6 +252,7 @@ pub struct CreateInstantFundingRequest {
     /// The account the money is owed from.
     pub source_account_no: String,
     /// How much to advance.
+    #[serde(with = "crate::types::decimal")]
     pub amount: Decimal,
 }
 

@@ -385,6 +385,18 @@ impl Default for Auction {
     }
 }
 
+impl Default for Orderbook {
+    fn default() -> Self {
+        Self {
+            symbol: String::new(),
+            timestamp: epoch(),
+            bids: Vec::new(),
+            asks: Vec::new(),
+            reset: false,
+        }
+    }
+}
+
 impl Default for ForexRate {
     fn default() -> Self {
         Self {
@@ -401,7 +413,7 @@ impl Default for ForexRate {
 pub type ForexRateSet = HashMap<String, Vec<ForexRate>>;
 
 /// One price level in an orderbook.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct OrderbookQuote {
     /// Price at this level.
@@ -434,7 +446,7 @@ pub struct Orderbook {
 }
 
 /// The most recent trade, quote, and bars for a symbol.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Snapshot {
     /// The symbol this snapshot is for, filled in from the response key.
@@ -474,7 +486,7 @@ pub struct OptionsGreeks {
 }
 
 /// The latest trade, quote, and analytics for an option contract.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct OptionsSnapshot {
     /// The contract symbol, filled in from the response key.
