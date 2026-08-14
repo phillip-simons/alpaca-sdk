@@ -35,6 +35,9 @@ __pycache__/
 .mcp.json
 .github/copilot-instructions.md
 nimbalyst-local/
+# Tracker type schemas and workspace config. Nothing writes here yet, but
+# `tracker_define_type` persists YAML into it the moment a custom type exists.
+.nimbalyst/
 
 # Agent instruction files, kept out of the repo for the same reason.
 AGENTS.md
