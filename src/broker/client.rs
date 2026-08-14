@@ -990,7 +990,10 @@ impl BrokerClient {
         );
 
         let retry = &config.retry;
-        let total_attempts = retry.attempts + 1;
+        // Saturating because `attempts` is a caller-supplied `u32`: `u32::MAX`
+        // would overflow, panicking in debug and wrapping to a zero-iteration
+        // loop in release.
+        let total_attempts = retry.attempts.saturating_add(1);
 
         for attempt in 1..=total_attempts {
             let response = self

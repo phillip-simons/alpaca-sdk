@@ -315,6 +315,17 @@ fn credentials() -> Credentials {
     })
 }
 
+fn assert_paper(credentials: &Credentials) {
+    // Alpaca prefixes paper keys with PK and live keys with AK. Refusing to run
+    // against a live account is worth the two lines.
+    if let Credentials::KeyPair { api_key, .. } = credentials {
+        assert!(
+            api_key.starts_with("PK"),
+            "these tests only run against a paper account; this key does not look like one"
+        );
+    }
+}
+
 fn client(credentials: &Credentials, host: Host, version: &str) -> RestClient {
     let base = match host {
         Host::Data => BaseUrl::Data,
@@ -330,6 +341,7 @@ fn client(credentials: &Credentials, host: Host, version: &str) -> RestClient {
 #[ignore = "hits the live market data API; run with `just capture`"]
 async fn capture_the_routes_no_sdk_tests_cover() {
     let credentials = credentials();
+    assert_paper(&credentials);
     let out = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/live");
     std::fs::create_dir_all(&out).expect("fixtures/live");
 

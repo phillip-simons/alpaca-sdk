@@ -539,8 +539,10 @@ impl RestClient {
     ) -> Result<reqwest::Response> {
         let retry = &self.config.retry;
         // `attempts` counts retries *after* the first request, so a value of 3
-        // means up to 4 requests in total.
-        let total_attempts = retry.attempts + 1;
+        // means up to 4 requests in total. Saturating because `attempts` is a
+        // caller-supplied `u32`: `u32::MAX` would overflow, panicking in debug
+        // and wrapping to a zero-iteration loop in release.
+        let total_attempts = retry.attempts.saturating_add(1);
 
         // The original builder is sent first and a copy is kept for the next
         // attempt. Cloning up front instead would swallow a builder-level error
@@ -778,5 +780,40 @@ mod tests {
         let truncated = truncate(&body);
         assert!(truncated.ends_with("bytes total)"));
         assert!(truncated.len() < body.len());
+    }
+
+    /// `RetryConfig::attempts` is public and takes a `u32`, so a caller can pass
+    /// `u32::MAX`. The loop bound used to be `attempts + 1`, which overflowed:
+    /// a panic in debug, and in release a `total_attempts` of 0, which skips the
+    /// loop entirely and falls through to the `unreachable!` below it. Both
+    /// failures are on the caller's side of an ordinary builder call, so the
+    /// bound saturates instead.
+    ///
+    /// The request has to actually be issued for this to prove anything —
+    /// computing the bound in the test would only re-test the arithmetic.
+    #[tokio::test]
+    async fn a_saturating_attempt_count_still_sends_one_request() {
+        use wiremock::matchers::{method as m, path as p};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(m("GET"))
+            .and(p("/v2/account"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("7"))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let creds = Credentials::new("key", "secret").unwrap();
+        let client = RestClient::new(
+            &creds,
+            RestConfig::new(server.uri()).retry(RetryConfig::default().attempts(u32::MAX)),
+        )
+        .unwrap();
+
+        // Succeeds on the first attempt, so the retry budget is never spent; the
+        // point is that establishing that budget no longer overflows.
+        let got: u8 = client.get("/account", &Empty).await.unwrap();
+        assert_eq!(got, 7);
     }
 }

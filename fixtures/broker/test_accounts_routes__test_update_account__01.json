@@ -77,7 +77,7 @@
       "document_type": "identity_verification",
       "document_sub_type": "passport",
       "id": "6458a6f5-0cd1-4206-a240-2666dd7089a8",
-      "content": "https://s3.amazonaws.com/stg.alpaca.markets/documents/accounts/0d969814-40d6-4b2b-99ac-2e37427f1ad2/544869c3-483e-4844-9de8-33166e04acdf.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAJLDF4SCWSL6HUQKA%2F20220413%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20220413T182315Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host&X-Amz-Signature=9d2b6a38329a3f35723d018983fb9783a6b39d9a59f0ce414bcfdfde858119de",
+      "content": "https://s3.amazonaws.com/stg.alpaca.markets/documents/accounts/0d969814-40d6-4b2b-99ac-2e37427f1ad2/544869c3-483e-4844-9de8-33166e04acdf.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=REDACTED&X-Amz-Date=20220413T182315Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host&X-Amz-Signature=REDACTED",
       "created_at": "2022-04-12T17:24:32.282494Z"
     }
   ],

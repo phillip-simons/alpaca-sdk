@@ -244,6 +244,13 @@ parameters:
 # ---------------------------------------------------------------------------
 
 # Run the tests that hit real paper endpoints, which `just test` skips.
+#
+# WARNING: this rewrites tracked files. `--ignored` selects every ignored test
+# in every target, which includes the capture in tests/live_capture.rs, so this
+# re-runs `just capture` as a side effect and overwrites fixtures/live/*.json
+# and fixtures/live/index.json. Commit or stash before running it, and diff
+# fixtures/live/ afterwards. To run only the smoke tests, select that target
+# directly rather than reaching for this recipe.
 live:
     # They are #[ignore]d so a normal run never spends network time or
     # credentials. Needs APCA_API_KEY_ID and APCA_API_SECRET_KEY set.

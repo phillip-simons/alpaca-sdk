@@ -465,3 +465,47 @@ async fn a_rate_limited_download_honours_retry_after_over_its_own_wait() {
         "`Retry-After: 1` was ignored in favour of the client's own 3s wait: {elapsed:?}"
     );
 }
+
+/// The download's own loop bounds itself without overflowing.
+///
+/// `RetryConfig::attempts` is public and takes a `u32`, so `u32::MAX` is a value
+/// a caller can pass. The bound used to be `attempts + 1`, which overflows: a
+/// panic in debug, and in release a `total_attempts` of 0, which skips the loop
+/// and falls through to the `unreachable!` under it. Saturating leaves the bound
+/// at `u32::MAX`, so the loop still runs.
+///
+/// The request has to actually be issued for this to prove anything — asserting
+/// on the arithmetic alone would not touch the loop.
+#[tokio::test]
+async fn a_saturating_attempt_count_still_sends_one_download() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/v1/accounts/{ACCOUNT_ID}/documents/{DOCUMENT_ID}/download"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(b"%PDF-1.4".to_vec()))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = BrokerClient::with_config(
+        &Credentials::new("broker-key", "broker-secret").unwrap(),
+        RestConfig::new(server.uri())
+            .api_version("v1")
+            .retry(RetryConfig::default().attempts(u32::MAX)),
+    )
+    .unwrap();
+
+    // Succeeds on the first attempt, so the retry budget is never spent; the
+    // point is that establishing that budget no longer overflows.
+    let bytes = client
+        .download_trade_document_for_account_by_id(
+            Uuid::parse_str(ACCOUNT_ID).unwrap(),
+            Uuid::parse_str(DOCUMENT_ID).unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(bytes, b"%PDF-1.4");
+}

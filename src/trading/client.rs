@@ -576,8 +576,11 @@ impl TradingClient {
     /// # Errors
     /// Propagates transport and API failures.
     pub async fn exercise_do_not_exercise(&self, contract: &AssetIdent) -> Result<()> {
-        let path = format!("/positions/{}/do-not-exercise", contract.as_path_segment()?);
-        self.rest.post(&path, &Empty).await
+        self.send_void(
+            Method::POST,
+            &format!("/positions/{}/do-not-exercise", contract.as_path_segment()?),
+        )
+        .await
     }
 
     // ------------------------------------------------ activities by type
