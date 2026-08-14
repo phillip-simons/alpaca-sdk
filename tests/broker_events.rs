@@ -363,3 +363,41 @@ async fn a_rejected_subscription_fails_instead_of_returning_an_empty_stream() {
 
     assert_eq!(error.status(), Some(403));
 }
+
+/// An event stream refuses a redirect.
+///
+/// This is the credential-leak fix, and it needs pinning because the failure
+/// mode is silent: reqwest strips `Authorization`, `Cookie` and
+/// `Proxy-Authorization` on a cross-host hop and *nothing else*, so the trading
+/// and market-data clients' `APCA-API-*` headers would ride along to wherever a
+/// `Location` pointed. Folding the stream client back together with the one that
+/// follows redirects — which is what the bug was — would pass CI without this.
+#[tokio::test]
+async fn an_event_stream_does_not_follow_a_redirect() {
+    let elsewhere = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("data: {}\n\n"))
+        // Nothing may reach the redirect target.
+        .expect(0)
+        .mount(&elsewhere)
+        .await;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v2/events/journals/status"))
+        .respond_with(
+            ResponseTemplate::new(302).insert_header("location", elsewhere.uri().as_str()),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // The redirect surfaces as the non-success status it is, rather than being
+    // followed to another host. The `Ok` side is a `Stream`, which is not
+    // `Debug`, so this cannot be `expect_err`.
+    match client(&server).get_journal_events(None).await {
+        Err(alpaca_sdk::Error::Api(api)) => assert_eq!(api.status, 302),
+        Err(other) => panic!("expected the 302 to surface as an API error, got {other:?}"),
+        Ok(_) => panic!("a redirect must not be followed"),
+    }
+}

@@ -96,9 +96,11 @@ behaviour changes are worth reading before the first release rather than after.
 - **Empty `Symbols` is refused locally** instead of issuing `?symbols=`.
 - **`Error::Decode` carries the route and the payload** everywhere in the
   market-data client, including the three single-symbol "latest" routes and the
-  news route, where it used to carry an empty body. The payload is now borrowed
-  rather than cloned, so a successful multi-symbol response no longer pays for an
-  error path it did not take.
+  news route, where it used to carry an empty body. Reporting the payload means
+  keeping it, so the symbol-keyed helpers deserialize from a borrowed `&Value`
+  rather than consuming it — which copies strings where the old code moved them.
+  The news route, which really did clone its whole article array, no longer
+  does.
 - **The reconnect curve resets on a session that did its job.** The counter was
   incremented immediately *after* a successful connect and reset only by an
   inbound message, so a few clean server-side recycles pushed the delay to its
@@ -144,14 +146,17 @@ Decisions that become expensive after the first release, settled now.
   action shapes and the funding, JIT, reporting, IPO, OAuth and locate responses.
   Request structs carry it too, as CONTRIBUTING states — the exemptions are
   clients, and the caller-constructed value types where the attribute costs
-  something and buys nothing: `OrderAmount`, `Trail`, `StopLimit`, `Symbols`,
-  `TimeFrame`, `Codes`, `SettlementTransfer`, `JitSettlementAccount`,
-  `TransmitterInfo`, `W8BenDocument` and `StreamConfig`. `CHANGELOG` stated the policy as a guarantee; `trading/models.rs`, `broker/models.rs` and `data/models.rs` had it
+  something and buys nothing — among them `OrderAmount`, `Trail`, `StopLimit`,
+  `AssetIdent`, `Symbols`, `TimeFrame`, `SettlementTransfer`, `W8BenDocument`
+  and `StreamConfig`. `tests/request_construction.rs` is the check that the line
+  between the two groups is drawn where it can actually be used from. `CHANGELOG` stated the policy as a guarantee; `trading/models.rs`, `broker/models.rs` and `data/models.rs` had it
   on nothing. Alpaca adds fields without a version bump, and without the
   attribute the crate cannot follow an *additive* upstream change without a major
   release of its own. Several request-body components gain constructors as a
   result: `Agreement::new`, `ManualACHRelationship::new`,
-  `PlaidACHRelationship::new`; `Contact`, `Identity`, `Disclosures`,
+  `PlaidACHRelationship::new`, `RebalancingCondition::drift_band` /
+  `::calendar`, `CIPInfo::new` and a `new` on each of the five CIP check types;
+  `Contact`, `Identity`, `Disclosures`,
   `UpdatableContact`, `UpdatableIdentity` and `BankAddress` are built from
   `Default` and assigned by name. `W8BenDocument` is deliberately left exhaustive:
   it transcribes an IRS form, and eleven required fields would make a constructor
@@ -232,7 +237,7 @@ Decisions that become expensive after the first release, settled now.
   twenty-eight, and those are rounded rather than refused, because refusing them
   would make an already-captured response undecodable. The exactness promise
   holds for what Alpaca *quotes*.
-- The fixture corpus is 227 files and 232KiB, not the 135 recorded in three
+- The fixture corpus is 227 captured payloads and 232KiB, not the 135 recorded in three
   places. `RELEASING.md` names `all checks` rather than "the 9 required checks".
 
 ### Dependencies

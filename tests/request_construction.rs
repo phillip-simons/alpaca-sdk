@@ -13,9 +13,10 @@
 #![cfg(all(feature = "broker", feature = "trading"))]
 
 use alpaca_sdk::broker::{
-    BankAddress, CIPInfo, CalendarSubType, CreateBankRequest, CreateWithdrawalRequest,
-    DriftBandSubType, IdentifierType, ManualACHRelationship, PlaidACHRelationship,
-    RebalancingCondition, UpdatableContact, UpdatableIdentity, Weight,
+    BankAddress, CIPDocument, CIPIdentity, CIPInfo, CIPKycInfo, CIPPhoto, CIPWatchlist,
+    CalendarSubType, CreateBankRequest, CreateWithdrawalRequest, DriftBandSubType, IdentifierType,
+    ManualACHRelationship, PlaidACHRelationship, RebalancingCondition, UpdatableContact,
+    UpdatableIdentity, Weight,
 };
 use alpaca_sdk::types::SupportedCurrencies;
 use alpaca_sdk::{Decimal, trading};
@@ -32,11 +33,28 @@ fn rebalancing_conditions_can_be_built() {
     assert!(calendar.percent.is_none());
 }
 
+/// The upload body *and* every nested check it can carry.
+///
+/// An earlier version of this test asserted `cip.kyc.is_none()` — which passed
+/// while the five check types were themselves unconstructible, so the guard
+/// missed exactly the case that was broken. Filling a check is the assertion.
 #[test]
-fn a_cip_record_can_be_built_for_upload() {
-    let cip = CIPInfo::new(Uuid::nil(), Uuid::nil());
+fn a_cip_record_can_be_built_for_upload_with_its_checks() {
+    let mut cip = CIPInfo::new(Uuid::nil(), Uuid::nil());
     assert!(cip.provider_name.is_empty());
-    assert!(cip.kyc.is_none());
+
+    let mut kyc = CIPKycInfo::new("kyc-1");
+    kyc.applicant_name = Some("Jane Doe".to_owned());
+    cip.kyc = Some(Box::new(kyc));
+
+    cip.document = Some(Box::new(CIPDocument::new("doc-1")));
+    cip.photo = Some(Box::new(CIPPhoto::new("photo-1")));
+    cip.identity = Some(Box::new(CIPIdentity::new("id-1")));
+    cip.watchlist = Some(Box::new(CIPWatchlist::new("watch-1")));
+
+    let kyc = cip.kyc.as_ref().expect("the check just set");
+    assert_eq!(kyc.applicant_name.as_deref(), Some("Jane Doe"));
+    assert_eq!(kyc.id, "kyc-1");
 }
 
 #[test]

@@ -1062,7 +1062,7 @@ pub struct RunsPage {
 /// The KYC provider's verdict on the account holder.
 ///
 /// Every field is optional, because which of them a provider fills in varies.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct CIPKycInfo {
     /// The provider's id for this check.
@@ -1123,8 +1123,24 @@ pub struct CIPKycInfo {
     pub approved_at: Option<DateTime<Utc>>,
 }
 
+impl CIPKycInfo {
+    /// A record for the KYC verdict, identified by `id`, with every finding unset.
+    ///
+    /// This type is `#[non_exhaustive]`, so a caller assembling a
+    /// [`CIPInfo`] for upload builds it here and then sets the fields that
+    /// apply. Without a constructor `CIPInfo::new`'s own instruction — "set the
+    /// check fields that apply on the result" — could not be followed at all.
+    #[must_use]
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            ..Self::default()
+        }
+    }
+}
+
 /// The provider's checks on an identity document.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct CIPDocument {
     /// The provider's id for this check.
@@ -1191,8 +1207,24 @@ pub struct CIPDocument {
     pub visual_authenticity: Option<String>,
 }
 
+impl CIPDocument {
+    /// A record for the document check, identified by `id`, with every finding unset.
+    ///
+    /// This type is `#[non_exhaustive]`, so a caller assembling a
+    /// [`CIPInfo`] for upload builds it here and then sets the fields that
+    /// apply. Without a constructor `CIPInfo::new`'s own instruction — "set the
+    /// check fields that apply on the result" — could not be followed at all.
+    #[must_use]
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            ..Self::default()
+        }
+    }
+}
+
 /// The provider's checks on a submitted photo.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct CIPPhoto {
     /// The provider's id for this check.
@@ -1233,8 +1265,24 @@ pub struct CIPPhoto {
     pub visual_authenticity_breakdown: Option<String>,
 }
 
+impl CIPPhoto {
+    /// A record for the photo check, identified by `id`, with every finding unset.
+    ///
+    /// This type is `#[non_exhaustive]`, so a caller assembling a
+    /// [`CIPInfo`] for upload builds it here and then sets the fields that
+    /// apply. Without a constructor `CIPInfo::new`'s own instruction — "set the
+    /// check fields that apply on the result" — could not be followed at all.
+    #[must_use]
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            ..Self::default()
+        }
+    }
+}
+
 /// The provider's checks against identity databases.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct CIPIdentity {
     /// The provider's id for this check.
@@ -1280,8 +1328,24 @@ pub struct CIPIdentity {
     pub tax_id_breakdown: Option<String>,
 }
 
+impl CIPIdentity {
+    /// A record for the identity-database check, identified by `id`, with every finding unset.
+    ///
+    /// This type is `#[non_exhaustive]`, so a caller assembling a
+    /// [`CIPInfo`] for upload builds it here and then sets the fields that
+    /// apply. Without a constructor `CIPInfo::new`'s own instruction — "set the
+    /// check fields that apply on the result" — could not be followed at all.
+    #[must_use]
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            ..Self::default()
+        }
+    }
+}
+
 /// The provider's checks against sanctions and watchlists.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct CIPWatchlist {
     /// The provider's id for this check.
@@ -1310,6 +1374,22 @@ pub struct CIPWatchlist {
     /// Whether they appear on a monitored list.
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub monitored_lists: Option<CIPResult>,
+}
+
+impl CIPWatchlist {
+    /// A record for the watchlist check, identified by `id`, with every finding unset.
+    ///
+    /// This type is `#[non_exhaustive]`, so a caller assembling a
+    /// [`CIPInfo`] for upload builds it here and then sets the fields that
+    /// apply. Without a constructor `CIPInfo::new`'s own instruction — "set the
+    /// check fields that apply on the result" — could not be followed at all.
+    #[must_use]
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            ..Self::default()
+        }
+    }
 }
 
 /// A Customer Identification Program record for an account.

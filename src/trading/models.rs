@@ -448,19 +448,30 @@ impl Serialize for Calendar {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct as _;
 
-        let mut state = serializer.serialize_struct("Calendar", 6)?;
+        // The three optional fields are *omitted* when absent, not written as
+        // `null`: an older response that carries no session times encodes back
+        // to the shape it arrived in, which is what "the wire form" means.
+        let present = 3
+            + usize::from(self.session_open.is_some())
+            + usize::from(self.session_close.is_some())
+            + usize::from(self.settlement_date.is_some());
+
+        let mut state = serializer.serialize_struct("Calendar", present)?;
         state.serialize_field("date", &self.date)?;
         state.serialize_field("open", &self.open.format("%H:%M").to_string())?;
         state.serialize_field("close", &self.close.format("%H:%M").to_string())?;
-        state.serialize_field(
-            "session_open",
-            &self.session_open.map(|t| t.format("%H%M").to_string()),
-        )?;
-        state.serialize_field(
-            "session_close",
-            &self.session_close.map(|t| t.format("%H%M").to_string()),
-        )?;
-        state.serialize_field("settlement_date", &self.settlement_date)?;
+        match self.session_open {
+            Some(at) => state.serialize_field("session_open", &at.format("%H%M").to_string())?,
+            None => state.skip_field("session_open")?,
+        }
+        match self.session_close {
+            Some(at) => state.serialize_field("session_close", &at.format("%H%M").to_string())?,
+            None => state.skip_field("session_close")?,
+        }
+        match self.settlement_date {
+            Some(date) => state.serialize_field("settlement_date", &date)?,
+            None => state.skip_field("settlement_date")?,
+        }
         state.end()
     }
 }
@@ -919,18 +930,33 @@ mod tests {
             "open": "09:30",
             "close": "16:00",
             "session_open": "0400",
-            "session_close": "2000",
-            "settlement_date": null
+            "session_close": "2000"
         });
 
         let calendar: Calendar = serde_json::from_value(wire.clone()).unwrap();
         let encoded: serde_json::Value = serde_json::to_value(&calendar).unwrap();
 
+        // An absent `settlement_date` stays absent rather than becoming `null`:
+        // Alpaca omits the key, so echoing it back as null is not "its shape".
         assert_eq!(encoded, wire);
     }
 
     /// The optional session fields are absent from older responses, and the
     /// round trip has to survive that too.
+    /// The shape that was previously unasserted: a calendar decoded from an
+    /// older response re-encodes without inventing `null` keys Alpaca omits.
+    #[test]
+    fn a_calendar_without_session_times_encodes_without_them() {
+        let wire = serde_json::json!({
+            "date": "2024-01-02",
+            "open": "09:30",
+            "close": "16:00"
+        });
+
+        let calendar: Calendar = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&calendar).unwrap(), wire);
+    }
+
     #[test]
     fn a_calendar_without_session_times_round_trips() {
         let wire = serde_json::json!({

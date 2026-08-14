@@ -384,3 +384,61 @@ fn a_w8ben_must_identify_the_applicant_for_tax() {
     with_ssn.tax_id_ssn = Some("123-45-6789".to_owned());
     assert!(with_ssn.validate().is_ok());
 }
+
+/// The download shares a retry policy with every other route.
+///
+/// It runs its own loop — the response body is bytes, not JSON — and that loop
+/// used to sleep a flat `retry.wait`, which defaults to `Duration::ZERO`. So a
+/// rate-limited download was hammered with no delay at all, while every other
+/// route honoured the backoff curve and the server's own `Retry-After`.
+#[tokio::test]
+async fn a_rate_limited_download_honours_retry_after() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/v1/accounts/{ACCOUNT_ID}/documents/{DOCUMENT_ID}/download"
+        )))
+        .respond_with(
+            ResponseTemplate::new(429)
+                // Read and clamped, not ignored. Small so the test stays quick.
+                .insert_header("retry-after", "1"),
+        )
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/v1/accounts/{ACCOUNT_ID}/documents/{DOCUMENT_ID}/download"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(b"%PDF-1.4".to_vec()))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // The shared helper disables retries; this route's whole point here is that
+    // it retries the way the rest of the crate does.
+    let retrying = BrokerClient::with_config(
+        &Credentials::new("broker-key", "broker-secret").unwrap(),
+        RestConfig::new(server.uri()).api_version("v1"),
+    )
+    .unwrap();
+
+    let started = std::time::Instant::now();
+    let bytes = retrying
+        .download_trade_document_for_account_by_id(
+            Uuid::parse_str(ACCOUNT_ID).unwrap(),
+            Uuid::parse_str(DOCUMENT_ID).unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(bytes, b"%PDF-1.4");
+    assert!(
+        started.elapsed() >= std::time::Duration::from_millis(900),
+        "the `Retry-After` was ignored: the retry came after {:?}",
+        started.elapsed()
+    );
+}
