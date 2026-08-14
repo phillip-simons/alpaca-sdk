@@ -54,6 +54,21 @@ pub(crate) fn check_window(min: Duration, max: Duration) -> crate::error::Result
     Ok(())
 }
 
+/// Checks a staleness timeout before it is stored.
+///
+/// # Errors
+/// Returns [`Error::InvalidRequest`] if the duration is zero, which would treat
+/// every connection as stale on its first pass.
+#[cfg(feature = "_ws")]
+pub(crate) fn check_data_timeout(timeout: Duration) -> crate::error::Result<()> {
+    if timeout.is_zero() {
+        return Err(crate::Error::InvalidRequest(
+            "data_timeout must be a positive duration".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 /// Checks a session-health threshold before it is stored.
 ///
 /// # Errors

@@ -148,9 +148,17 @@ impl Error {
     }
 }
 
-impl From<reqwest::Error> for Error {
-    fn from(e: reqwest::Error) -> Self {
-        Self::Transport(TransportError(e))
+impl Error {
+    /// Wraps a transport failure.
+    ///
+    /// An inherent constructor rather than `impl From<reqwest::Error> for
+    /// Error`, and for the same reason [`TransportError`] exists at all: a
+    /// `From` impl names `reqwest::Error` in this crate's *public* API, so a
+    /// `0.13 → 0.14` bump would still be a breaking change here — which is
+    /// exactly what the newtype is meant to prevent. Keeping the conversion
+    /// crate-private finishes the job.
+    pub(crate) fn transport(error: reqwest::Error) -> Self {
+        Self::Transport(TransportError(error))
     }
 }
 

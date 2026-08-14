@@ -115,11 +115,7 @@ impl TradingStream {
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if the timeout is not positive.
     pub fn data_timeout(mut self, timeout: Duration) -> Result<Self> {
-        if timeout.is_zero() {
-            return Err(Error::InvalidRequest(
-                "data_timeout must be a positive duration".to_owned(),
-            ));
-        }
+        crate::backoff::check_data_timeout(timeout)?;
         self.data_timeout = Some(timeout);
         Ok(self)
     }

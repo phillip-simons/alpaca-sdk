@@ -927,11 +927,15 @@ impl BrokerClient {
                 .get(&url)
                 .send()
                 .await
-                .map_err(crate::Error::from)?;
+                .map_err(crate::Error::transport)?;
             let status = response.status().as_u16();
 
             if response.status().is_success() {
-                return Ok(response.bytes().await.map_err(crate::Error::from)?.to_vec());
+                return Ok(response
+                    .bytes()
+                    .await
+                    .map_err(crate::Error::transport)?
+                    .to_vec());
             }
 
             // Read before the body: `text()` consumes the response, headers

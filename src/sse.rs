@@ -238,7 +238,7 @@ pub(crate) fn streaming_client(credentials: &Credentials) -> Result<reqwest::Cli
         reqwest::header::HeaderValue::from_static(crate::config::user_agent()),
     );
 
-    Ok(reqwest::Client::builder()
+    reqwest::Client::builder()
         .default_headers(headers)
         // No event stream redirects, so following one has no upside and some
         // downside: reqwest strips `Authorization` on a cross-host hop but not
@@ -246,7 +246,8 @@ pub(crate) fn streaming_client(credentials: &Credentials) -> Result<reqwest::Cli
         // is a long-lived credentialed connection. The one route that does
         // redirect — the broker document download — has its own client below.
         .redirect(reqwest::redirect::Policy::none())
-        .build()?)
+        .build()
+        .map_err(Error::transport)
 }
 
 /// Builds the HTTP client the broker document download uses.
@@ -282,7 +283,7 @@ pub(crate) fn download_client(
     if let Some(timeout) = timeout {
         builder = builder.timeout(timeout);
     }
-    Ok(builder.build()?)
+    builder.build().map_err(Error::transport)
 }
 
 /// Opens an event stream at `url`.
@@ -317,7 +318,7 @@ pub(crate) async fn subscribe(
         request = request.query(query);
     }
 
-    let response = request.send().await.map_err(Error::from)?;
+    let response = request.send().await.map_err(Error::transport)?;
     let status = response.status();
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();

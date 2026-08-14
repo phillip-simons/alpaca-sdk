@@ -57,7 +57,7 @@ behaviour changes are worth reading before the first release rather than after.
   discarded every good symbol beside it. A request takes up to 100 symbols, so
   one delisted ticker made the batch unusable. The crate's own shipped fixture
   `fixtures/go/marketdata__test_snapshots__01.json` is exactly this shape.
-- **`CorporateActionsRequest` walks every page again.** Its `limit` defaulted to
+- **`CorporateActionsRequest` walks every page.** Its `limit` defaulted to
   1,000 — the endpoint's own page size — and `limit` caps the *total* across all
   pages, so page one filled the cap and the walk ended there with the
   `next_page_token` discarded and unrecoverable.
@@ -74,7 +74,7 @@ behaviour changes are worth reading before the first release rather than after.
   no `skip_serializing_if`, so the only possible usage pattern —
   read-modify-write, forced because every other field is non-`Option` — sent two
   fields the current schema does not document and a `null` into an integer enum.
-- **`JitReport` can fail again.** `JitReportInline` accepted any JSON object and
+- **`JitReport` can fail at all.** `JitReportInline` accepted any JSON object and
   produced an all-`None` value, so the untagged enum could never fail and a
   settlement report came back silently empty. It now errors when no known report
   key is present, and carries the three report types that had no field at all.
@@ -104,11 +104,6 @@ behaviour changes are worth reading before the first release rather than after.
   `rust_decimal`'s own `Serialize`. They agree today; pinning them means a
   dependency bump cannot change the wire form of an amount underneath a transfer,
   a settlement, a locate or a mint.
-- **`get_all_orders` ends its walk on an empty page, not a short one.** A short
-  page is also what a server silently capping `limit` returns — and stopping
-  there would reproduce the truncation the walk exists to fix. It also measures
-  progress in new orders rather than cursor movement, so a server cycling between
-  two pages terminates instead of spinning.
 - **`Error::Decode` carries the route and the payload** everywhere in the
   market-data client, including the three single-symbol "latest" routes and the
   news route, where it used to carry an empty body. Reporting the payload means
@@ -125,12 +120,13 @@ behaviour changes are worth reading before the first release rather than after.
   accepts and immediately hangs up, about one connection a second at an endpoint
   that allows one per account. So a session clears the count when it delivered
   data or stayed up past `stable_session`.
-- **`get_option_chain` and `get_market_movers` encode their path segments.** Both
-  interpolate a request *field* rather than a bare argument, so the first
-  encoding sweep missed them.
-- **`JitReport` reports the real decode error too.** It was the other untagged
-  enum on an unobserved route, and it was discarding the carefully worded error
-  its own inline arm produces.
+- **`get_option_chain` and `get_market_movers` encode their path segments too.**
+  Both take the value from a request *field* rather than a bare argument, which
+  is why they are called out separately from the sweep above.
+- **`JitReport` reports the real decode error.** It was `#[serde(untagged)]`, so
+  a body that fit neither arm came back as "data did not match any variant"
+  instead of the field error — on a route whose payloads this crate has never
+  seen, where that first real error is the most valuable thing it can receive.
 - **The broker document download retries like every other route.** Its
   hand-rolled loop ignored `Retry-After` and waited a flat interval instead of
   the backoff curve.
@@ -145,9 +141,16 @@ behaviour changes are worth reading before the first release rather than after.
   which walk `/v2/orders` and its broker twin with the `before_order_id` cursor.
   `get_orders` returns one page — 50 by default, 500 at most — and said so
   nowhere, so an account with more history than that reconciled against a
-  silently truncated list. The walk deduplicates on order id rather than assuming
-  the cursor is exclusive, because Alpaca's cursors are inclusive on some routes
-  and the reference does not say which this is.
+  silently truncated list.
+
+  Three details of the walk are deliberate. It deduplicates on order id rather
+  than assuming the cursor is exclusive, because Alpaca's cursors are inclusive
+  on some routes and the reference does not say which this is. It ends on an
+  *empty* page rather than a short one, because a short page is also what a
+  server silently capping `limit` returns — and stopping there would reproduce
+  the truncation the walk exists to prevent. And it measures progress in new
+  orders rather than in cursor movement, so a server cycling between two pages
+  terminates instead of spinning.
 - `Default` for the market data records a caller might build — `Bar`, `Quote`,
   `Trade`, `Auction`, `DailyAuctions`, `ForexRate`, `Snapshot`,
   `OptionsSnapshot`, `Orderbook`, `OrderbookQuote`. They are `#[non_exhaustive]`

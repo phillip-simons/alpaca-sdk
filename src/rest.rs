@@ -189,7 +189,7 @@ impl RestClient {
         }
 
         Ok(Self {
-            http: builder.build()?,
+            http: builder.build().map_err(Error::transport)?,
             config,
         })
     }
@@ -411,7 +411,7 @@ impl RestClient {
             .await?
             .text()
             .await
-            .map_err(Error::from)
+            .map_err(Error::transport)
     }
 
     /// Runs the retry loop and reads the successful body as bytes.
@@ -426,7 +426,7 @@ impl RestClient {
             .await?
             .bytes()
             .await
-            .map_err(Error::from)?
+            .map_err(Error::transport)?
             .to_vec())
     }
 
@@ -456,7 +456,7 @@ impl RestClient {
                 None
             };
 
-            let response = current.send().await.map_err(Error::from)?;
+            let response = current.send().await.map_err(Error::transport)?;
             let status = response.status().as_u16();
 
             if response.status().is_success() {

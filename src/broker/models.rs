@@ -1764,7 +1764,8 @@ pub struct CIPInfo {
     /// Which KYC providers the information came from.
     #[serde(
         default,
-        deserialize_with = "crate::types::serde_util::null_as_default"
+        deserialize_with = "crate::types::serde_util::null_as_default",
+        skip_serializing_if = "Vec::is_empty"
     )]
     pub provider_name: Vec<CIPProvider>,
     /// When the record was first uploaded.
@@ -1797,17 +1798,20 @@ impl CIPInfo {
     /// struct literal no longer provides. Set the check fields that apply on the
     /// result; Alpaca fills the rest.
     ///
-    /// `created_at` and `updated_at` are Alpaca's to assign and are set to
-    /// `now` here, which is what the route ignores them as.
+    /// `created_at` and `updated_at` are Alpaca's to assign. They are set to the
+    /// epoch rather than `now` so the body carries no client-invented time, and
+    /// they are omitted from an upload along with an empty `provider_name` — a
+    /// caller has nothing to say about any of the three, and no captured payload
+    /// or reference quote says the route ignores them.
     #[must_use]
     pub fn new(id: Uuid, account_id: Uuid) -> Self {
-        let now = Utc::now();
+        let unset = DateTime::from_timestamp(0, 0).unwrap_or_default();
         Self {
             id,
             account_id,
             provider_name: Vec::new(),
-            created_at: now,
-            updated_at: now,
+            created_at: unset,
+            updated_at: unset,
             kyc: None,
             document: None,
             photo: None,
