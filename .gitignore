@@ -18,5 +18,25 @@ specs/
 # Python bytecode from the scripts/ helpers.
 __pycache__/
 
-# Agent worktrees.
+# AI tooling artifacts: agent worktrees, assistant configs, and scratch notes.
+# None of it belongs to the crate, and none of it should reach a published
+# tarball or a public diff.
 .claude/
+.cursor/
+.cursorrules
+.windsurf/
+.windsurfrules
+.aider*
+.continue/
+.codeium/
+.gemini/
+.roo/
+.specstory/
+.mcp.json
+.github/copilot-instructions.md
+nimbalyst-local/
+
+# Agent instruction files, kept out of the repo for the same reason.
+AGENTS.md
+CLAUDE.md
+GEMINI.md
