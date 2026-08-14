@@ -392,10 +392,10 @@ fn a_w8ben_must_identify_the_applicant_for_tax() {
 /// curve and the server's own `Retry-After`. Every other route honours both.
 ///
 /// The two are separated by making them disagree: `wait` is set to 3s and the
-/// server asks for 1s. The old loop would sleep its own 3s; the new one does
-/// what it was told. An earlier version of this test used the default 1s `wait`
-/// against a `Retry-After: 1`, which of course could not tell them apart — it
-/// passed against the unfixed code.
+/// server asks for 1s. A loop that ignores `Retry-After` sleeps its own 3s; one
+/// that honours it sleeps 1s. Leaving `wait` at its 1s default against a
+/// `Retry-After: 1` would make the test pass either way — the values have to
+/// disagree for the assertion to mean anything.
 #[tokio::test]
 async fn a_rate_limited_download_honours_retry_after_over_its_own_wait() {
     let server = MockServer::start().await;

@@ -181,7 +181,7 @@ impl StockHistoricalDataClient {
     /// Historical bars, keyed by symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -198,7 +198,7 @@ impl StockHistoricalDataClient {
     /// Historical quotes, keyed by symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -215,7 +215,7 @@ impl StockHistoricalDataClient {
     /// Historical trades, keyed by symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -232,7 +232,7 @@ impl StockHistoricalDataClient {
     /// The latest trade for each symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -252,7 +252,7 @@ impl StockHistoricalDataClient {
     /// The latest quote for each symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -272,7 +272,7 @@ impl StockHistoricalDataClient {
     /// The latest bar for each symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -292,7 +292,7 @@ impl StockHistoricalDataClient {
     /// A snapshot of the latest trade, quote, and bars for each symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -314,7 +314,7 @@ impl StockHistoricalDataClient {
     /// Historical opening and closing auctions, keyed by symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// Only the `sip` feed serves auctions.
     ///
@@ -612,7 +612,7 @@ impl CryptoHistoricalDataClient {
     /// Historical bars, keyed by symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -629,7 +629,7 @@ impl CryptoHistoricalDataClient {
     /// Historical quotes, keyed by symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -646,7 +646,7 @@ impl CryptoHistoricalDataClient {
     /// Historical trades, keyed by symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -663,7 +663,7 @@ impl CryptoHistoricalDataClient {
     /// The latest trade for each symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -680,7 +680,7 @@ impl CryptoHistoricalDataClient {
     /// The latest quote for each symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -697,7 +697,7 @@ impl CryptoHistoricalDataClient {
     /// The latest bar for each symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -714,7 +714,7 @@ impl CryptoHistoricalDataClient {
     /// The latest orderbook for each symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -731,7 +731,7 @@ impl CryptoHistoricalDataClient {
     /// A snapshot of the latest data for each symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -783,7 +783,7 @@ impl OptionHistoricalDataClient {
     /// Historical bars, keyed by contract symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -800,7 +800,7 @@ impl OptionHistoricalDataClient {
     /// Historical trades, keyed by contract symbol.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -817,7 +817,7 @@ impl OptionHistoricalDataClient {
     /// The latest quote for each contract.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -837,7 +837,7 @@ impl OptionHistoricalDataClient {
     /// The latest trade for each contract.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -857,7 +857,7 @@ impl OptionHistoricalDataClient {
     /// A snapshot of the latest data for each contract.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -877,7 +877,7 @@ impl OptionHistoricalDataClient {
     /// Every contract in an underlying's option chain.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -963,7 +963,7 @@ impl ForexDataClient {
     /// Historical rates, keyed by currency pair.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -980,7 +980,7 @@ impl ForexDataClient {
     /// The latest rate for each currency pair.
     ///
     /// A symbol Alpaca has nothing for is absent from the map rather than
-    /// present with an empty list.
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.

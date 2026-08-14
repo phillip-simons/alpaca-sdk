@@ -739,10 +739,9 @@ fn dividend(symbol: &str, ex_date: &str) -> serde_json::Value {
 /// and ended the walk there, discarding a `next_page_token` the request type has
 /// no field to send back.
 ///
-/// Page one therefore has to be **full**. An earlier version of this test served
-/// a single dividend on page one, which left 999 of the cap unspent and followed
-/// the token whatever the default was — so it passed against the bug it was
-/// named for.
+/// Page one therefore has to be **full**. A single dividend on page one would
+/// leave 999 of the cap unspent and follow the token whatever the default was,
+/// so the test would pass against the bug it is named for.
 #[tokio::test]
 async fn corporate_actions_walk_past_the_first_full_page_by_default() {
     // The endpoint's own page size, and the value the default `limit` used to be.
@@ -795,10 +794,10 @@ async fn corporate_actions_walk_past_the_first_full_page_by_default() {
 /// An empty symbol list is a request to ask the API about nothing, and it is
 /// refused before any HTTP happens.
 ///
-/// The first version of this guard tested `params["symbols"].as_str() == ""`,
-/// which could never fire: `Symbols` is `#[serde(transparent)]` over
-/// `Vec<String>`, so it reaches the guard as a `Value::Array` and is only joined
-/// into a string later. It shipped as dead code because nothing exercised it.
+/// The obvious guard — `params["symbols"].as_str() == ""` — can never fire:
+/// `Symbols` is `#[serde(transparent)]` over `Vec<String>`, so it reaches the
+/// check as a `Value::Array` and is only joined into a string later. Without a
+/// test, that version of the guard looks correct and does nothing.
 #[tokio::test]
 async fn an_empty_symbol_list_never_reaches_the_network() {
     let server = MockServer::start().await;

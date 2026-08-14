@@ -44,8 +44,9 @@ behaviour changes are worth reading before the first release rather than after.
   strips `Authorization` on a cross-host hop and nothing else, so the custom
   `APCA-API-*` headers rode along. **No stream client follows a redirect now** —
   no SSE route redirects, so following one was surface without upside. The broker
-  keeps a second client that does follow them, for the one route that needs it:
-  the document download answers `301` to a presigned storage URL. That is safe
+  keeps a second client that does follow them, for the two routes that need it:
+  the trade-document and W-8BEN downloads both answer `301` to a presigned
+  storage URL. That is safe
   because those credentials are basic auth, which reqwest does strip.
 - **`RestConfig::timeout` is no longer applied to event streams.** It is a total
   deadline on a whole request, and an event stream's body never finishes, so
@@ -136,7 +137,7 @@ behaviour changes are worth reading before the first release rather than after.
 - **The broker document download retries like every other route.** Its
   hand-rolled loop ignored `Retry-After` and waited a flat interval instead of
   the backoff curve.
-- **`get_latest_*_for_symbol` reports a `null` payload as an absent record**
+- **`get_latest_*_for_symbol` says a `null` payload carried no record**
   rather than a decode mismatch. It returns one record, so it cannot skip the way
   the three sibling helpers do — but the error now says the response carried
   nothing for that symbol instead of blaming the shape.

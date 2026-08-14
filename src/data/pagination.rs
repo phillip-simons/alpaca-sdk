@@ -126,7 +126,8 @@ pub(crate) async fn get_marketdata<Q: Serialize>(
     // `#[serde(transparent)]` over `Vec<String>`, so it arrives here as a
     // `Value::Array` and is only joined into a string later by `stringify`;
     // the request types that carry a plain comma-separated field arrive as a
-    // `Value::String`. Testing only the string form made this guard dead code.
+    // `Value::String`. A guard that tested only the string form would be dead
+    // code that reads as correct.
     //
     // And both *keys*: the forex requests rename the same `Symbols` field to
     // `currency_pairs` and go through this same loop, so checking `symbols`

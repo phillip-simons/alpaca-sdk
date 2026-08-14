@@ -3,8 +3,7 @@
 //! `#[non_exhaustive]` is applied broadly here, and it is invisible from inside:
 //! a struct literal in `src/` compiles whether or not the attribute is present,
 //! and only an external crate — which is what an integration test is — sees the
-//! difference. Two request-body types shipped unbuildable before this file
-//! existed: `RebalancingCondition`, the element type of a portfolio's
+//! difference. Two request-body types were caught unbuildable by this file: `RebalancingCondition`, the element type of a portfolio's
 //! `rebalance_conditions`, and `CIPInfo`, the body of the CIP upload.
 //!
 //! Nothing here asserts on behaviour. It asserts that the *shape* of the public
@@ -35,9 +34,9 @@ fn rebalancing_conditions_can_be_built() {
 
 /// The upload body *and* every nested check it can carry.
 ///
-/// An earlier version of this test asserted `cip.kyc.is_none()` — which passed
-/// while the five check types were themselves unconstructible, so the guard
-/// missed exactly the case that was broken. Filling a check is the assertion.
+/// Asserting `cip.kyc.is_none()` would pass while the five check types were
+/// themselves unconstructible — a guard that misses exactly the case it exists
+/// for. Filling a check is what makes it an assertion.
 #[test]
 fn a_cip_record_can_be_built_for_upload_with_its_checks() {
     let mut cip = CIPInfo::new(Uuid::nil(), Uuid::nil());

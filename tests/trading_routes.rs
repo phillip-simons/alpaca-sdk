@@ -1010,3 +1010,51 @@ async fn a_cycling_server_does_not_spin_the_order_walk() {
     // Both distinct orders, each once.
     assert_eq!(orders.len(), 2, "expected A and B exactly once: {orders:?}");
 }
+
+/// `max_items` narrows the page size on *every* request, not just the first.
+///
+/// Capping only the first page still pulls a full 500 orders to satisfy a
+/// `max_items` that spans two pages. The existing `max_items` test uses a cap
+/// satisfied inside page one, so it cannot see the difference — this one asks
+/// for 600 and asserts the second request only asks for the 100 outstanding.
+#[tokio::test]
+async fn get_all_orders_narrows_the_page_size_on_every_request() {
+    fn order_page(n: usize, offset: u128) -> serde_json::Value {
+        serde_json::Value::Array(
+            (0..n)
+                .map(|i| {
+                    let mut order =
+                        fixture("trading/test_order_routes__test_get_order_by_id__01.json");
+                    order["id"] = json!(Uuid::from_u128(offset + i as u128).to_string());
+                    order
+                })
+                .collect(),
+        )
+    }
+
+    let server = MockServer::start().await;
+
+    // The second request must ask for the 100 still outstanding, not another 500.
+    Mock::given(method("GET"))
+        .and(path("/v2/orders"))
+        .and(query_param("limit", "100"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(order_page(100, 500)))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v2/orders"))
+        .and(query_param("limit", "500"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(order_page(500, 0)))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let orders = client(&server)
+        .get_all_orders(None, Some(600))
+        .await
+        .unwrap();
+
+    assert_eq!(orders.len(), 600);
+}

@@ -1828,10 +1828,14 @@ impl CIPInfo {
     /// struct literal no longer provides. Set the check fields that apply on the
     /// result; Alpaca fills the rest.
     ///
-    /// `created_at`, `updated_at` and `provider_name` are left unset and are
-    /// omitted from the body: all three are Alpaca's to assign, a caller has
-    /// nothing to say about them, and inventing a timestamp to fill a required
-    /// field would put a client's clock into a KYC record.
+    /// `created_at` and `updated_at` are left unset and omitted from the body:
+    /// both are Alpaca's to assign, and inventing a timestamp to fill a required
+    /// field would put the client's clock into a KYC record.
+    ///
+    /// `provider_name` starts empty but is **yours to fill in** — the spec calls
+    /// it "list of KYC providers this information came from", which is a
+    /// statement by the correspondent who ran the checks. It is omitted only
+    /// while it is empty.
     #[must_use]
     pub fn new(id: Uuid, account_id: Uuid) -> Self {
         Self {

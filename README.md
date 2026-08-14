@@ -182,6 +182,13 @@ The decisions a caller actually runs into, and why each one is the way it is.
   attempts after the first, ~1s doubling to a 30s ceiling with jitter. A
   response carrying `Retry-After` overrides that curve, clamped to the same
   ceiling.
+
+  **A request that acts is never replayed.** A 504 means the gateway stopped
+  waiting for the answer, not that nothing happened — so `submit_order`,
+  `create_journal`, and the position-closing routes are reported rather than
+  retried, whatever the status list says. Only a 429 is replayed regardless,
+  because the rate limiter refuses the request before anything acts on it. If
+  you re-issue one of these yourself, that is the same hazard in your own hands.
 - **`request_raw` is the escape hatch** for routes this crate does not wrap. The
   transport is public and hands back the body undecoded.
 
