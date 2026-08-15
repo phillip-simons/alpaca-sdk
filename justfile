@@ -169,6 +169,10 @@ fixtures source=alpaca_py:
 # Read-only GETs against live market data. Records refusals as well as
 # successes: several of these routes are plan-gated, and a 403 is a finding.
 # Needs credentials, same as `just live`.
+#
+# This is the recipe that writes: it overwrites fixtures/live/*.json and
+# fixtures/live/index.json, which are tracked. Commit or stash first, and diff
+# fixtures/live/ afterwards. `just live` does not touch them.
 capture:
     cargo test --all-features --test live_capture -- --ignored --nocapture
 
@@ -252,12 +256,15 @@ parameters:
 
 # Run the tests that hit real paper endpoints, which `just test` skips.
 #
-# WARNING: this rewrites tracked files. `--ignored` selects every ignored test
-# in every target, which includes the capture in tests/live_capture.rs, so this
-# re-runs `just capture` as a side effect and overwrites fixtures/live/*.json
-# and fixtures/live/index.json. Commit or stash before running it, and diff
-# fixtures/live/ afterwards. To run only the smoke tests, select that target
-# directly rather than reaching for this recipe.
+# Reads only: this recipe spends credentials and network time, and writes
+# nothing. `--test integration` is what keeps it that way. Without it,
+# `--ignored` selects every ignored test in *every* target, which picks up
+# tests/live_capture.rs and rewrites fixtures/live/*.json as a side effect of
+# asking for a smoke test — so `just live` used to be `just capture` as well,
+# and the tracked fixtures moved under you.
+#
+# The division: `live` runs the tests that need real credentials, `capture`
+# re-records fixtures. Only `capture` writes.
 live:
     # They are #[ignore]d so a normal run never spends network time or
     # credentials. Needs APCA_API_KEY_ID and APCA_API_SECRET_KEY set.
@@ -265,7 +272,7 @@ live:
     # The login shell does not export them; they come from .envrc via direnv.
     # If this fails with "APCA_API_KEY_ID is not set", run:
     #     direnv exec . just live
-    cargo test --all-features --locked -- --ignored --test-threads=1
+    cargo test --all-features --locked --test integration -- --ignored --test-threads=1
 
 # ---------------------------------------------------------------------------
 # Release
