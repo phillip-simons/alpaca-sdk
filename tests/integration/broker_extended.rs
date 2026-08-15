@@ -509,6 +509,105 @@ async fn category_and_activity_types_cannot_both_be_set() {
     );
 }
 
+// ------------------------------------------------- tokenization callbacks
+
+/// Both callbacks document a 200 body. The mint one is the shared
+/// [`TokenizationRequest`], so this asserts the crate decodes it off the
+/// callback route rather than only off the mint and lookup routes.
+#[tokio::test]
+async fn the_mint_callback_decodes_the_shared_tokenization_request() {
+    use alpaca_sdk::trading::{TokenizationMintCallback, TokenizationStatus, TokenizationType};
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/accounts/{ACCOUNT}/tokenization/callback/mint"
+        )))
+        .and(body_json(json!({
+            "tokenization_request_id": "00000000-0000-0000-0000-000000000000",
+            "tx_hash": "0xdead",
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "tokenization_request_id": "5b1d6a3e-7f0a-4d2c-b8e1-9e6f1c0d2c4a",
+            "type": "mint",
+            "status": "completed",
+            "underlying_symbol": "AAPL",
+            "token_symbol": "AAPLx",
+            "qty": "1.5",
+            "issuer": "xstocks",
+            "network": "solana",
+            "wallet_address": "9xQeWvG816bUx9EPa2",
+            "tx_hash": "0xdead",
+            "created_at": "2026-01-02T15:04:05Z",
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let confirmed = client(&server)
+        .tokenization_mint_callback(
+            ACCOUNT,
+            &TokenizationMintCallback::new(Uuid::nil(), "0xdead"),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(confirmed.status, TokenizationStatus::Completed);
+    assert_eq!(confirmed.request_type, Some(TokenizationType::Mint));
+    assert_eq!(confirmed.tx_hash.as_deref(), Some("0xdead"));
+}
+
+/// The redeem callback answers with its own schema, and this crate declines to
+/// require the four fields the spec calls required that [`TokenizationRequest`]
+/// already treats as optional. The response here omits all four: a spec that is
+/// wrong about them costs a `None`, not an `Error::Decode`.
+#[tokio::test]
+async fn the_redeem_callback_decodes_without_the_fields_the_spec_over_requires() {
+    use alpaca_sdk::trading::{TokenizationNetwork, TokenizationRedeemRequest, TokenizationStatus};
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/accounts/{ACCOUNT}/tokenization/callback/redeem"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "tokenization_request_id": "5b1d6a3e-7f0a-4d2c-b8e1-9e6f1c0d2c4a",
+            "status": "pending",
+            "underlying_symbol": "AAPL",
+            "token_symbol": "AAPLx",
+            "qty": "1.5",
+            "issuer": "xstocks",
+            "network": "solana",
+            "created_at": "2026-01-02T15:04:05Z",
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let redeemed = client(&server)
+        .tokenization_redeem_callback(
+            ACCOUNT,
+            &TokenizationRedeemRequest::new(
+                "iss-1",
+                "AAPL",
+                "AAPLx",
+                Decimal::ONE,
+                TokenizationNetwork::Solana,
+                "9xQeWvG816bUx9EPa2",
+                "0xdead",
+            ),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(redeemed.status, TokenizationStatus::Pending);
+    assert_eq!(redeemed.qty, Decimal::new(15, 1));
+    assert_eq!(redeemed.request_type, None);
+    assert_eq!(redeemed.issuer_request_id, None);
+    assert_eq!(redeemed.wallet_address, None);
+    assert_eq!(redeemed.tx_hash, None);
+}
+
 // ------------------------------------------ routes nothing else exercised
 
 /// The withdrawal — money leaving the account — had only a negative test, which

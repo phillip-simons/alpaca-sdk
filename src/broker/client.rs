@@ -2846,36 +2846,45 @@ impl BrokerClient {
 
     /// Acknowledges an issuer's mint callback.
     ///
+    /// Answers with the confirmed request, which is the ordinary
+    /// [`TokenizationRequest`](crate::trading::TokenizationRequest) the mint and
+    /// lookup routes already return — the spec gives this route that same
+    /// schema, so it gets the shipping type rather than a near-duplicate.
+    ///
+    /// No captured payload exists for this route — paper trading answers 404 on
+    /// this surface — so the response is decoded against a spec-derived model
+    /// and is unverified against a live response.
+    ///
     /// # Errors
-    /// Propagates transport and API failures.
+    /// Propagates transport, API, and decoding failures.
     pub async fn tokenization_mint_callback(
         &self,
         account_id: Uuid,
         body: &crate::trading::TokenizationMintCallback,
-    ) -> Result<()> {
-        self.send_void(
-            Method::POST,
-            &format!("/accounts/{account_id}/tokenization/callback/mint"),
-            Some(body),
-        )
-        .await
+    ) -> Result<crate::trading::TokenizationRequest> {
+        let path = format!("/accounts/{account_id}/tokenization/callback/mint");
+        self.rest.post(&path, body).await
     }
 
     /// Acknowledges an issuer's redeem callback.
     ///
+    /// Answers with a [`TokenizationRedeemResponse`](crate::trading::TokenizationRedeemResponse)
+    /// rather than the [`TokenizationRequest`](crate::trading::TokenizationRequest)
+    /// the mint callback returns; the spec gives the two routes two schemas.
+    ///
+    /// No captured payload exists for this route — paper trading answers 404 on
+    /// this surface — so the response is decoded against a spec-derived model
+    /// and is unverified against a live response.
+    ///
     /// # Errors
-    /// Propagates transport and API failures.
+    /// Propagates transport, API, and decoding failures.
     pub async fn tokenization_redeem_callback(
         &self,
         account_id: Uuid,
         body: &crate::trading::TokenizationRedeemRequest,
-    ) -> Result<()> {
-        self.send_void(
-            Method::POST,
-            &format!("/accounts/{account_id}/tokenization/callback/redeem"),
-            Some(body),
-        )
-        .await
+    ) -> Result<crate::trading::TokenizationRedeemResponse> {
+        let path = format!("/accounts/{account_id}/tokenization/callback/redeem");
+        self.rest.post(&path, body).await
     }
 
     // ------------------------------------------------- crypto wallets

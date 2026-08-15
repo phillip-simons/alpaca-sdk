@@ -369,6 +369,59 @@ impl TokenizationRedeemRequest {
     }
 }
 
+/// What the redeem callback answers with.
+///
+/// The 200 body of `POST /v1/accounts/{account_id}/tokenization/callback/redeem`,
+/// on `broker::BrokerClient::tokenization_redeem_callback`. The mint callback
+/// answers with the ordinary [`TokenizationRequest`] instead; only this one
+/// needs a type of its own.
+///
+/// No captured payload exists for this route — paper trading answers 404 on
+/// this surface — so the shape is `specs/broker.yaml`'s and is unverified
+/// against a live response. That is why almost every field that the spec calls
+/// required is still `Option` here: an incomplete model costs nothing, because
+/// unknown fields are ignored, but a field wrongly declared required would turn
+/// a working route into [`Error::Decode`](crate::Error::Decode). The fields
+/// left non-optional are the ones [`TokenizationRequest`] already requires
+/// across the six tokenization routes this crate ships, so requiring them here
+/// adds no failure that is not already in the crate.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct TokenizationRedeemResponse {
+    /// Alpaca's identifier for the request.
+    pub tokenization_request_id: String,
+    /// Where the request stands.
+    pub status: TokenizationStatus,
+    /// The underlying asset's symbol.
+    pub underlying_symbol: String,
+    /// The tokenized asset's symbol.
+    pub token_symbol: String,
+    /// How much was converted back. May be fractional.
+    #[serde(with = "crate::types::decimal")]
+    pub qty: Decimal,
+    /// Who issues the token.
+    pub issuer: TokenizationIssuer,
+    /// The chain the tokens were held on.
+    pub network: TokenizationNetwork,
+    /// When the request was made.
+    pub created_at: DateTime<Utc>,
+    /// Whether this mints or redeems — `redeem`, on this route.
+    ///
+    /// The spec calls it required and [`TokenizationRequest`] does not, because
+    /// a mint response omits it. Optional here for the same reason.
+    #[serde(rename = "type", default)]
+    pub request_type: Option<TokenizationType>,
+    /// The issuer's own identifier for the redemption.
+    #[serde(default)]
+    pub issuer_request_id: Option<String>,
+    /// The address the redeemed tokens were originally held at.
+    #[serde(default)]
+    pub wallet_address: Option<String>,
+    /// The on-chain transaction.
+    #[serde(default)]
+    pub tx_hash: Option<String>,
+}
+
 /// A lookup by the caller's own request id.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -431,6 +484,52 @@ mod tests {
         assert_eq!(request.request_type, Some(TokenizationType::Redeem));
 
         let encoded = serde_json::to_value(&request).unwrap();
+        assert_eq!(encoded["type"], "redeem");
+        assert!(encoded.get("request_type").is_none(), "{encoded}");
+    }
+
+    #[test]
+    fn a_redeem_response_keeps_type_on_the_wire_and_tolerates_the_over_required() {
+        // `specs/broker.yaml` calls all twelve fields required. Four of them —
+        // `type`, `issuer_request_id`, `wallet_address`, `tx_hash` — are
+        // optional on `TokenizationRequest` for reasons the spec does not
+        // record, so requiring them here would make the newer model stricter
+        // than the one already shipping against the same wire family. A body
+        // without them must decode.
+        let response: TokenizationRedeemResponse = serde_json::from_value(serde_json::json!({
+            "tokenization_request_id": "abc",
+            "status": "completed",
+            "underlying_symbol": "AAPL",
+            "token_symbol": "AAPLx",
+            "qty": "1.5",
+            "issuer": "xstocks",
+            "network": "solana",
+            "created_at": "2026-01-02T15:04:05Z",
+        }))
+        .unwrap();
+
+        assert_eq!(response.request_type, None);
+        assert_eq!(response.issuer_request_id, None);
+        assert_eq!(response.wallet_address, None);
+        assert_eq!(response.tx_hash, None);
+        assert_eq!(response.qty, Decimal::new(15, 1));
+
+        // `request_type` is a Rust-side name only, as on `TokenizationRequest`.
+        let full: TokenizationRedeemResponse = serde_json::from_value(serde_json::json!({
+            "tokenization_request_id": "abc",
+            "type": "redeem",
+            "status": "completed",
+            "underlying_symbol": "AAPL",
+            "token_symbol": "AAPLx",
+            "qty": "1.5",
+            "issuer": "xstocks",
+            "network": "solana",
+            "created_at": "2026-01-02T15:04:05Z",
+        }))
+        .unwrap();
+        assert_eq!(full.request_type, Some(TokenizationType::Redeem));
+
+        let encoded = serde_json::to_value(&full).unwrap();
         assert_eq!(encoded["type"], "redeem");
         assert!(encoded.get("request_type").is_none(), "{encoded}");
     }
