@@ -36,9 +36,18 @@
 //! | `rustls-tls` | yes | TLS via rustls |
 //! | `native-tls` | no | TLS via the platform library |
 //!
+//! The minimum supported Rust version is **1.88**. Enabling `polars` raises it
+//! to 1.95, which is why that feature is off by default — a convenience feature
+//! does not get to set the crate's floor.
+//!
 //! [docs.alpaca.markets]: https://docs.alpaca.markets/us/reference/
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
+// The README is included so that its five examples compile as doctests. They
+// are the crate's front door and nothing was checking them, so five batches of
+// breaking changes went past without anything noticing whether they still
+// built. They did — but only because nobody had needed to find out.
+#![doc = include_str!("../README.md")]
 
 pub mod auth;
 pub mod backoff;

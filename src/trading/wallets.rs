@@ -95,6 +95,14 @@ pub struct CryptoWallet {
 }
 
 /// An on-chain transfer into or out of an account.
+///
+/// **There is no method to start a withdrawal, on purpose.**
+/// `POST /v2/wallets/transfers` is deprecated as of 2026-07-09 with a sunset of
+/// 2026-10-09, and the reference's replacement is the Alpaca web application
+/// rather than another route — so there is nothing to point a method at.
+/// Everything on the read side is here, and the broker API's own equivalent of
+/// the withdrawal is *not* deprecated and *is* implemented, on
+/// `broker::BrokerClient`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct CryptoTransfer {

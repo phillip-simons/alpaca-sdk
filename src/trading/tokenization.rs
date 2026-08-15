@@ -76,6 +76,9 @@ wire_enum! {
 ///
 /// The response to a mint carries a narrower set of these fields than a listed
 /// request does, so all but the core are optional.
+///
+/// The broker API carries the same four routes under an account id; see
+/// `broker::BrokerClient`. The models are shared.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct TokenizationRequest {

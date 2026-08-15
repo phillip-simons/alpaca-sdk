@@ -1,4 +1,11 @@
 //! The trading API: orders, positions, assets, watchlists, and account state.
+//!
+//! Most of this is checked against captured responses. Four corners of it are
+//! not, because no captured payload exists for them — securities lending
+//! locates ([`Locate`]), the per-market calendar ([`MarketCalendar`]), tokenized
+//! assets ([`TokenizationRequest`]) and crypto funding ([`CryptoWallet`]). Those
+//! models follow the published reference, and the first real response is what
+//! will confirm them.
 
 pub(crate) mod client;
 mod enums;

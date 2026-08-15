@@ -147,6 +147,15 @@ pub struct MarketInfo {
 }
 
 /// A named market's calendar.
+///
+/// `GET /v3/calendar/{market}` answers with a named market's sessions rather
+/// than the US equities calendar `GET /v2/calendar` returns, and it splits the
+/// day into pre-market, core, lunch and post-market rather than into an open and
+/// a close. For the latter, see [`Calendar`](crate::trading::Calendar).
+///
+/// **This route is `v3`.** The trading client is `v2` and the broker's
+/// equivalent is `v2`, so all three versions of the same idea are live at once —
+/// which is why the version is written at the call site.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct MarketCalendar {

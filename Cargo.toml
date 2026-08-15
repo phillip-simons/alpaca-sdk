@@ -132,5 +132,8 @@ must_use_candidate = "allow"
 module_name_repetitions = "allow"
 
 [package.metadata.docs.rs]
-all-features = true
+# Not `all-features`: it enables both TLS backends at once, against the "pick
+# exactly one" rule above, and lists the internal `_ws`/`_sse` features in the
+# sidebar as though a caller were meant to reach for them.
+features = ["trading", "data", "broker", "blocking", "polars", "rustls-tls"]
 rustdoc-args = ["--cfg", "docsrs"]

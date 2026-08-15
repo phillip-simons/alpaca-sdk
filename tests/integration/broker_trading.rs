@@ -10,7 +10,8 @@
 use crate::common::{broker_client as client, fixture};
 use alpaca_sdk::broker::{CreateOptionExerciseRequest, Order, OrderRequest};
 use alpaca_sdk::trading::{
-    GetOrderByIdRequest, GetOrdersRequest, OrderAmount, OrderSide, QueryOrderStatus, TimeInForce,
+    ClosePositionRequest, GetOrderByIdRequest, GetOrdersRequest, OrderAmount, OrderSide,
+    QueryOrderStatus, TimeInForce,
 };
 use alpaca_sdk::types::{AssetIdent, SupportedCurrencies};
 use rust_decimal::Decimal;
@@ -292,6 +293,36 @@ async fn get_open_position_for_account_takes_a_symbol_or_an_id() {
         .unwrap();
 
     assert_eq!(held.symbol, "AAPL");
+}
+
+#[tokio::test]
+async fn close_position_for_account_puts_the_close_request_in_the_query() {
+    // The captured payload is named for this call and nothing was making it,
+    // so the qty never reached a query string in a test. It also pins the
+    // borrow: this takes `Option<&ClosePositionRequest>`, the same way
+    // `TradingClient::close_position` does, and the two clients disagreeing
+    // about how one type is passed is the kind of thing a release freezes.
+    let server = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path(format!(
+            "/v1/trading/accounts/{ACCOUNT_ID}/positions/AAPL"
+        )))
+        .and(query_param("qty", "1.5"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture(
+            "broker/test_trading_routes__test_close_position_for_account_with_qty__01.json",
+        )))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let close = ClosePositionRequest::Qty(Decimal::new(15, 1));
+    client(&server)
+        .close_position_for_account(account_id(), &AssetIdent::from("AAPL"), Some(&close))
+        .await
+        .unwrap();
+
+    // Borrowed, not consumed — reusable for the next account.
+    assert_eq!(close, ClosePositionRequest::Qty(Decimal::new(15, 1)));
 }
 
 #[tokio::test]

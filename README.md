@@ -2,7 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/alpaca-sdk.svg)](https://crates.io/crates/alpaca-sdk)
 [![docs.rs](https://docs.rs/alpaca-sdk/badge.svg)](https://docs.rs/alpaca-sdk)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/phillip-simons/alpaca-sdk/blob/main/LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.88-blue.svg)](#minimum-supported-rust-version)
 
 Unofficial Rust SDK for the [Alpaca](https://alpaca.markets) trading, market
@@ -14,7 +14,7 @@ distinction is the point of the crate, and [what it means in practice](#how-this
 is written down below.
 
 > **Unofficial.** Not affiliated with, endorsed by, or sponsored by Alpaca
-> Securities LLC. See [NOTICE](NOTICE).
+> Securities LLC. See [NOTICE](https://github.com/phillip-simons/alpaca-sdk/blob/main/NOTICE).
 
 ## Install
 
@@ -171,7 +171,9 @@ The decisions a caller actually runs into, and why each one is the way it is.
 - **Request structs are `#[non_exhaustive]`.** Build one with `new` or
   `default` and assign fields:
 
-  ```rust
+  ```rust,no_run
+  use alpaca_sdk::trading::GetOrdersRequest;
+
   let mut filter = GetOrdersRequest::default();
   filter.limit = Some(50);
   ```
@@ -194,7 +196,7 @@ The decisions a caller actually runs into, and why each one is the way it is.
 
 ## How this is verified
 
-Alpaca publishes an API reference, vendors OpenAPI specs, and ships five SDKs —
+Alpaca publishes an API reference, vendors `OpenAPI` specs, and ships five SDKs —
 and they do not always agree. This crate ranks its sources by how close each is
 to the wire:
 
@@ -244,7 +246,7 @@ Release notes are in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-Apache-2.0. This crate derives from Apache-2.0 works; see [NOTICE](NOTICE).
+Apache-2.0. This crate derives from Apache-2.0 works; see [NOTICE](https://github.com/phillip-simons/alpaca-sdk/blob/main/NOTICE).
 
 [docs]: https://docs.alpaca.markets/us/reference/
 [rate-limits]: https://docs.alpaca.markets/us/docs/broker-api-rate-limits

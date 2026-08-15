@@ -47,6 +47,15 @@ wire_enum! {
 }
 
 /// A locate request and its current status.
+///
+/// Borrowing shares to sell short: ask what a symbol costs to borrow
+/// ([`LocateQuote`]), then request a locate ([`CreateLocateRequest`]) and hold
+/// it for the trading day.
+///
+/// **These routes are `v1`, not the trading client's `v2`**, and the client
+/// sends them through
+/// [`RestClient::at_version`](crate::rest::RestClient::at_version) for that
+/// reason.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Locate {

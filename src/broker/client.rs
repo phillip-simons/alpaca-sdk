@@ -1533,7 +1533,7 @@ impl BrokerClient {
         &self,
         account_id: Uuid,
         asset: &crate::types::AssetIdent,
-        close: Option<crate::trading::ClosePositionRequest>,
+        close: Option<&crate::trading::ClosePositionRequest>,
     ) -> Result<Order> {
         let path = format!(
             "/trading/accounts/{account_id}/positions/{}",
