@@ -831,8 +831,8 @@ impl TradingClient {
     ///
     /// The withdrawal route that would create one is deliberately absent: it is
     /// deprecated with a sunset of 2026-10-09 and the reference's replacement
-    /// is the Alpaca web application, not another endpoint. See
-    /// [`crate::trading::wallets`].
+    /// is the Alpaca web application, not another endpoint. The broker API's
+    /// equivalent withdrawal is neither deprecated nor absent.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.

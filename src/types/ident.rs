@@ -24,6 +24,7 @@ use crate::error::Result;
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
+#[non_exhaustive]
 pub enum AssetIdent {
     /// Alpaca's UUID for the asset or option contract.
     Id(Uuid),

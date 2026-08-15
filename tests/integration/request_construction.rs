@@ -109,11 +109,9 @@ fn money_moving_bodies_can_be_built() {
 
 #[test]
 fn the_order_value_types_can_be_built() {
-    // These are deliberately *exhaustive*, so a struct literal must keep working.
-    let prices = trading::StopLimit {
-        stop: Decimal::new(9500, 2),
-        limit: Decimal::new(9450, 2),
-    };
+    // These are `#[non_exhaustive]`, so a caller outside the crate builds them
+    // through the constructor rather than a struct literal.
+    let prices = trading::StopLimit::new(Decimal::new(9500, 2), Decimal::new(9450, 2));
     assert!(prices.stop > prices.limit);
 
     let order = trading::OrderRequest::stop_limit(

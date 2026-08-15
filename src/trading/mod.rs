@@ -3,13 +3,13 @@
 pub(crate) mod client;
 mod enums;
 mod enums_ext;
-pub mod locates;
-pub mod markets;
+mod locates;
+mod markets;
 mod models;
 mod requests;
 mod stream;
-pub mod tokenization;
-pub mod wallets;
+mod tokenization;
+mod wallets;
 
 pub use client::TradingClient;
 pub use enums::*;

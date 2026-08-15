@@ -1989,7 +1989,9 @@ impl BrokerClient {
     /// A named market's calendar.
     ///
     /// **A `v2` route**, where the trading API's equivalent is `v3`. The models
-    /// are shared with [`crate::trading::markets`]; the version is not.
+    /// are shared with
+    /// [`TradingClient::get_market_calendar`](crate::trading::TradingClient::get_market_calendar);
+    /// the version is not.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.

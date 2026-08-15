@@ -120,10 +120,7 @@ fn a_stop_limit_order_carries_both_prices_under_their_own_names() {
         OrderSide::Sell,
         qty(1),
         TimeInForce::Day,
-        StopLimit {
-            stop: price(140),
-            limit: price(139),
-        },
+        StopLimit::new(price(140), price(139)),
     );
 
     let body = body(&order);

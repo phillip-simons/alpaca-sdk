@@ -597,10 +597,11 @@ async fn the_instant_funding_writes_reach_their_paths() {
         "POST",
         "/v1/instant_funding/settlements",
         |broker| async move {
-            let settlement = CreateInstantFundingSettlementRequest::new(vec![SettlementTransfer {
-                instant_transfer_id: other(),
-                transmitter_info: TransmitterInfo::default(),
-            }]);
+            let settlement =
+                CreateInstantFundingSettlementRequest::new(vec![SettlementTransfer::new(
+                    other(),
+                    TransmitterInfo::default(),
+                )]);
             broker.create_instant_funding_settlement(&settlement).await
         },
     )

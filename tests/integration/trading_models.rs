@@ -197,8 +197,11 @@ fn order_list_deserializes() {
     assert!(!orders.is_empty());
     assert_eq!(orders[0].symbol.as_deref(), Some("SPY"));
     assert_eq!(orders[0].qty, Some(Decimal::from(1)));
-    // order_type and type disagree in this payload; both are preserved.
-    assert_eq!(orders[0].order_type_deprecated, Some(OrderType::Market));
+    // order_type and type disagree in this payload; both are preserved. Reading
+    // the legacy key is the point of the assertion, so the deprecation is muted.
+    #[allow(deprecated)]
+    let legacy = &orders[0].legacy_order_type;
+    assert_eq!(legacy, &Some(OrderType::Market));
     assert_eq!(orders[0].order_type, Some(OrderType::Stop));
 }
 
@@ -348,7 +351,9 @@ fn multi_leg_order_empty_strings_become_none() {
     assert_eq!(order.side, None);
     assert_eq!(order.position_intent, None);
     assert_eq!(order.order_type, None);
-    assert_eq!(order.order_type_deprecated, None);
+    #[allow(deprecated)]
+    let legacy = &order.legacy_order_type;
+    assert_eq!(legacy, &None);
     assert_eq!(order.order_class, OrderClass::Mleg);
 }
 

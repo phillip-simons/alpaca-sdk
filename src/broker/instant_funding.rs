@@ -300,11 +300,23 @@ impl CreateInstantFundingRequest {
 
 /// One advance to settle, and who sent the money.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SettlementTransfer {
     /// The advance being settled.
     pub instant_transfer_id: Uuid,
     /// Who sent the money, for travel-rule reporting.
     pub transmitter_info: TransmitterInfo,
+}
+
+impl SettlementTransfer {
+    /// Settles the advance `instant_transfer_id`, sent by `transmitter_info`.
+    #[must_use]
+    pub fn new(instant_transfer_id: Uuid, transmitter_info: TransmitterInfo) -> Self {
+        Self {
+            instant_transfer_id,
+            transmitter_info,
+        }
+    }
 }
 
 /// A request to settle one or more advances.

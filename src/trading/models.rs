@@ -239,13 +239,18 @@ pub struct Order {
     /// `simple (or "")`.
     #[serde(default = "order_class_default", deserialize_with = "order_class")]
     pub order_class: OrderClass,
-    /// Deprecated alias for [`Order::order_type`].
+    /// Alpaca's legacy `order_type` key, which duplicates [`Order::order_type`].
+    #[deprecated(
+        since = "0.1.0",
+        note = "Alpaca's legacy duplicate of the `type` key; use `Order::order_type` instead. \
+                Still sent on responses, so the field stays populated"
+    )]
     #[serde(
         rename = "order_type",
         default,
         deserialize_with = "empty_string_as_none"
     )]
-    pub order_type_deprecated: Option<OrderType>,
+    pub legacy_order_type: Option<OrderType>,
     /// The order type. Absent from the legs of a multi-leg order.
     #[serde(rename = "type", default, deserialize_with = "empty_string_as_none")]
     pub order_type: Option<OrderType>,

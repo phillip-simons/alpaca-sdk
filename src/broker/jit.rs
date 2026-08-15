@@ -429,6 +429,7 @@ impl GetJitBalancesRequest {
 
 /// One account's share of a JIT settlement.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct JitSettlementAccount {
     /// The account.
     pub account_number: String,
@@ -437,6 +438,18 @@ pub struct JitSettlementAccount {
     pub amount: Decimal,
     /// Who sent the money, for travel-rule reporting.
     pub transmitter_info: TransmitterInfo,
+}
+
+impl JitSettlementAccount {
+    /// Settles `amount` for `account_number`, sent by `transmitter_info`.
+    #[must_use]
+    pub fn new(account_number: String, amount: Decimal, transmitter_info: TransmitterInfo) -> Self {
+        Self {
+            account_number,
+            amount,
+            transmitter_info,
+        }
+    }
 }
 
 /// A request to settle a day's JIT obligation.

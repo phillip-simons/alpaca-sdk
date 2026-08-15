@@ -83,6 +83,7 @@ fn replay_is_safe(method: &Method, replay: Replay, status: u16) -> bool {
 /// sells the caller into a short. That is the same failure `POST` is excluded
 /// for, wearing a different verb.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Replay {
     /// HTTP's answer is the right one for this route.
     ByMethod,

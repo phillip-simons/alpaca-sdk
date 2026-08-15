@@ -46,6 +46,7 @@ wire_enum! {
 /// Alpaca's business, and refusing a request it would have accepted is the
 /// worse failure.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TransmitterInfo {
     /// The sender's full name.
     #[serde(default, skip_serializing_if = "Option::is_none")]

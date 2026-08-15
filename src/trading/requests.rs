@@ -37,6 +37,7 @@ use crate::types::{ContractType, Sort};
 /// Alpaca accepts a share quantity or a dollar amount, never both, so this is
 /// an enum rather than two optional fields and a runtime check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum OrderAmount {
     /// A number of shares. Fractional quantities are supported for stocks with
     /// market orders and for crypto.
@@ -59,13 +60,14 @@ pub enum OrderAmount {
 /// ```
 /// # use alpaca_sdk::trading::StopLimit;
 /// # use alpaca_sdk::Decimal;
-/// let prices = StopLimit {
-///     stop: Decimal::new(9500, 2),  // triggers at 95.00
-///     limit: Decimal::new(9450, 2), // fills no worse than 94.50
-/// };
+/// let prices = StopLimit::new(
+///     Decimal::new(9500, 2), // triggers at 95.00
+///     Decimal::new(9450, 2), // fills no worse than 94.50
+/// );
 /// # let _ = prices;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct StopLimit {
     /// The price that turns the order live.
     pub stop: Decimal,
@@ -73,8 +75,17 @@ pub struct StopLimit {
     pub limit: Decimal,
 }
 
+impl StopLimit {
+    /// The pair that triggers at `stop` and fills no worse than `limit`.
+    #[must_use]
+    pub fn new(stop: Decimal, limit: Decimal) -> Self {
+        Self { stop, limit }
+    }
+}
+
 /// How far a trailing stop trails the high water mark.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Trail {
     /// A dollar amount away from the high water mark.
     Price(Decimal),
@@ -686,6 +697,7 @@ impl ReplaceOrderRequest {
 /// A quantity or a percentage, never both and never neither — an enum rather
 /// than two optional fields and a runtime check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ClosePositionRequest {
     /// Close this number of shares.
     Qty(Decimal),

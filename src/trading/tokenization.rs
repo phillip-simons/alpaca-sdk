@@ -82,8 +82,8 @@ pub struct TokenizationRequest {
     /// Alpaca's identifier for the request.
     pub tokenization_request_id: String,
     /// Whether this mints or redeems. Absent on a mint response, which is one.
-    #[serde(default)]
-    pub r#type: Option<TokenizationType>,
+    #[serde(rename = "type", default)]
+    pub request_type: Option<TokenizationType>,
     /// Where the request stands.
     pub status: TokenizationStatus,
     /// The position's symbol.
@@ -270,8 +270,31 @@ mod tests {
         .unwrap();
 
         assert_eq!(request.status, TokenizationStatus::Pending);
-        assert_eq!(request.r#type, None);
+        assert_eq!(request.request_type, None);
         assert_eq!(request.wallet_address, None);
+    }
+
+    #[test]
+    fn the_direction_stays_on_the_wire_as_type() {
+        // `request_type` is a Rust-side name only: Alpaca sends and expects
+        // `type`, and a rename that leaked would silently stop decoding it.
+        let request: TokenizationRequest = serde_json::from_value(serde_json::json!({
+            "tokenization_request_id": "abc",
+            "type": "redeem",
+            "status": "pending",
+            "underlying_symbol": "AAPL",
+            "token_symbol": "AAPLx",
+            "qty": "1.5",
+            "issuer": "xstocks",
+            "network": "solana",
+            "created_at": "2026-01-02T15:04:05Z",
+        }))
+        .unwrap();
+        assert_eq!(request.request_type, Some(TokenizationType::Redeem));
+
+        let encoded = serde_json::to_value(&request).unwrap();
+        assert_eq!(encoded["type"], "redeem");
+        assert!(encoded.get("request_type").is_none(), "{encoded}");
     }
 
     #[test]

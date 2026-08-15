@@ -456,6 +456,7 @@ pub struct ListAccountsRequest {
 /// takes one parameter and the choice is checked at compile time.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
+#[non_exhaustive]
 pub enum CreateACHRelationshipRequest {
     /// Bank details entered by the account holder.
     Manual(ManualACHRelationship),
@@ -665,6 +666,7 @@ pub struct BankAddress {
 /// carry a `bank_id`, and a wire cannot carry a `relationship_id`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
+#[non_exhaustive]
 pub enum CreateTransferRequest {
     /// Money moving over an ACH relationship.
     Ach(CreateACHTransferRequest),
@@ -1139,6 +1141,7 @@ impl GetTradeDocumentsRequest {
 /// one shape for the other's document type unrepresentable.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
+#[non_exhaustive]
 pub enum UploadDocument {
     /// Any document other than a W-8BEN.
     Document(UploadDocumentRequest),
