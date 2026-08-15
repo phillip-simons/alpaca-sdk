@@ -102,12 +102,16 @@ impl Sweep {
         }
     }
 
-    /// Asserts the failures are exactly `known`, by file name.
+    /// Asserts the failures are exactly `known`, by file name and by reason.
     ///
     /// Both directions matter. A new failure is a model or a wire change and
     /// must fail the build. A `known` entry that now decodes must fail it too:
     /// otherwise the exemption outlives the defect, and the next reader is told
     /// a payload is broken when it is not.
+    ///
+    /// The recorded reason is checked as well. An entry that still fails, but
+    /// for something other than what it documents, is the same lie in a form
+    /// the file-name check cannot see.
     fn finish(self, known: &[(&str, &str)]) {
         let failed: Vec<&str> = self.failures.iter().map(|(n, _)| n.as_str()).collect();
 
@@ -135,6 +139,21 @@ impl Sweep {
             fixed.is_empty(),
             "these are listed as known-failing but now decode — drop them from \
              the list: {fixed:?}"
+        );
+
+        let misreported: Vec<String> = known
+            .iter()
+            .filter_map(|(name, expected)| {
+                let (_, actual) = self.failures.iter().find(|(n, _)| n == name)?;
+                (!actual.contains(expected))
+                    .then(|| format!("  {name}\n    recorded: {expected}\n    actual:   {actual}"))
+            })
+            .collect();
+        assert!(
+            misreported.is_empty(),
+            "these still fail, but not for the reason recorded — the exemption \
+             is describing a defect that is no longer the one there:\n{}",
+            misreported.join("\n")
         );
     }
 }
