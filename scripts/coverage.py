@@ -290,7 +290,13 @@ def reference_index(path: pathlib.Path) -> dict[tuple[str, str], list[dict]]:
 
 
 def flagged(reference: dict[tuple[str, str], list[dict]], key: tuple[str, str]) -> str:
-    """A short note if the reference has flagged any page for this route."""
+    """A short note if the reference has flagged any page for this route.
+
+    The ` — reference: ` prefix is matched by the `coverage-doc` job in
+    `.github/workflows/ci.yml`, which regenerates without `specs/reference.json`
+    and so must erase these suffixes from the committed file before comparing.
+    Change the prefix here and change the `specs_only` filter there.
+    """
     notes = []
     for row in reference.get(key, []):
         if row["sunset"]:
@@ -341,6 +347,10 @@ def main() -> int:
         "",
     ]
     if not reference:
+        # The `coverage-doc` job in `.github/workflows/ci.yml` deletes this
+        # banner — first line through the blank one — from both sides before it
+        # diffs, because CI runs `just specs` and not the ~250-page `just
+        # reference`. Reword the first line and the job stops matching it.
         lines += [
             "> `specs/reference.json` is absent, so nothing here is annotated with",
             "> what Alpaca's published reference says. Run `just reference`.",

@@ -229,15 +229,52 @@ jobs:
       # the committed report is out of date with this crate, or it is out of
       # date with the API because the specs moved upstream. Both are worth a
       # human look; neither should land silently.
+      #
+      # It fetches the specs and *not* the reference. COVERAGE.md is generated
+      # from two sources with different provenance: `just specs` is three files
+      # from one raw.githubusercontent.com path in under a second, while `just
+      # reference` walks ~250 pages of docs.alpaca.markets — a host that
+      # already 403s anything that does not look like curl. Worse for a
+      # reproducibility check, `scripts/reference.py` exits 0 when individual
+      # pages fail and simply omits their operations, so a handful of throttled
+      # requests would silently drop annotations and fail this job with a diff
+      # that says nothing about the crate. A determinism gate cannot be built
+      # on 250 uncached third-party requests whose partial failure is invisible.
+      #
+      # So the comparison covers the specs-derived content only, and both sides
+      # are normalized to that view before diffing. `specs_only` erases the two
+      # things a reference-less run changes: the "run `just reference`" banner,
+      # and the ` — reference: …` suffix on flagged routes. Applied to the
+      # committed file each edit is a no-op, so nothing specs-derived is
+      # excused. What is genuinely no longer checked here is whether the
+      # annotations themselves are current — that needs `just reference`
+      # locally, and it is a question about Alpaca's docs, not about this crate.
+      #
+      # Both patterns are load-bearing against `scripts/coverage.py`. If the
+      # banner wording or the ` — reference: ` prefix changes there, change
+      # them here too, or this job starts comparing the wrong thing.
       - name: Regenerate and compare
         run: |
           set -euo pipefail
+
+          specs_only() {
+            sed -e '/^> `specs\/reference.json` is absent/,/^$/d' \
+                -e 's/ — reference: .*$//' "$1"
+          }
+
+          git show HEAD:COVERAGE.md > "$RUNNER_TEMP/COVERAGE.committed.md"
           just coverage
-          if ! git diff --exit-code -- COVERAGE.md; then
+
+          if ! diff -u \
+            --label 'COVERAGE.md (committed)' \
+            --label 'COVERAGE.md (regenerated)' \
+            <(specs_only "$RUNNER_TEMP/COVERAGE.committed.md") \
+            <(specs_only COVERAGE.md); then
             echo "::error file=COVERAGE.md::COVERAGE.md is out of date — run \`just coverage\` and commit the result"
             exit 1
           fi
-          echo "COVERAGE.md matches what the generator produces"
+          echo "COVERAGE.md matches what the generator produces from the specs"
+          echo "(reference annotations are not checked here — see the comment above)"
 
   secret-scan:
     name: no credentials in the tree
