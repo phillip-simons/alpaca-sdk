@@ -217,6 +217,60 @@ jobs:
           fi
           echo "COVERAGE.md matches what the generator produces"
 
+  secret-scan:
+    name: no credentials in the tree
+    # No `changes` gate and no `if`. Every other job is allowed to skip on a
+    # documentation-only change; this one is not, because a leaked key is just
+    # as leaked when it arrives in a Markdown file. It costs a checkout and a
+    # grep, so there is nothing to save by skipping it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # An `AKIA`-prefixed AWS key and its SigV4 signature sat in a packaged
+      # fixture until an audit found them (removed in 2e10e9b). Nothing read
+      # that fixture, so no test could have failed on it, and nothing scanned
+      # for it — the only reason it surfaced was someone reading the file.
+      # This job is what makes that a build failure instead of a lucky catch.
+      - name: Grep for credential-shaped names and values
+        run: |
+          set -uo pipefail
+          status=0
+          scan() {
+            label="$1"; pattern="$2"; shift 2
+            hits=$(git ls-files -z -- "$@" | xargs -0 grep -InE -- "$pattern" 2>/dev/null) || true
+            if [ -n "$hits" ]; then
+              echo "::error::$label"
+              echo "$hits"
+              status=1
+            else
+              echo "ok: $label"
+            fi
+          }
+
+          # Shape. These are a credential whatever the surrounding field is
+          # called, so every tracked file is in scope.
+          scan "credential-shaped value in a tracked file" \
+            'AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----' \
+            .
+
+          # Name. Scoped to fixtures/, because `api_key` and `password` are
+          # ordinary identifiers in src/ — `Credentials::new(api_key, ..)` is
+          # not a leak, and a scan that cried wolf there would be turned off.
+          # A fixture is a captured response payload and Alpaca sends no field
+          # by any of these names, so a hit there is a leak or a hand-edit.
+          #
+          # The X-Amz pair is anchored to a value of real length on purpose:
+          # fixtures/broker/test_accounts_routes__test_update_account__01.json
+          # carries a scrubbed `X-Amz-Signature=REDACTED`, which is a
+          # placeholder rather than a secret and must not fail the build.
+          # Nothing here matches a bare `token=`, so the `page_token=` cursors
+          # in fixtures/index.json do not trip it either.
+          scan "credential-shaped name or value in fixtures/" \
+            'X-Amz-Signature=[0-9a-fA-F]{16,}|X-Amz-Credential=[A-Za-z0-9]{16,}|Bearer |api_key|apikey|private_key|password' \
+            fixtures
+
+          exit "$status"
+
   # The single required status check.
   #
   # Branch protection names check *runs*, and a matrix job that is skipped
@@ -234,7 +288,7 @@ jobs:
   # failure here, not a skip that protection would accept.
   gate:
     name: all checks
-    needs: [changes, fmt, clippy, test, features, msrv, deny, docs, coverage-doc]
+    needs: [changes, fmt, clippy, test, features, msrv, deny, docs, coverage-doc, secret-scan]
     if: always()
     runs-on: ubuntu-latest
     steps:
