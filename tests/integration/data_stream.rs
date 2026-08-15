@@ -525,6 +525,17 @@ async fn the_stock_stream_rejects_a_feed_without_a_live_socket() {
 // poll interval — so both took the right branch by accident, and neither could
 // tell a real clock from one that fired on every poll. These two use a timeout
 // above the poll interval, which is the only place the difference shows.
+//
+// The two below are the most expensive tests in the suite — 12 real seconds
+// each, overlapping under the test harness's parallelism. `tokio::time::pause()`
+// is the obvious fix and does not work here: these drive a real WebSocket over a
+// real socket, and a paused clock auto-advances whenever the runtime parks on
+// I/O. Measured rather than assumed — under `start_paused` the first assertion
+// fails outright, and the same experiment on the REST retry tests read 179.968s
+// of virtual time for a 1s wait, the clock having leapt to `reqwest`'s own
+// ~90s pool timers while the request was in flight. Shortening the waits is the
+// other tempting fix, and it is what the timeout has to exceed the 5s poll
+// interval to prove: the budget is the assertion.
 
 /// A timeout longer than the internal poll interval must be honoured as written.
 /// Before the clock existed, a 5s poll elapsing *was* the staleness signal, so

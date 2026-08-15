@@ -6,6 +6,19 @@
 //! has.
 //!
 //! Every record carries an `id` that the specs do not declare.
+//!
+//! Rates and cash amounts are `f64` here rather than [`Decimal`], even though
+//! [`CashDividend::rate`] models the same quantity as the trading surface's
+//! `CorporateActionAnnouncement::cash`, which is a [`Decimal`]. Both follow
+//! the rule; the two endpoints simply do not agree on
+//! the wire. `fixtures/data/test_corporate_actions__test_get_corporate_actions__02.json`
+//! sends `"rate": 0.086928` as a bare JSON number, while
+//! `fixtures/trading/test_corporate_announcements__test_get_announcements__01.json`
+//! sends `"cash": "0.018"` as a string. Reading a string amount as a float
+//! loses precision, so that one is [`Decimal`]; a number that arrived as a
+//! float gains nothing from being widened after the fact.
+//!
+//! [`Decimal`]: rust_decimal::Decimal
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};

@@ -14,6 +14,13 @@
 /// `other`, discard the unknown string. A plain string visitor behaves identically
 /// under `serde_json` and `rmp-serde`, and the live market data stream is msgpack.
 ///
+/// The fence below is `ignore` because it has to be: the macro is
+/// `pub(crate) use` rather than `#[macro_export]`, and a doctest compiles as a
+/// separate crate that cannot name it. The arm grammar it shows is not left
+/// unchecked, though — `wire_tests.rs` declares the same enum through the macro
+/// for real, so a change to the grammar fails there rather than silently
+/// rotting here.
+///
 /// ```ignore
 /// wire_enum! {
 ///     /// Which side of the market an order is on.

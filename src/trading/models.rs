@@ -2,7 +2,7 @@
 //!
 //! Field-for-field with what the API sends, with two systematic changes: money
 //! that arrives as a string is [`Decimal`] rather than `str`, and integers
-//! Alpaca sends inconsistently go through [`serde_util::int`].
+//! Alpaca sends inconsistently go through [`crate::types::int`].
 //!
 //! Unknown fields are ignored rather than rejected. Alpaca adds fields without
 //! warning — `Asset` grew `last_price` and `last_close_pct_change`, orders carry
@@ -22,7 +22,7 @@ use crate::trading::enums::{
     TradeConfirmationEmail, TradeEvent,
 };
 use crate::types::ContractType;
-use crate::types::serde_util::{self, empty_string_as_none};
+use crate::types::serde_util::empty_string_as_none;
 
 /// A tradable security.
 ///
@@ -307,7 +307,7 @@ fn order_class<'de, D: Deserializer<'de>>(deserializer: D) -> Result<OrderClass,
 #[non_exhaustive]
 pub struct FailedClosePositionDetails {
     /// The status code for the failure.
-    #[serde(with = "serde_util::int")]
+    #[serde(with = "crate::types::int")]
     pub code: i64,
     /// A description of the failure.
     pub message: String,
@@ -344,13 +344,27 @@ pub struct ClosePositionResponse {
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub order_id: Option<Uuid>,
     /// Status code for this position's liquidation.
-    #[serde(default, with = "serde_util::int::option")]
+    #[serde(default, with = "crate::types::option_int")]
     pub status: Option<i64>,
     /// Symbol of the position being closed.
     #[serde(default)]
     pub symbol: Option<String>,
     /// The order, or the reason the close failed.
     pub body: ClosePositionBody,
+}
+
+/// The outcome of cancelling one order in a bulk cancel.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct CancelOrderResponse {
+    /// Id of the order.
+    pub id: Uuid,
+    /// Status code for this order's cancellation.
+    #[serde(with = "crate::types::int")]
+    pub status: i64,
+    /// Any additional detail returned for the cancellation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<serde_json::Value>,
 }
 
 /// The value of a portfolio over time.
@@ -706,16 +720,16 @@ pub struct TradeAccount {
     /// Day trades made in the last 5 trading days, inclusive of today.
     ///
     /// Removed from Alpaca responses on 2026-07-06.
-    #[serde(default, with = "serde_util::int::option")]
+    #[serde(default, with = "crate::types::option_int")]
     pub daytrade_count: Option<i64>,
     /// Buying power for options trading.
     #[serde(default, with = "crate::types::option_decimal")]
     pub options_buying_power: Option<Decimal>,
     /// Approved options trading level: 0 disabled through 3 spreads.
-    #[serde(default, with = "serde_util::int::option")]
+    #[serde(default, with = "crate::types::option_int")]
     pub options_approved_level: Option<i64>,
     /// Effective options trading level, the lower of approved and configured.
-    #[serde(default, with = "serde_util::int::option")]
+    #[serde(default, with = "crate::types::option_int")]
     pub options_trading_level: Option<i64>,
 }
 
@@ -777,7 +791,7 @@ pub struct AccountConfiguration {
     /// those four — so sending it is a 422 rather than "leave it alone".
     #[serde(
         default,
-        with = "serde_util::int::option",
+        with = "crate::types::option_int",
         skip_serializing_if = "Option::is_none"
     )]
     pub max_options_trading_level: Option<i64>,

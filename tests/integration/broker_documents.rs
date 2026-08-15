@@ -390,11 +390,18 @@ fn a_w8ben_must_identify_the_applicant_for_tax() {
 /// used to sleep a flat `retry.wait` on every attempt, ignoring both the backoff
 /// curve and the server's own `Retry-After`. Every other route honours both.
 ///
-/// The two are separated by making them disagree: `wait` is set to 3s and the
-/// server asks for 1s. A loop that ignores `Retry-After` sleeps its own 3s; one
+/// The two are separated by making them disagree: `wait` is set to 10s and the
+/// server asks for 1s. A loop that ignores `Retry-After` sleeps its own 10s; one
 /// that honours it sleeps 1s. Leaving `wait` at its 1s default against a
 /// `Retry-After: 1` would make the test pass either way — the values have to
 /// disagree for the assertion to mean anything.
+///
+/// The gap is deliberately far wider than the ~1s the test actually costs. The
+/// upper bound is a real-time measurement on a shared runner, and at the old 3s
+/// it had to sit at 2.5s — close enough to the honoured 1s wait that a loaded
+/// runner could cross it without any defect. Widening the disagreement rather
+/// than the tolerance keeps the discrimination absolute while leaving 7s of
+/// slack: the two outcomes are 1s and 10s, and nothing in between is ambiguous.
 #[tokio::test]
 async fn a_rate_limited_download_honours_retry_after_over_its_own_wait() {
     let server = MockServer::start().await;
@@ -422,7 +429,7 @@ async fn a_rate_limited_download_honours_retry_after_over_its_own_wait() {
         &Credentials::new("broker-key", "broker-secret").unwrap(),
         RestConfig::new(server.uri())
             .api_version("v1")
-            .retry(RetryConfig::default().wait(std::time::Duration::from_secs(3))),
+            .retry(RetryConfig::default().wait(std::time::Duration::from_secs(10))),
     )
     .unwrap();
 
@@ -442,8 +449,8 @@ async fn a_rate_limited_download_honours_retry_after_over_its_own_wait() {
         "the retry did not wait at all: {elapsed:?}"
     );
     assert!(
-        elapsed < std::time::Duration::from_millis(2500),
-        "`Retry-After: 1` was ignored in favour of the client's own 3s wait: {elapsed:?}"
+        elapsed < std::time::Duration::from_secs(8),
+        "`Retry-After: 1` was ignored in favour of the client's own 10s wait: {elapsed:?}"
     );
 }
 

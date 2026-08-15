@@ -16,6 +16,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::error::{Error, Result};
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -219,7 +220,7 @@ impl GetLocatesRequest {
 #[non_exhaustive]
 pub struct GetLocateQuotesRequest {
     /// The symbols to quote, sent as one comma-separated parameter.
-    #[serde(serialize_with = "crate::types::serde_util::comma_separated_required")]
+    #[serde(serialize_with = "crate::types::comma_separated_required")]
     pub symbols: Vec<String>,
 }
 
@@ -286,9 +287,9 @@ impl CreateLocateRequest {
     /// # Errors
     /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if `qty`
     /// is not positive, or `limit_price` is negative.
-    pub fn validate(&self) -> crate::Result<()> {
+    pub fn validate(&self) -> Result<()> {
         if self.qty <= 0 {
-            return Err(crate::Error::InvalidRequest(
+            return Err(Error::InvalidRequest(
                 "qty must be greater than zero".to_owned(),
             ));
         }
@@ -296,7 +297,7 @@ impl CreateLocateRequest {
             .limit_price
             .is_some_and(|price| price.is_sign_negative())
         {
-            return Err(crate::Error::InvalidRequest(
+            return Err(Error::InvalidRequest(
                 "limit_price cannot be negative".to_owned(),
             ));
         }

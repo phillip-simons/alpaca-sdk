@@ -12,6 +12,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::error::{Error, Result};
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -175,9 +176,9 @@ impl MintTokenRequest {
     /// # Errors
     /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if `qty`
     /// is not positive.
-    pub fn validate(&self) -> crate::Result<()> {
+    pub fn validate(&self) -> Result<()> {
         if self.qty <= Decimal::ZERO {
-            return Err(crate::Error::InvalidRequest(
+            return Err(Error::InvalidRequest(
                 "qty must be greater than zero".to_owned(),
             ));
         }

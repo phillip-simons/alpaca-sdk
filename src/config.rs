@@ -33,7 +33,8 @@ pub const ACCOUNT_ACTIVITIES_DEFAULT_PAGE_SIZE: u32 = 100;
 /// Maximum number of documents accepted by a single broker upload request.
 pub const BROKER_DOCUMENT_UPLOAD_LIMIT: usize = 10;
 
-/// Retries attempted after the initial request, matching `DEFAULT_RETRY_ATTEMPTS`.
+/// Retries attempted after the initial request, matching alpaca-py's
+/// `DEFAULT_RETRY_ATTEMPTS`, which carries the same name.
 pub const DEFAULT_RETRY_ATTEMPTS: u32 = 3;
 
 /// Base delay before the first retry, doubling from there.

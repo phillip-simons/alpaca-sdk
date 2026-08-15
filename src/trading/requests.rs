@@ -1211,20 +1211,6 @@ impl GetOptionContractsRequest {
     }
 }
 
-/// The outcome of cancelling one order in a bulk cancel.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub struct CancelOrderResponse {
-    /// Id of the order.
-    pub id: Uuid,
-    /// Status code for this order's cancellation.
-    #[serde(with = "crate::types::serde_util::int")]
-    pub status: i64,
-    /// Any additional detail returned for the cancellation.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub body: Option<serde_json::Value>,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

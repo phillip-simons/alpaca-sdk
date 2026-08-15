@@ -15,15 +15,15 @@ use crate::trading::locates::{
 };
 use crate::trading::markets::{GetMarketCalendarRequest, Market, MarketCalendar};
 use crate::trading::models::{
-    AccountConfiguration, Activity, Asset, Calendar, Clock, ClosePositionResponse,
-    CorporateActionAnnouncement, OptionContract, OptionContractsResponse, Order, PortfolioHistory,
-    Position, TradeAccount, Watchlist,
+    AccountConfiguration, Activity, Asset, Calendar, CancelOrderResponse, Clock,
+    ClosePositionResponse, CorporateActionAnnouncement, OptionContract, OptionContractsResponse,
+    Order, PortfolioHistory, Position, TradeAccount, Watchlist,
 };
 use crate::trading::requests::{
-    CancelOrderResponse, ClosePositionRequest, CreateWatchlistRequest, GetAccountActivitiesRequest,
-    GetCorporateAnnouncementsRequest, GetOptionContractsRequest, GetOrderByIdRequest,
-    GetOrdersRequest, GetPortfolioHistoryRequest, OrderRequest, ReplaceOrderRequest,
-    UpdateWatchlistRequest,
+    ClosePositionRequest, CreateWatchlistRequest, GetAccountActivitiesRequest, GetAssetsRequest,
+    GetCalendarRequest, GetCorporateAnnouncementsRequest, GetOptionContractsRequest,
+    GetOrderByIdRequest, GetOrdersRequest, GetPortfolioHistoryRequest, OrderRequest,
+    ReplaceOrderRequest, UpdateWatchlistRequest,
 };
 use crate::trading::tokenization::{
     ByClientRequestId, GetTokenizationRequestsRequest, MintTokenRequest, TokenizationRequest,
@@ -370,10 +370,7 @@ impl TradingClient {
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
-    pub async fn get_all_assets(
-        &self,
-        filter: Option<&crate::trading::requests::GetAssetsRequest>,
-    ) -> Result<Vec<Asset>> {
+    pub async fn get_all_assets(&self, filter: Option<&GetAssetsRequest>) -> Result<Vec<Asset>> {
         match filter {
             Some(filter) => self.rest.get("/assets", filter).await,
             None => self.rest.get("/assets", &Empty).await,
@@ -404,10 +401,7 @@ impl TradingClient {
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
-    pub async fn get_calendar(
-        &self,
-        filter: Option<&crate::trading::requests::GetCalendarRequest>,
-    ) -> Result<Vec<Calendar>> {
+    pub async fn get_calendar(&self, filter: Option<&GetCalendarRequest>) -> Result<Vec<Calendar>> {
         match filter {
             Some(filter) => self.rest.get("/calendar", filter).await,
             None => self.rest.get("/calendar", &Empty).await,

@@ -230,8 +230,13 @@ async fn the_delay_between_retries_grows() {
 
 /// A 429 carrying `Retry-After` is stating the answer the curve is guessing at,
 /// so it wins. The assertion is on the wall clock rather than on a delay value:
-/// with the header ignored, a 10-second base doubling three times could not
-/// finish in under a second, so the two outcomes cannot be confused.
+/// with the header ignored, a 10-second base doubling three times takes over a
+/// minute, so the two outcomes cannot be confused.
+///
+/// The bound is 5s rather than the 1s it was, because 1s was measuring the
+/// runner as much as the client — four round trips against a loaded CI box can
+/// take that long with the header honoured perfectly. 5s is still nowhere near
+/// the 70s the curve would cost, so the discrimination is untouched.
 #[tokio::test]
 async fn retry_after_overrides_the_backoff_curve() {
     let server = MockServer::start().await;
@@ -254,7 +259,7 @@ async fn retry_after_overrides_the_backoff_curve() {
 
     assert!(matches!(err, Error::RetriesExhausted { .. }), "{err:?}");
     assert!(
-        elapsed < Duration::from_secs(1),
+        elapsed < Duration::from_secs(5),
         "waited {elapsed:?}; the curve was used and the header ignored"
     );
 }
