@@ -6,12 +6,12 @@
 
 #![cfg(feature = "broker")]
 
+use crate::common::{broker_client as client, fixture};
 use alpaca_sdk::broker::{
-    BatchJournalRequestEntry, BatchJournalResponse, BrokerClient, CreateBatchJournalRequest,
+    BatchJournalRequestEntry, BatchJournalResponse, CreateBatchJournalRequest,
     CreateJournalRequest, CreateReverseBatchJournalRequest, GetJournalsRequest, Journal,
     JournalEntryType, JournalStatus, ReverseBatchJournalRequestEntry,
 };
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use rust_decimal::Decimal;
 use serde_json::json;
 use uuid::Uuid;
@@ -22,29 +22,9 @@ const JOURNAL_ID: &str = "a7a50677-2983-4c68-96dc-aff62fe3b8cf";
 const FROM_ACCOUNT: &str = "ff7b9e35-90e7-453d-a410-b508e1971a36";
 const TO_ACCOUNT: &str = "a4c80770-edca-45bc-b35c-cfdf2ed46649";
 
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
-
 fn parse<T: serde::de::DeserializeOwned>(name: &str) -> T {
     let value = fixture(name);
     serde_json::from_value(value.clone()).unwrap_or_else(|e| panic!("{name}: {e}\n{value:#}"))
-}
-
-fn client(server: &MockServer) -> BrokerClient {
-    let credentials = Credentials::new("broker-key", "broker-secret").unwrap();
-    BrokerClient::with_config(
-        &credentials,
-        RestConfig::new(server.uri())
-            .api_version("v1")
-            .retry(RetryConfig::none()),
-    )
-    .unwrap()
 }
 
 fn from_account() -> Uuid {

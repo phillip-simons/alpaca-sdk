@@ -7,14 +7,14 @@
 
 #![cfg(feature = "broker")]
 
+use crate::common::{broker_client as client, fixture};
 use alpaca_sdk::broker::{
-    ACHRelationship, ACHRelationshipStatus, Bank, BankAccountType, BankAddress, BrokerClient,
+    ACHRelationship, ACHRelationshipStatus, Bank, BankAccountType, BankAddress,
     CreateACHRelationshipRequest, CreateACHTransferRequest, CreateBankRequest,
     CreateBankTransferRequest, CreateTransferRequest, FeePaymentMethod, GetTransfersRequest,
     IdentifierType, ManualACHRelationship, PlaidACHRelationship, Transfer, TransferDirection,
     TransferStatus, TransferTiming, TransferType,
 };
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use rust_decimal::Decimal;
 use serde_json::json;
 use uuid::Uuid;
@@ -26,29 +26,9 @@ const RELATIONSHIP_ID: &str = "0f08c6bc-8e9f-463d-a73f-fd047fdb5e94";
 const BANK_ID: &str = "9a7fb9b5-1f4d-420f-b6d4-0fd32008cec8";
 const TRANSFER_ID: &str = "be3c368a-4c7c-4384-808e-f02c9f5a8afe";
 
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
-
 fn parse<T: serde::de::DeserializeOwned>(name: &str) -> T {
     let value = fixture(name);
     serde_json::from_value(value.clone()).unwrap_or_else(|e| panic!("{name}: {e}\n{value:#}"))
-}
-
-fn client(server: &MockServer) -> BrokerClient {
-    let credentials = Credentials::new("broker-key", "broker-secret").unwrap();
-    BrokerClient::with_config(
-        &credentials,
-        RestConfig::new(server.uri())
-            .api_version("v1")
-            .retry(RetryConfig::none()),
-    )
-    .unwrap()
 }
 
 /// `BankAddress` is `#[non_exhaustive]` and all five fields are `String`, so it

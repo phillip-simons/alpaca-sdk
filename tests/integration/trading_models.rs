@@ -8,8 +8,6 @@
 
 #![cfg(feature = "trading")]
 
-use std::path::PathBuf;
-
 use alpaca_sdk::trading::{
     Activity, Asset, AssetClass, AssetExchange, AssetStatus, Calendar, ClosePositionBody,
     ClosePositionResponse, Order, OrderClass, OrderStatus, OrderType, PositionIntent, TimeInForce,
@@ -18,15 +16,13 @@ use alpaca_sdk::trading::{
 use alpaca_sdk::types::SupportedCurrencies;
 use rust_decimal::Decimal;
 
-fn fixture(name: &str) -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("reading {}: {e}", path.display()))
-}
+// The raw-text variant: these tests deserialize from the file as captured
+// rather than from a `Value` that has already been through serde once, which is
+// what makes a string-typed integer visible here at all.
+use crate::common::fixture_str;
 
 fn parse<T: serde::de::DeserializeOwned>(name: &str) -> T {
-    let body = fixture(name);
+    let body = fixture_str(name);
     serde_json::from_str(&body).unwrap_or_else(|e| panic!("{name}: {e}\n{body}"))
 }
 
@@ -190,7 +186,7 @@ fn order_list_deserializes() {
     // Rejecting a non-numeric price is the behavior we want, so the placeholder
     // is patched out here rather than the type being weakened to match. See
     // `a_non_numeric_price_is_rejected` for the other half of this.
-    let body = fixture("trading/test_order_routes__test_get_orders__01.json")
+    let body = fixture_str("trading/test_order_routes__test_get_orders__01.json")
         .replace(r#""hwm": "string""#, r#""hwm": null"#);
     let orders: Vec<Order> = serde_json::from_str(&body).unwrap();
 

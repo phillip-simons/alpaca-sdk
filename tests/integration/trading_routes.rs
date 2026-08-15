@@ -6,14 +6,13 @@
 
 #![cfg(feature = "trading")]
 
+use crate::common::{fixture, trading_client as client};
 use alpaca_sdk::trading::{
     AssetStatus, ClosePositionRequest, CreateWatchlistRequest, GetAssetsRequest,
     GetOptionContractsRequest, GetOrderByIdRequest, GetOrdersRequest, OrderAmount, OrderRequest,
-    OrderSide, QueryOrderStatus, ReplaceOrderRequest, TimeInForce, TradingClient,
-    UpdateWatchlistRequest,
+    OrderSide, QueryOrderStatus, ReplaceOrderRequest, TimeInForce, UpdateWatchlistRequest,
 };
 use alpaca_sdk::types::AssetIdent;
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use rust_decimal::Decimal;
 use serde_json::json;
 use uuid::Uuid;
@@ -22,23 +21,6 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const ORDER_ID: &str = "61e69015-8549-4bfd-b9c3-01e75843f47d";
 const WATCHLIST_ID: &str = "fb306d55-2d64-4b8b-8c2a-3d0d9e0b7d47";
-
-fn client(server: &MockServer) -> TradingClient {
-    let credentials = Credentials::new("key", "secret").unwrap();
-    TradingClient::with_config(
-        &credentials,
-        RestConfig::new(server.uri()).retry(RetryConfig::none()),
-    )
-    .unwrap()
-}
-
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path).unwrap();
-    serde_json::from_str(&body).unwrap()
-}
 
 /// Mounts a single expected request and returns the server.
 async fn expect(http_method: &str, http_path: &str, response: serde_json::Value) -> MockServer {

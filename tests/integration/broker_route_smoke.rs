@@ -18,11 +18,14 @@
 
 #![cfg(feature = "broker")]
 
+use crate::common::broker_client as client;
+use alpaca_sdk::Credentials;
 use alpaca_sdk::broker::{
     BatchCreateFundingWalletsRequest, BrokerClient, CreateInstantFundingSettlementRequest,
-    DemoFundingRequest, EstimateOrderRequest, GetAccountLimitsRequest,
-    GetAggregatePositionsRequest, GetRunsRequest, OAuthRequest, OptionsLevel,
-    RequestOptionsApprovalRequest, SettlementTransfer, TransmitterInfo, UpdateOnfidoOutcomeRequest,
+    CreateJitSettlementRequest, DemoFundingRequest, EstimateOrderRequest, GetAccountLimitsRequest,
+    GetAggregatePositionsRequest, GetRunsRequest, JitSettlementAccount, OAuthRequest, OptionsLevel,
+    RequestOptionsApprovalRequest, SettlementAssetClass, SettlementTransfer, TransmitterInfo,
+    UpdateOnfidoOutcomeRequest,
 };
 use alpaca_sdk::trading::{
     ByClientRequestId, CreateWatchlistRequest, CreateWhitelistedAddressRequest, CryptoChain,
@@ -30,7 +33,6 @@ use alpaca_sdk::trading::{
     TransferFeeEstimateRequest, UpdateWatchlistRequest,
 };
 use alpaca_sdk::types::{AssetIdent, SupportedCurrencies};
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use rust_decimal::Decimal;
 use serde_json::json;
 use std::future::Future;
@@ -40,17 +42,6 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const ACCOUNT: &str = "2a87c088-ffb6-472b-a4a3-cd9305c8605c";
 const OTHER: &str = "61e69015-8549-4bfd-b9c3-01e75843f47d";
-
-fn client(server: &MockServer) -> BrokerClient {
-    let credentials = Credentials::new("broker-key", "broker-secret").unwrap();
-    BrokerClient::with_config(
-        &credentials,
-        RestConfig::new(server.uri())
-            .api_version("v1")
-            .retry(RetryConfig::none()),
-    )
-    .unwrap()
-}
 
 fn account() -> Uuid {
     Uuid::parse_str(ACCOUNT).unwrap()
@@ -91,6 +82,28 @@ where
         "{http_method} {http_path} did not return the 404 the mock answers with"
     );
     server.received_requests().await.unwrap()
+}
+
+// --------------------------------------------------------------- versions
+
+/// The version segment `BrokerClient::new` picks for itself.
+///
+/// Every other test in this file supplies `v1` through `with_config`, so the
+/// constructor's own choice is asserted by nothing — change it and the suite
+/// stays green while every broker route 404s. It is read back off the client
+/// rather than off a mock because `new` bakes in Alpaca's base URL alongside
+/// the version; that the configured version then reaches the wire is what the
+/// rest of this file already proves.
+#[test]
+fn the_broker_client_constructor_picks_v1() {
+    let credentials = Credentials::new("broker-key", "broker-secret").unwrap();
+
+    // Both environments, because the sandbox flag picks the base URL and could
+    // just as easily have been wired to pick a version.
+    for sandbox in [true, false] {
+        let broker = BrokerClient::new(&credentials, sandbox).unwrap();
+        assert_eq!(broker.rest().config().api_version, "v1");
+    }
 }
 
 // --------------------------------------------------------------- accounts
@@ -558,6 +571,46 @@ async fn the_watchlist_verbs_are_not_interchangeable() {
                 .await
         },
     )
+    .await;
+}
+
+// ----------------------------------------------------- writes on a prefix
+// a read already owns
+
+/// Three routes where a `GET` on the same path is already covered elsewhere and
+/// the `POST` was not. That is the worst shape for this to be in: `just
+/// coverage` sees the path, a grep for the literal finds a test, and the verb
+/// the write actually uses is asserted by nothing. Each of the three has an
+/// existing test that stops at `validate` and never reaches the network, so
+/// none of them had ever put a request on a wire.
+#[tokio::test]
+async fn opening_an_account_posts_to_the_path_the_listing_reads() {
+    expect_route("POST", "/v1/accounts", |broker| async move {
+        broker
+            .create_account(&crate::broker_accounts::valid_application())
+            .await
+    })
+    .await;
+}
+
+/// The settlement write shares `/v1/jit/settlements` with the listing, and sits
+/// on the `/jit` prefix rather than the `/transfers/jit` one the ledgers use.
+#[tokio::test]
+async fn settling_a_jit_obligation_posts_to_the_jit_prefix() {
+    expect_route("POST", "/v1/jit/settlements", |broker| async move {
+        // A settlement with no accounts, or one settling nothing, is refused
+        // before it is sent — which would leave the mock never called.
+        let request = CreateJitSettlementRequest::new(
+            vec![JitSettlementAccount::new(
+                "9001".to_owned(),
+                Decimal::ONE,
+                TransmitterInfo::default(),
+            )],
+            SettlementAssetClass::UsEquity,
+            SupportedCurrencies::Usd,
+        );
+        broker.create_jit_settlement(&request).await
+    })
     .await;
 }
 

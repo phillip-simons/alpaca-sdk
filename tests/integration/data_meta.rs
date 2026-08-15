@@ -9,34 +9,22 @@
 
 #![cfg(feature = "data")]
 
+use crate::common::{credentials, fixture};
 use alpaca_sdk::data::Exchange;
 use alpaca_sdk::data::{
     Codes, DataFeed, ForexDataClient, ForexLatestRatesRequest, ForexRatesRequest, LogoClient,
     LogoRequest, OptionHistoricalDataClient, SingleSymbolRequest, StockAuctionsRequest,
     StockHistoricalDataClient, Tape, TickType,
 };
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
+use alpaca_sdk::{RestConfig, RetryConfig};
 use serde_json::json;
 use wiremock::matchers::{method, path, query_param, query_param_is_missing};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
 
 fn config(server: &MockServer, version: &str) -> RestConfig {
     RestConfig::new(server.uri())
         .api_version(version)
         .retry(RetryConfig::none())
-}
-
-fn credentials() -> Credentials {
-    Credentials::new("key", "secret").unwrap()
 }
 
 fn stock_client(server: &MockServer) -> StockHistoricalDataClient {

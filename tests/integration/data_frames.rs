@@ -8,6 +8,7 @@
 
 use std::collections::HashMap;
 
+use crate::common::fixture;
 use alpaca_sdk::data::{
     Bar, DailyAuctions, ForexRate, Quote, StockBarsRequest, StockHistoricalDataClient, TimeFrame,
     ToFrame, Trade,
@@ -17,15 +18,6 @@ use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
 
 fn timestamp(text: &str) -> chrono::DateTime<chrono::Utc> {
     text.parse().unwrap()

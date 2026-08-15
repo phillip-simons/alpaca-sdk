@@ -2,15 +2,15 @@
 
 #![cfg(feature = "broker")]
 
+use crate::common::{broker_client as client, fixture};
 use alpaca_sdk::broker::{
-    Account, AccountEntities, Agreement, AgreementType, BrokerClient, Contact,
-    CreateAccountRequest, Disclosures, FundingSource, Identity, ListAccountsRequest, TaxIdType,
-    UpdatableContact, UpdateAccountRequest,
+    Account, AccountEntities, Agreement, AgreementType, Contact, CreateAccountRequest, Disclosures,
+    FundingSource, Identity, ListAccountsRequest, TaxIdType, UpdatableContact,
+    UpdateAccountRequest,
 };
 use alpaca_sdk::trading::AccountStatus;
 use alpaca_sdk::types::Sort;
 use alpaca_sdk::types::SupportedCurrencies;
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use serde_json::json;
 use uuid::Uuid;
 use wiremock::matchers::{body_json, header, method, path, query_param};
@@ -18,29 +18,9 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const ACCOUNT_ID: &str = "2a87c088-ffb6-472b-a4a3-cd9305c8605c";
 
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
-
 fn parse<T: serde::de::DeserializeOwned>(name: &str) -> T {
     let value = fixture(name);
     serde_json::from_value(value.clone()).unwrap_or_else(|e| panic!("{name}: {e}\n{value:#}"))
-}
-
-fn client(server: &MockServer) -> BrokerClient {
-    let credentials = Credentials::new("broker-key", "broker-secret").unwrap();
-    BrokerClient::with_config(
-        &credentials,
-        RestConfig::new(server.uri())
-            .api_version("v1")
-            .retry(RetryConfig::none()),
-    )
-    .unwrap()
 }
 
 // ------------------------------------------------------------------ auth
@@ -325,7 +305,10 @@ fn a_null_list_reads_as_an_empty_one() {
 
 // ------------------------------------------------------- account requests
 
-fn valid_application() -> CreateAccountRequest {
+/// Reachable from `broker_route_smoke`, which needs an application that gets
+/// past `validate` to reach the network at all — thirty lines of required
+/// fields worth building in one place rather than two.
+pub(crate) fn valid_application() -> CreateAccountRequest {
     // These are `#[non_exhaustive]`, so they are built from `Default` and then
     // filled in rather than as struct literals — which is also what an external
     // caller has to do.

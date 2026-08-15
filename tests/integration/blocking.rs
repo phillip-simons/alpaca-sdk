@@ -6,19 +6,12 @@
 
 #![cfg(all(feature = "blocking", feature = "trading"))]
 
+use crate::common::fixture;
 use alpaca_sdk::blocking::Blocking;
 use alpaca_sdk::trading::TradingClient;
 use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path).unwrap();
-    serde_json::from_str(&body).unwrap()
-}
 
 /// Mounts the account route and hands back the running server.
 ///

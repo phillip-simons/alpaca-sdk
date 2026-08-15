@@ -11,7 +11,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use alpaca_sdk::Credentials;
+use crate::common::credentials;
 use alpaca_sdk::data::{Channel, StockDataStream, StreamMessage};
 use futures_util::{SinkExt as _, StreamExt as _};
 use serde_json::{Value, json};
@@ -173,10 +173,6 @@ async fn record(seen: &Received, message: &Message) {
     {
         seen.lock().await.push(value);
     }
-}
-
-fn credentials() -> Credentials {
-    Credentials::new("key", "secret").unwrap()
 }
 
 fn trade(symbol: &str, price: f64) -> Value {

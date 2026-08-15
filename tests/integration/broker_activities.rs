@@ -11,10 +11,10 @@
 
 #![cfg(feature = "broker")]
 
-use alpaca_sdk::broker::{BrokerClient, CIPInfo, GetAccountActivitiesRequest};
+use crate::common::{broker_client as client, fixture};
+use alpaca_sdk::broker::{CIPInfo, GetAccountActivitiesRequest};
 use alpaca_sdk::trading::{Activity, ActivityType};
 use alpaca_sdk::types::Sort;
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use serde_json::json;
 use uuid::Uuid;
 use wiremock::matchers::{method, path, query_param};
@@ -22,29 +22,9 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const ACCOUNT_ID: &str = "3dcb795c-3ccc-402a-abb9-07e26a1b1326";
 
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
-
 fn parse<T: serde::de::DeserializeOwned>(name: &str) -> T {
     let value = fixture(name);
     serde_json::from_value(value.clone()).unwrap_or_else(|e| panic!("{name}: {e}\n{value:#}"))
-}
-
-fn client(server: &MockServer) -> BrokerClient {
-    let credentials = Credentials::new("broker-key", "broker-secret").unwrap();
-    BrokerClient::with_config(
-        &credentials,
-        RestConfig::new(server.uri())
-            .api_version("v1")
-            .retry(RetryConfig::none()),
-    )
-    .unwrap()
 }
 
 const ACTIVITIES: &str = "broker/test_account_activities_routes__test_get_activities_for_account_max_items_and_single_request_date__01.json";

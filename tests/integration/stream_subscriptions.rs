@@ -15,15 +15,12 @@
 
 use std::time::Duration;
 
+use crate::common::credentials;
 use alpaca_sdk::Credentials;
 use alpaca_sdk::data::{
     Channel, CryptoDataStream, CryptoFeed, DataFeed, NewsDataStream, OptionDataStream, OptionsFeed,
     StockDataStream,
 };
-
-fn credentials() -> Credentials {
-    Credentials::new("key", "secret").unwrap()
-}
 
 // ------------------------------------------------------------------ stocks
 

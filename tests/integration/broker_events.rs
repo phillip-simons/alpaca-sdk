@@ -7,23 +7,12 @@
 
 #![cfg(feature = "broker")]
 
-use alpaca_sdk::broker::{BrokerClient, GetEventsRequest};
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
+use crate::common::broker_client as client;
+use alpaca_sdk::broker::GetEventsRequest;
 use futures_util::StreamExt as _;
 use serde_json::json;
 use wiremock::matchers::{header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-fn client(server: &MockServer) -> BrokerClient {
-    let credentials = Credentials::new("broker-key", "broker-secret").unwrap();
-    BrokerClient::with_config(
-        &credentials,
-        RestConfig::new(server.uri())
-            .api_version("v1")
-            .retry(RetryConfig::none()),
-    )
-    .unwrap()
-}
 
 /// A `text/event-stream` body: one fully-specified event, then one that sends
 /// neither an `id` nor an `event` line.

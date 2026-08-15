@@ -7,14 +7,13 @@
 
 #![cfg(feature = "broker")]
 
+use crate::common::{broker_client as client, fixture};
 use alpaca_sdk::broker::{
-    BrokerClient, CalendarSubType, CreatePortfolioRequest, CreateRunRequest,
-    CreateSubscriptionRequest, DriftBandSubType, GetRunsRequest, GetSubscriptionsRequest,
-    Portfolio, PortfolioStatus, RebalancingConditionsType, RebalancingRun, RebalancingSubType,
-    RunStatus, RunType, Subscription, SubscriptionsPage, UpdatePortfolioRequest, Weight,
-    WeightType,
+    CalendarSubType, CreatePortfolioRequest, CreateRunRequest, CreateSubscriptionRequest,
+    DriftBandSubType, GetRunsRequest, GetSubscriptionsRequest, Portfolio, PortfolioStatus,
+    RebalancingConditionsType, RebalancingRun, RebalancingSubType, RunStatus, RunType,
+    Subscription, SubscriptionsPage, UpdatePortfolioRequest, Weight, WeightType,
 };
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use rust_decimal::Decimal;
 use serde_json::json;
 use uuid::Uuid;
@@ -30,29 +29,9 @@ const THIRD_SUBSCRIPTION_ID: &str = "9341be15-8786-4d23-ba1a-fc10ef4f90f6";
 const RUN_ID: &str = "2ad28f83-796c-4c4d-895e-d360aeb95297";
 const ACCOUNT_ID: &str = "bf2b0f93-f296-4276-a9cf-288586cf4fb7";
 
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
-
 fn parse<T: serde::de::DeserializeOwned>(name: &str) -> T {
     let value = fixture(name);
     serde_json::from_value(value.clone()).unwrap_or_else(|e| panic!("{name}: {e}\n{value:#}"))
-}
-
-fn client(server: &MockServer) -> BrokerClient {
-    let credentials = Credentials::new("broker-key", "broker-secret").unwrap();
-    BrokerClient::with_config(
-        &credentials,
-        RestConfig::new(server.uri())
-            .api_version("v1")
-            .retry(RetryConfig::none()),
-    )
-    .unwrap()
 }
 
 // ----------------------------------------------------------------- models

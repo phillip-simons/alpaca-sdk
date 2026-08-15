@@ -16,39 +16,20 @@
 
 #![cfg(feature = "broker")]
 
+use crate::common::{broker_client as client, fixture};
 use alpaca_sdk::broker::{
-    BrokerClient, CreateInstantFundingRequest, CreateJitSettlementRequest,
-    CreateRecipientBankRequest, CreateWithdrawalRequest, GetEntryRequirementsRequest,
-    GetJitReportRequest, GetUsCorporatesRequest, GetUsTreasuriesRequest, InstantFundingStatus,
-    IpoAvailability, JitReport, JitReportType, OAuthRequest, OptionsLevel,
-    RequestOptionsApprovalRequest, RiskRating, SettlementAssetClass, TreasurySubtype,
+    CreateInstantFundingRequest, CreateJitSettlementRequest, CreateRecipientBankRequest,
+    CreateWithdrawalRequest, GetEntryRequirementsRequest, GetJitReportRequest,
+    GetUsCorporatesRequest, GetUsTreasuriesRequest, InstantFundingStatus, IpoAvailability,
+    JitReport, JitReportType, OAuthRequest, OptionsLevel, RequestOptionsApprovalRequest,
+    RiskRating, SettlementAssetClass, TreasurySubtype,
 };
 use alpaca_sdk::types::SupportedCurrencies;
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use rust_decimal::Decimal;
 use serde_json::json;
 use uuid::Uuid;
 use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
-
-fn client(server: &MockServer) -> BrokerClient {
-    BrokerClient::with_config(
-        &Credentials::new("key", "secret").unwrap(),
-        RestConfig::new(server.uri())
-            .api_version("v1")
-            .retry(RetryConfig::none()),
-    )
-    .unwrap()
-}
 
 const ACCOUNT: Uuid = Uuid::nil();
 

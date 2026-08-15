@@ -9,12 +9,15 @@
 
 #![cfg(feature = "data")]
 
+use crate::common::credentials;
 use alpaca_sdk::data::{
-    CryptoFeed, CryptoHistoricalDataClient, CryptoLatestRequest, CryptoSnapshotRequest,
-    OptionHistoricalDataClient, OptionLatestRequest, SingleSymbolRequest,
-    StockHistoricalDataClient, StockLatestRequest, StockTimeseriesRequest, TimeseriesRequest,
+    CorporateActionsClient, CryptoFeed, CryptoHistoricalDataClient, CryptoLatestRequest,
+    CryptoSnapshotRequest, ForexDataClient, LogoClient, NewsClient, OptionHistoricalDataClient,
+    OptionLatestRequest, ScreenerClient, SingleSymbolRequest, StockHistoricalDataClient,
+    StockLatestRequest, StockTimeseriesRequest, TimeseriesRequest,
 };
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
+use alpaca_sdk::{RestConfig, RetryConfig};
+use futures_util::StreamExt as _;
 use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -23,10 +26,6 @@ fn config(server: &MockServer, version: &str) -> RestConfig {
     RestConfig::new(server.uri())
         .api_version(version)
         .retry(RetryConfig::none())
-}
-
-fn credentials() -> Credentials {
-    Credentials::new("key", "secret").unwrap()
 }
 
 fn stocks(server: &MockServer) -> StockHistoricalDataClient {
@@ -65,6 +64,51 @@ fn bar() -> serde_json::Value {
     json!({"t": "2022-03-09T00:00:00Z", "o": 1.0, "h": 2.0, "l": 0.5, "c": 1.5, "v": 100.0})
 }
 
+// ---------------------------------------------------------------- versions
+
+/// The version segment each constructor picks for itself.
+///
+/// Every other test in this file hands the version in through `config`, so the
+/// segment the shipped constructors choose is asserted by nothing: change `v2`
+/// to `v3` inside `StockHistoricalDataClient::new` and every stock route 404s
+/// in production while the suite stays green. These read the choice back off
+/// the client rather than off a mock because `new` bakes in Alpaca's own base
+/// URL alongside the version — there is no seam to point a `MockServer` at.
+/// That the configured version then reaches the wire is what the rest of this
+/// file already proves.
+#[test]
+fn each_data_client_constructor_picks_its_own_version_segment() {
+    let credentials = credentials();
+
+    // Stocks are the only data surface that is not beta.
+    let stocks = StockHistoricalDataClient::new(&credentials).unwrap();
+    assert_eq!(stocks.rest().config().api_version, "v2");
+
+    // Crypto is three majors ahead of the other beta surfaces, and both of its
+    // constructors have to agree.
+    let crypto = CryptoHistoricalDataClient::new().unwrap();
+    assert_eq!(crypto.rest().config().api_version, "v1beta3");
+    let crypto = CryptoHistoricalDataClient::with_credentials(&credentials).unwrap();
+    assert_eq!(crypto.rest().config().api_version, "v1beta3");
+
+    let options = OptionHistoricalDataClient::new(&credentials).unwrap();
+    assert_eq!(options.rest().config().api_version, "v1beta1");
+    let forex = ForexDataClient::new(&credentials).unwrap();
+    assert_eq!(forex.rest().config().api_version, "v1beta1");
+    let logos = LogoClient::new(&credentials).unwrap();
+    assert_eq!(logos.rest().config().api_version, "v1beta1");
+    let news = NewsClient::new(&credentials).unwrap();
+    assert_eq!(news.rest().config().api_version, "v1beta1");
+    let screener = ScreenerClient::new(&credentials).unwrap();
+    assert_eq!(screener.rest().config().api_version, "v1beta1");
+
+    // Corporate actions is `v1` for the polled route. Its event stream is
+    // `v1beta1` and does not read this field at all — see
+    // `the_corporate_action_event_stream_is_v1beta1_on_a_v1_client`.
+    let corporate_actions = CorporateActionsClient::new(&credentials).unwrap();
+    assert_eq!(corporate_actions.rest().config().api_version, "v1");
+}
+
 // ------------------------------------------------------------------ stocks
 
 /// The multi-symbol time series routes, and the wrapping key each one reads.
@@ -87,6 +131,27 @@ async fn stock_quotes_and_trades_read_their_own_wrapping_keys() {
         .await
         .unwrap();
     assert_eq!(trades["AAPL"][0].price, 158.65);
+}
+
+/// The multi-symbol latest quote. A different route from the single-symbol
+/// `/stocks/AAPL/quotes/latest` below, and the only one of the two that answers
+/// with a map — reaching the single-symbol path with a list of symbols returns
+/// one arbitrary symbol's quote rather than an error.
+#[tokio::test]
+async fn the_latest_stock_quote_is_keyed_by_symbol() {
+    let server = serving(
+        "/v2/stocks/quotes/latest",
+        json!({"quotes": {"AAPL": quote()}}),
+    )
+    .await;
+
+    let quotes = stocks(&server)
+        .get_stock_latest_quote(&StockLatestRequest::new("AAPL"))
+        .await
+        .unwrap();
+
+    assert_eq!(quotes["AAPL"].ask_price, 158.65);
+    assert_eq!(quotes["AAPL"].symbol, "AAPL");
 }
 
 #[tokio::test]
@@ -241,6 +306,20 @@ async fn the_crypto_latest_routes_reverse_the_stock_path_order() {
         .await
         .unwrap();
     assert_eq!(books["BTC/USD"].bids.len(), 1);
+
+    let server = serving(
+        "/v1beta3/crypto/us/latest/quotes",
+        json!({"quotes": {"BTC/USD": quote()}}),
+    )
+    .await;
+    assert_eq!(
+        crypto(&server)
+            .get_crypto_latest_quote(&CryptoLatestRequest::new("BTC/USD"), CryptoFeed::Us)
+            .await
+            .unwrap()["BTC/USD"]
+            .ask_price,
+        158.65
+    );
 }
 
 #[tokio::test]
@@ -262,6 +341,44 @@ async fn a_crypto_snapshot_decodes_its_nested_records() {
 
     assert!(snapshots["BTC/USD"].daily_bar.is_some());
     assert!(snapshots["BTC/USD"].latest_quote.is_some());
+}
+
+// ------------------------------------------------- corporate action events
+
+/// The push twin of `/v1/corporate-actions`, on a version segment of its own.
+///
+/// `get_corporate_action_events` writes `v1beta1` into the URL directly instead
+/// of taking it from the client, so this asserts the segment against a client
+/// configured for `v1` — which is what a caller building one with `new` gets.
+/// Reading the configured version here instead would send the stream to
+/// `/v1/events/corporate-actions`, a 404 with nothing else to show for it.
+#[tokio::test]
+async fn the_corporate_action_event_stream_is_v1beta1_on_a_v1_client() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1beta1/events/corporate-actions"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string("event: cash_dividend\ndata: {\"symbol\":\"AAPL\"}\n\n"),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client =
+        CorporateActionsClient::with_config(&credentials(), config(&server, "v1")).unwrap();
+    let events: Vec<_> = client
+        .get_corporate_action_events(None)
+        .await
+        .unwrap()
+        .collect()
+        .await;
+
+    assert_eq!(events.len(), 1);
+    // The payload is JSON the caller types itself: the envelope's event name
+    // selects which of fifteen shapes it takes and none of them are modelled.
+    assert_eq!(events[0].as_ref().unwrap().name, "cash_dividend");
 }
 
 // ----------------------------------------------------------------- options
