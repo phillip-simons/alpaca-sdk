@@ -13,7 +13,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Nothing yet.
 
-## [0.1.0] — unreleased
+## [0.1.0] — 2026-08-14
 
 The first real release: an unofficial Rust SDK for the Alpaca trading, market
 data and broker APIs, in one crate with three API surfaces behind cargo
