@@ -1,48 +1,14 @@
-//! Unofficial Rust SDK for the [Alpaca](https://alpaca.markets) trading, market
-//! data, and broker APIs.
-//!
 //! Targets the Alpaca API itself, documented at [docs.alpaca.markets]. Where these
 //! docs describe what an endpoint does, they describe the API; where they describe
-//! how this crate represents it, that is a choice made here. Money is
-//! [`rust_decimal::Decimal`] rather than a string-or-float union, unknown API enum
-//! values deserialize into an `Unknown` variant instead of failing, and paginated
-//! endpoints offer both a single page and a walk.
+//! how this crate represents it, that is a choice made here.
 //!
-//! It is not affiliated with or endorsed by Alpaca Securities LLC. See `NOTICE`
-//! for the works this one derives from.
+//! Each API surface is its own feature-gated module — `trading`, `data` and
+//! `broker`. The `blocking` feature adds `blocking::Blocking`, a synchronous
+//! façade over any of them; `polars` adds `data::ToFrame`, and implies `data`.
 //!
-//! # What the routes are checked against
-//!
-//! Alpaca publishes an API reference, vendors `OpenAPI` specs, and ships five
-//! SDKs, and they do not always agree. This crate treats them in order of how
-//! close each is to the wire: a captured response beats a specification, a
-//! specification beats an SDK, and the published reference is what says whether
-//! a route is still current at all — three event streams were in the specs,
-//! looked healthy, and had been switched off.
-//!
-//! `just coverage`, `just parameters` and `just enums-drift` diff this crate
-//! against those sources, and `COVERAGE.md` is checked in rather than trusted
-//! to memory.
-//!
-//! # Feature flags
-//!
-//! | Feature | Default | What it enables |
-//! |---|---|---|
-//! | `trading` | yes | The trading REST client and trade-update stream |
-//! | `data` | yes | Historical and live market data |
-//! | `broker` | no | The broker API, including its SSE event streams |
-//! | `blocking` | no | A synchronous façade over the async clients, via `blocking::Blocking` |
-//! | `polars` | no | `DataFrame` conversion for market data collections, via `data::ToFrame`. Implies `data` |
-//! | `rustls-tls` | yes | TLS via rustls |
-//! | `native-tls` | no | TLS via the platform library |
-//!
-//! **Exactly one TLS backend is required.** No API surface implies one, so
-//! `default-features = false` without `rustls-tls` or `native-tls` fails the
-//! build rather than compiling into a client that cannot make a request.
-//!
-//! The minimum supported Rust version is **1.88**. Enabling `polars` raises it
-//! to 1.95, which is why that feature is off by default — a convenience feature
-//! does not get to set the crate's floor.
+//! The README is the rest of this page: what the crate is, the feature table,
+//! the quick-start examples, how the types behave, how the routes are verified,
+//! and the minimum supported Rust version.
 //!
 //! [docs.alpaca.markets]: https://docs.alpaca.markets/us/reference/
 
