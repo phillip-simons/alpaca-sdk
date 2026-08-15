@@ -31,16 +31,20 @@ just check     # fmt, clippy, rustdoc, tests
 ordinary edit; CI holds the rest and runs both.
 
 `just ci` adds what CI checks and `just check` does not: the feature
-combinations, the per-surface rustdoc builds, the MSRV build and `cargo-deny`.
-Run it before opening a pull request, or just let CI do it.
+combinations, the per-surface rustdoc builds, the nightly `docsrs` build, the
+MSRV build and `cargo-deny`. Run it before opening a pull request, or just let
+CI do it.
 
-One CI job has no local equivalent. The `docs` job builds on nightly with
-`--cfg docsrs`, which is what turns on `feature(doc_cfg)` in `src/lib.rs`, so a
-malformed `doc(cfg(...))` attribute passes everything locally and fails there.
-Reproducing it needs a nightly toolchain:
+That nightly build is `just doc-docsrs`, and it needs a nightly toolchain
+(`rustup toolchain install nightly`) that the other recipes do not. It is worth
+knowing why it exists: CI's `docs` job builds with `--cfg docsrs`, which is what
+turns on `feature(doc_cfg)` in `src/lib.rs`, so a malformed `doc(cfg(...))`
+attribute compiles under a stable toolchain and fails there. It used to have no
+local equivalent at all, which also put it in front of a release — `release.yml`
+gates publishing on `just publish-dry`, and that runs `just ci`.
 
 ```sh
-RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc --no-deps --all-features
+just doc-docsrs   # RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc …
 ```
 
 On a change that touches no Rust — documentation, issue templates, this file —
@@ -103,7 +107,9 @@ doing when it found it.
 
 ## Adding or changing a route
 
-1. Check `COVERAGE.md` — regenerate it with `just coverage`, never by hand.
+1. Check `COVERAGE.md` — regenerate it with `just coverage`, never by hand. CI
+   regenerates it too and fails if your commit does not match, so a route added
+   without rerunning it will not merge.
 2. Verify the route against the published reference, not only the spec. The
    spec says what exists; the reference says what is still current.
 3. Add a test. If you have a real captured payload, add it under `fixtures/`

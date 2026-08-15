@@ -116,7 +116,15 @@ required-features = ["data"]
 
 [lints.rust]
 unsafe_code = "forbid"
-missing_docs = "warn"
+# `deny`, not `warn`. Every gate that matters already passes `-D warnings` —
+# the justfile exports it for every recipe and ci.yml sets it workflow-wide —
+# so as a practical matter this was already an error along every path either
+# of those covers, `just features` included. What `deny` adds is that the rule
+# stops depending on how the compiler was invoked: a plain `cargo check` or
+# `cargo build`, run by hand outside the harness, now enforces it too. A public
+# item with no documentation is a defect in a published crate whoever asked
+# the compiler to look.
+missing_docs = "deny"
 
 [lints.clippy]
 doc_markdown = "warn"

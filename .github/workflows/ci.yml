@@ -26,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      coverage_doc: ${{ steps.filter.outputs.coverage_doc }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v3
@@ -44,6 +45,15 @@ jobs:
               - 'Cargo.toml'
               - 'Cargo.lock'
               - 'deny.toml'
+              - '.github/workflows/ci.yml'
+            coverage_doc:
+              # What COVERAGE.md is generated from, plus the generator and the
+              # file itself. Deliberately not the `code` filter: `tests/` and
+              # `fixtures/` cannot change the report, and a hand-edit of
+              # COVERAGE.md must trip this job even though it touches no code.
+              - 'src/**'
+              - 'scripts/coverage.py'
+              - 'COVERAGE.md'
               - '.github/workflows/ci.yml'
 
   fmt:
@@ -172,6 +182,41 @@ jobs:
       - run: cargo doc --no-deps --no-default-features --features data,rustls-tls
       - run: cargo doc --no-deps --no-default-features --features broker,rustls-tls
 
+  coverage-doc:
+    name: COVERAGE.md is current
+    needs: changes
+    if: needs.changes.outputs.coverage_doc == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      # COVERAGE.md says "Do not edit by hand — run `just coverage`", and
+      # CONTRIBUTING makes reading it step 1 of adding a route. Nothing checked
+      # that the committed file still matched the crate, so a route added
+      # without regenerating left the document quietly wrong — and the one
+      # thing a coverage report cannot afford is to be believed while stale.
+      #
+      # No Rust toolchain: `scripts/coverage.py` reads `src/` as text.
+      #
+      # This job reaches the network, because `just coverage` depends on `just
+      # specs`, which fetches the OpenAPI documents from alpaca-java rather
+      # than vendoring 1.2MB of YAML that changes on Alpaca's schedule. So a
+      # failure here means one of two things, and the diff says which: either
+      # the committed report is out of date with this crate, or it is out of
+      # date with the API because the specs moved upstream. Both are worth a
+      # human look; neither should land silently.
+      - name: Regenerate and compare
+        run: |
+          set -euo pipefail
+          just coverage
+          if ! git diff --exit-code -- COVERAGE.md; then
+            echo "::error file=COVERAGE.md::COVERAGE.md is out of date — run \`just coverage\` and commit the result"
+            exit 1
+          fi
+          echo "COVERAGE.md matches what the generator produces"
+
   # The single required status check.
   #
   # Branch protection names check *runs*, and a matrix job that is skipped
@@ -189,7 +234,7 @@ jobs:
   # failure here, not a skip that protection would accept.
   gate:
     name: all checks
-    needs: [changes, fmt, clippy, test, features, msrv, deny, docs]
+    needs: [changes, fmt, clippy, test, features, msrv, deny, docs, coverage-doc]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -207,8 +252,14 @@ jobs:
           done
           echo "every job succeeded or was skipped"
 
-  coverage:
-    name: coverage
+  # Named `line-coverage`, not `coverage`, because `coverage-doc` above is also
+  # about coverage and means something else entirely: that job checks which
+  # documented *routes* the crate implements, this one measures which *lines* a
+  # test has executed. Two unrelated numbers under one word is how someone
+  # reads a green `coverage` check as an answer to the question the other job
+  # asks.
+  line-coverage:
+    name: line coverage
     # Push-only. Nothing gates on the number — it is a map of what no test has
     # ever run, not a target — so measuring it on every pull request would spend
     # an instrumented test run on a report no one is blocked by. `on.push` here
@@ -229,7 +280,7 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo '### Coverage'
+            echo '### Line coverage'
             echo
             echo 'Where no test has ever run. Not a threshold — see `just cov`.'
             echo

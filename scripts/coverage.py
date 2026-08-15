@@ -127,17 +127,29 @@ BINDING = re.compile(r"let path = (?:format!\s*\(\s*)?\"([^\"]+)\"")
 #
 # `.at_version("v1")` may sit between the two: Alpaca versions routes
 # individually, so a client's own version is not always the route's.
+#
+# `_effectful` is a suffix, not a separate verb: `delete_effectful` is the
+# DELETE that answers with a body rather than a 204. Matching the bare verb
+# alone lost the four close-position routes, which are the only DELETEs in the
+# crate that return one — the report claimed they were unimplemented while
+# `close_position` sat two lines above the call.
 REST_CALL = re.compile(
     r"\.rest\s*\.\s*(?:at_version\s*\(\s*\"[^\"]+\"\s*\)\s*\.\s*)?"
-    r"(get|post|put|patch|delete)\s*\(\s*"
+    r"(get|post|put|patch|delete)(?:_effectful)?\s*\(\s*"
     r"(?:&?\s*(?:format!\s*\(\s*)?\"(?P<literal>[^\"]+)\"|&?(?P<binding>path)\b)",
     re.S,
 )
 # `send_void(Method::DELETE, &format!("/x"), ..)` and
-# `self.rest.request(Method::PUT, "/x", ..)`, which take the method as a value
-# rather than as the name of the call.
+# `self.rest.request(Method::PUT, Replay::ByMethod, "/x", ..)`, which take the
+# method as a value rather than as the name of the call.
+#
+# The `Replay` argument is optional here because only `rest.request` carries
+# one. It is matched rather than skipped over generically: a `.*?` between the
+# method and the path would happily cross into the next call and pair a verb
+# with a path that is not its own.
 VOID_CALL = re.compile(
     r"(?:send_void|\.rest\s*\.\s*request)\s*\(\s*Method::(GET|POST|PUT|PATCH|DELETE)\s*,\s*"
+    r"(?:(?:crate::rest::)?Replay::\w+\s*,\s*)?"
     r"(?:&?\s*(?:format!\s*\(\s*)?\"(?P<literal>[^\"]+)\"|&?(?P<binding>path)\b)",
     re.S,
 )

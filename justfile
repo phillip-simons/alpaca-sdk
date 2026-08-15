@@ -125,16 +125,23 @@ deny:
 semver:
     cargo semver-checks check-release
 
-# The nightly `docs` job is the one thing no recipe here reproduces.
-# `src/lib.rs` gates `feature(doc_cfg)` behind `--cfg docsrs`, and only the
-# workflow sets it, so a malformed `doc(cfg(...))` attribute compiles under
-# every recipe in this file and fails in CI. Reproducing it needs nightly:
+# Reproduce CI's nightly `docs` job. Needs `rustup toolchain install nightly`.
 #
-#     RUSTDOCFLAGS="-D warnings --cfg docsrs" \
-#         cargo +nightly doc --no-deps --all-features
+# `src/lib.rs` gates `feature(doc_cfg)` behind `--cfg docsrs`, which only the
+# workflow set, so a malformed `doc(cfg(...))` attribute compiled under every
+# other recipe in this file and failed in CI. That was the whole of the gap
+# between `just ci` and the workflow, and it was load-bearing in a second
+# place: `release.yml` gates publishing on `just publish-dry`, so the same
+# blind spot sat in front of a release.
 #
-# Everything CI runs, bar that job.
-ci: check doc-surfaces features msrv deny
+# Stable cannot stand in for nightly here. `--cfg docsrs` is what turns the
+# feature on, and the attribute it enables is unstable, so the check does not
+# exist on a stable toolchain rather than merely being weaker there.
+doc-docsrs:
+    RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc --all-features --no-deps
+
+# Everything CI runs.
+ci: check doc-surfaces doc-docsrs features msrv deny
 
 # Install the repo's git hooks (once per clone).
 hooks:
