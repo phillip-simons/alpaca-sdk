@@ -6,19 +6,12 @@
 
 #![cfg(all(feature = "blocking", feature = "trading"))]
 
+use crate::common::fixture;
 use alpaca_sdk::blocking::Blocking;
 use alpaca_sdk::trading::TradingClient;
 use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path).unwrap();
-    serde_json::from_str(&body).unwrap()
-}
 
 /// Mounts the account route and hands back the running server.
 ///
@@ -123,4 +116,34 @@ async fn calling_from_inside_a_runtime_is_an_error_not_a_panic() {
         }
         other => panic!("expected InvalidRequest, got {other:?}"),
     }
+}
+
+/// The bridge that used to be refused.
+///
+/// `spawn_blocking` threads carry an ambient runtime handle, so a check for one
+/// rejected them — but they are not driving the reactor, and blocking on them is
+/// exactly what they exist for. The call works, and this is how an async program
+/// reaches the façade.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_call_from_spawn_blocking_succeeds() {
+    let server = tokio::task::spawn_blocking(account_server).await.unwrap();
+    let uri = server.uri();
+
+    let account = tokio::task::spawn_blocking(move || {
+        let credentials = Credentials::new("key", "secret").unwrap();
+        let client = TradingClient::with_config(
+            &credentials,
+            RestConfig::new(uri).retry(RetryConfig::none()),
+        )
+        .unwrap();
+        Blocking::new(client)
+            .unwrap()
+            .call(|client| client.get_account())
+    })
+    .await
+    .unwrap()
+    .expect("spawn_blocking is the supported bridge into the blocking façade");
+
+    assert!(!account.id.is_nil());
+    drop(server);
 }

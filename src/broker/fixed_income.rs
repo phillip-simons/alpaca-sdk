@@ -135,6 +135,7 @@ wire_enum! {
 /// captured payload's doing rather than caution: the Go SDK's own fixture omits
 /// the whole liquidity block on one bond and the maturity date on another.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UsCorporate {
     /// The CUSIP.
     pub cusip: String,
@@ -293,6 +294,7 @@ pub struct UsCorporate {
 
 /// A US treasury instrument.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UsTreasury {
     /// The CUSIP.
     pub cusip: String,
@@ -346,6 +348,7 @@ pub struct UsTreasury {
 
 /// The corporates response, which nests its list under a key.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UsCorporates {
     /// The bonds.
     #[serde(
@@ -357,6 +360,7 @@ pub struct UsCorporates {
 
 /// The treasuries response, which nests its list under a key.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UsTreasuries {
     /// The instruments.
     #[serde(
@@ -368,14 +372,15 @@ pub struct UsTreasuries {
 
 /// What Regulation T requires to hold one symbol.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct EntryRequirement {
     /// The symbol.
     pub symbol: String,
     /// The margin requirement for a long position, as a fraction.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub regt_long: Option<Decimal>,
     /// The margin requirement for a short position, as a fraction.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub regt_short: Option<Decimal>,
 }
 
@@ -483,6 +488,7 @@ pub struct GetEntryRequirementsRequest {
 
 impl GetEntryRequirementsRequest {
     /// Requirements for `symbols`.
+    #[must_use]
     pub fn new(symbols: Vec<String>) -> Self {
         Self { symbols }
     }

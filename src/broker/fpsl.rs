@@ -20,6 +20,7 @@ use uuid::Uuid;
 
 /// How a loan's interest is split.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FpslInterest {
     /// The account holder's share.
     pub customer: f64,
@@ -29,6 +30,7 @@ pub struct FpslInterest {
 
 /// One symbol on loan from one account for one day.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FpslLoan {
     /// The lending account.
     pub account_id: String,
@@ -56,6 +58,7 @@ pub struct FpslLoan {
 
 /// A page of loans.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FpslLoansPage {
     /// The loans.
     #[serde(
@@ -70,6 +73,7 @@ pub struct FpslLoansPage {
 
 /// A revenue-split tier.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FpslTier {
     /// Alpaca's identifier for the tier.
     #[serde(default)]
@@ -96,6 +100,7 @@ pub struct FpslTier {
 
 /// One account's lending activity over a window.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FpslAnalytics {
     /// The account.
     pub account_number: String,

@@ -13,6 +13,55 @@ use crate::data::enums::{CryptoFeed, DataFeed, OptionsFeed};
 use crate::data::live::{Channel, DataStream, StreamConfig, StreamMessage, SubscriptionSet};
 use crate::error::{Error, Result};
 
+/// The feed's wire value, refusing one this crate does not recognise.
+///
+/// Every `wire_enum!` carries an `Unknown(String)` so an unrecognised value
+/// decodes rather than fails. That is right for a response and wrong for a URL:
+/// the string ends up as a path segment, where `..` addresses a different
+/// endpoint than the caller named. A feed the crate does not know has no live
+/// stream behind it either way, so refusing loses nothing.
+fn known_feed<T>(feed: &T) -> Result<&str>
+where
+    T: std::fmt::Display,
+    T: AsUnknown,
+{
+    if feed.is_unknown() {
+        return Err(Error::InvalidRequest(format!(
+            "unknown feed {feed}: this crate has no live stream endpoint for it"
+        )));
+    }
+    Ok(feed.wire())
+}
+
+/// The two `wire_enum!` accessors [`known_feed`] needs, so it can be written
+/// once rather than per feed type.
+trait AsUnknown {
+    fn is_unknown(&self) -> bool;
+    fn wire(&self) -> &str;
+}
+
+macro_rules! as_unknown {
+    ($($ty:ident),+ $(,)?) => {
+        $(
+            impl AsUnknown for $ty {
+                fn is_unknown(&self) -> bool {
+                    // Matched on the variant rather than delegating to the
+                    // inherent `is_unknown`: `Self::is_unknown(self)` picks the
+                    // inherent method only by precedence, so renaming or
+                    // removing it would turn this into silent infinite
+                    // recursion rather than a compile error.
+                    matches!(self, $ty::Unknown(_))
+                }
+                fn wire(&self) -> &str {
+                    self.as_str()
+                }
+            }
+        )+
+    };
+}
+
+as_unknown!(CryptoFeed, OptionsFeed);
+
 /// Declares the subscribe and unsubscribe pair for one channel.
 macro_rules! subscriptions {
     ($( $subscribe:ident / $unsubscribe:ident => $channel:expr, $what:literal ; )+) => {
@@ -58,8 +107,33 @@ macro_rules! common {
         ///
         /// # Errors
         /// Returns [`Error::InvalidRequest`] if the timeout is not positive.
-        pub fn data_timeout(&mut self, timeout: Duration) -> Result<&mut Self> {
+        pub fn set_data_timeout(&mut self, timeout: Duration) -> Result<&mut Self> {
             self.inner.config_mut().set_data_timeout(timeout)?;
+            Ok(self)
+        }
+
+        /// The reconnect backoff window.
+        ///
+        /// The delay starts at `min`, doubles on each consecutive failure, and
+        /// is capped at `max`. See
+        /// [`StreamConfig::backoff`](crate::data::StreamConfig::backoff).
+        ///
+        /// # Errors
+        /// Returns [`Error::InvalidRequest`] if `min` is zero, or if `max` is
+        /// smaller than `min`.
+        pub fn set_backoff(&mut self, min: Duration, max: Duration) -> Result<&mut Self> {
+            self.inner.config_mut().set_backoff(min, max)?;
+            Ok(self)
+        }
+
+        /// How long a session must stay up before it clears the reconnect
+        /// failure count. See
+        /// [`StreamConfig::stable_session`](crate::data::StreamConfig::stable_session).
+        ///
+        /// # Errors
+        /// Returns [`Error::InvalidRequest`] if the duration is zero.
+        pub fn set_stable_session(&mut self, after: Duration) -> Result<&mut Self> {
+            self.inner.config_mut().set_stable_session(after)?;
             Ok(self)
         }
 
@@ -168,12 +242,21 @@ pub struct CryptoDataStream {
 
 impl CryptoDataStream {
     /// A stream against `feed`.
-    #[must_use]
-    pub fn new(credentials: Credentials, feed: CryptoFeed) -> Self {
-        let endpoint = format!("{}/v1beta3/crypto/{feed}", BaseUrl::MarketDataStream);
-        Self {
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] for a feed this crate does not know.
+    /// `CryptoFeed` carries an `Unknown(String)` variant so an unrecognised
+    /// value decodes rather than fails, and that string would otherwise be
+    /// interpolated straight into the endpoint URL.
+    pub fn new(credentials: Credentials, feed: CryptoFeed) -> Result<Self> {
+        let endpoint = format!(
+            "{}/v1beta3/crypto/{}",
+            BaseUrl::MarketDataStream,
+            known_feed(&feed)?
+        );
+        Ok(Self {
             inner: DataStream::new(credentials, StreamConfig::new(endpoint)),
-        }
+        })
     }
 
     /// A stream against a custom endpoint, for proxies and tests.
@@ -203,12 +286,19 @@ pub struct OptionDataStream {
 
 impl OptionDataStream {
     /// A stream against `feed`.
-    #[must_use]
-    pub fn new(credentials: Credentials, feed: OptionsFeed) -> Self {
-        let endpoint = format!("{}/v1beta1/{feed}", BaseUrl::MarketDataStream);
-        Self {
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] for a feed this crate does not know,
+    /// for the same reason as [`CryptoDataStream::new`].
+    pub fn new(credentials: Credentials, feed: OptionsFeed) -> Result<Self> {
+        let endpoint = format!(
+            "{}/v1beta1/{}",
+            BaseUrl::MarketDataStream,
+            known_feed(&feed)?
+        );
+        Ok(Self {
             inner: DataStream::new(credentials, StreamConfig::new(endpoint)),
-        }
+        })
     }
 
     /// A stream against a custom endpoint, for proxies and tests.

@@ -21,21 +21,45 @@ env:
 permissions:
   contents: read
 
+# Every `uses:` below is pinned to a commit SHA, with the ref it was resolved
+# from kept as a trailing comment. A tag is a movable pointer: whoever controls
+# the action repository can repoint `@v7` at new code without any change here.
+# That matters most in this file, because `publish` mints a live crates.io token
+# over OIDC and a publish cannot be withdrawn.
+#
+# `dtolnay/rust-toolchain` needs the extra `toolchain:` input wherever it is
+# pinned. That action has no version tags — `stable`, `nightly` and `1.88.0` are
+# *branches*, and it reads the toolchain to install from the ref it was invoked
+# by. Pinned to a SHA, the ref is the SHA, so the toolchain has to be named
+# explicitly or rustup is asked for a release called `4360b52…`.
+
 jobs:
   verify:
     name: verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      # `just ci` builds against the MSRV as well as stable, via `cargo
-      # +1.88.0`. Installed first so that stable, installed second, stays the
-      # default — otherwise every other recipe would quietly run on 1.88 too.
-      - uses: dtolnay/rust-toolchain@1.88.0
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # `just ci` reaches past stable twice: `cargo +1.88.0` for the MSRV build,
+      # and `cargo +nightly` for `doc-docsrs`, the rustdoc build with `--cfg
+      # docsrs` that turns on `feature(doc_cfg)`. Both are installed before
+      # stable, because this action makes whichever toolchain it installed last
+      # the default — put either after stable and every other recipe would
+      # quietly run on it instead.
+      #
+      # Nightly earns its place here only through `doc-docsrs`. If that recipe
+      # ever leaves `just ci`, this step leaves with it.
+      - uses: dtolnay/rust-toolchain@2eae45db285e407f22119950686d47e1101e071b # 1.88.0
         with:
+          toolchain: "1.88.0"
+      - uses: dtolnay/rust-toolchain@7c8d7d138f5c09cef361f8214cf96882cd029cdb # nightly
+        with:
+          toolchain: nightly
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: taiki-e/install-action@82cd3e7658a6f96c86c0234aeeda1748937cb0a1 # v2
         with:
           tool: just,cargo-deny,cargo-semver-checks
 
@@ -72,9 +96,11 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       # `--locked` because a release must test the dependency versions it is
       # about to publish, not whatever resolves today.
       - run: cargo test --all-features --locked
@@ -91,11 +117,13 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
-      - uses: rust-lang/crates-io-auth-action@v1
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1
         id: auth
 
       - run: cargo publish --locked

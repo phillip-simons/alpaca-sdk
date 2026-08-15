@@ -7,23 +7,12 @@
 
 #![cfg(feature = "broker")]
 
-use alpaca_sdk::broker::{BrokerClient, GetEventsRequest};
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
+use crate::common::broker_client as client;
+use alpaca_sdk::broker::GetEventsRequest;
 use futures_util::StreamExt as _;
 use serde_json::json;
 use wiremock::matchers::{header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-fn client(server: &MockServer) -> BrokerClient {
-    let credentials = Credentials::new("broker-key", "broker-secret").unwrap();
-    BrokerClient::with_config(
-        &credentials,
-        RestConfig::new(server.uri())
-            .api_version("v1")
-            .retry(RetryConfig::none()),
-    )
-    .unwrap()
-}
 
 /// A `text/event-stream` body: one fully-specified event, then one that sends
 /// neither an `id` nor an `event` line.
@@ -285,7 +274,7 @@ async fn the_ulid_cursor_is_spelled_for_the_version_being_called() {
 
     drop(
         client(&server)
-            .get_trade_events(Some(&GetEventsRequest::after_ulid(
+            .get_trade_events(Some(&GetEventsRequest::from_id(
                 "01ARZ3NDEKTSV4RRFFQ69G5FAV",
             )))
             .await
@@ -303,7 +292,7 @@ async fn the_ulid_cursor_is_spelled_for_the_version_being_called() {
 
     drop(
         client(&server)
-            .get_account_status_events(Some(&GetEventsRequest::after_ulid(
+            .get_account_status_events(Some(&GetEventsRequest::from_id(
                 "01ARZ3NDEKTSV4RRFFQ69G5FAV",
             )))
             .await
@@ -362,4 +351,42 @@ async fn a_rejected_subscription_fails_instead_of_returning_an_empty_stream() {
     };
 
     assert_eq!(error.status(), Some(403));
+}
+
+/// An event stream refuses a redirect.
+///
+/// This is the credential-leak fix, and it needs pinning because the failure
+/// mode is silent: reqwest strips `Authorization`, `Cookie` and
+/// `Proxy-Authorization` on a cross-host hop and *nothing else*, so the trading
+/// and market-data clients' `APCA-API-*` headers would ride along to wherever a
+/// `Location` pointed. Folding the stream client back together with the one that
+/// follows redirects — which is what the bug was — would pass CI without this.
+#[tokio::test]
+async fn an_event_stream_does_not_follow_a_redirect() {
+    let elsewhere = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("data: {}\n\n"))
+        // Nothing may reach the redirect target.
+        .expect(0)
+        .mount(&elsewhere)
+        .await;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v2/events/journals/status"))
+        .respond_with(
+            ResponseTemplate::new(302).insert_header("location", elsewhere.uri().as_str()),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // The redirect surfaces as the non-success status it is, rather than being
+    // followed to another host. The `Ok` side is a `Stream`, which is not
+    // `Debug`, so this cannot be `expect_err`.
+    match client(&server).get_journal_events(None).await {
+        Err(alpaca_sdk::Error::Api(api)) => assert_eq!(api.status, 302),
+        Err(other) => panic!("expected the 302 to surface as an API error, got {other:?}"),
+        Ok(_) => panic!("a redirect must not be followed"),
+    }
 }

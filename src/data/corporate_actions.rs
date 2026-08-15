@@ -6,12 +6,26 @@
 //! has.
 //!
 //! Every record carries an `id` that the specs do not declare.
+//!
+//! Rates and cash amounts are `f64` here rather than [`Decimal`], even though
+//! [`CashDividend::rate`] models the same quantity as the trading surface's
+//! `CorporateActionAnnouncement::cash`, which is a [`Decimal`]. Both follow
+//! the rule; the two endpoints simply do not agree on
+//! the wire. `fixtures/data/test_corporate_actions__test_get_corporate_actions__02.json`
+//! sends `"rate": 0.086928` as a bare JSON number, while
+//! `fixtures/trading/test_corporate_announcements__test_get_announcements__01.json`
+//! sends `"cash": "0.018"` as a string. Reading a string amount as a float
+//! loses precision, so that one is [`Decimal`]; a number that arrived as a
+//! float gains nothing from being widened after the fact.
+//!
+//! [`Decimal`]: rust_decimal::Decimal
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
 /// A stock split that increases the share count.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ForwardSplit {
     /// Alpaca's identifier for the action.
     #[serde(default)]
@@ -41,6 +55,7 @@ pub struct ForwardSplit {
 
 /// A stock split that reduces the share count.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ReverseSplit {
     /// Alpaca's identifier for the action.
     #[serde(default)]
@@ -69,6 +84,7 @@ pub struct ReverseSplit {
 
 /// A unit separating into its component securities.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UnitSplit {
     /// Alpaca's identifier for the action.
     #[serde(default)]
@@ -102,6 +118,7 @@ pub struct UnitSplit {
 
 /// A dividend paid in shares.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct StockDividend {
     /// Alpaca's identifier for the action.
     #[serde(default)]
@@ -126,6 +143,7 @@ pub struct StockDividend {
 
 /// A dividend paid in cash.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CashDividend {
     /// Alpaca's identifier for the action.
     #[serde(default)]
@@ -160,6 +178,7 @@ pub struct CashDividend {
 
 /// A subsidiary distributed to shareholders as a separate security.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SpinOff {
     /// Alpaca's identifier for the action.
     #[serde(default)]
@@ -193,6 +212,7 @@ pub struct SpinOff {
 
 /// An acquisition settled entirely in cash.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CashMerger {
     /// Alpaca's identifier for the action.
     #[serde(default)]
@@ -220,6 +240,7 @@ pub struct CashMerger {
 
 /// An acquisition settled entirely in shares.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct StockMerger {
     /// Alpaca's identifier for the action.
     #[serde(default)]
@@ -247,6 +268,7 @@ pub struct StockMerger {
 
 /// An acquisition settled in a mix of shares and cash.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct StockAndCashMerger {
     /// Alpaca's identifier for the action.
     #[serde(default)]
@@ -276,6 +298,7 @@ pub struct StockAndCashMerger {
 
 /// A security redeemed for cash.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Redemption {
     /// Alpaca's identifier for the action.
     #[serde(default)]
@@ -295,6 +318,7 @@ pub struct Redemption {
 
 /// A ticker or CUSIP change.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NameChange {
     /// Alpaca's identifier for the action.
     #[serde(default)]
@@ -313,6 +337,7 @@ pub struct NameChange {
 
 /// A security removed from accounts as worthless.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct WorthlessRemoval {
     /// Alpaca's identifier for the action.
     #[serde(default)]
@@ -327,6 +352,7 @@ pub struct WorthlessRemoval {
 
 /// Subscription rights distributed to shareholders.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct RightsDistribution {
     /// Alpaca's identifier for the action.
     #[serde(default)]
@@ -358,6 +384,7 @@ pub struct RightsDistribution {
 
 /// Corporate actions grouped by kind, as the endpoint returns them.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CorporateActions {
     /// Splits that increase the share count.
     #[serde(default)]

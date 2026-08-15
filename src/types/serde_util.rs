@@ -31,6 +31,71 @@ where
     }
 }
 
+/// A response that is a bare object when there is one of something and an array
+/// when there are several.
+///
+/// The crypto funding routes are documented this way and only this way: the
+/// wallets route's own description is *"A single wallet object if an asset is
+/// specified or an array of wallet objects if no asset is specified"*, while the
+/// transfers and whitelists routes say *"An array of…"* — yet all three
+/// `$ref` the singular schema, so the specs cannot be read literally either.
+///
+/// Nothing in this repository has ever decoded one: the route smoke tests mount
+/// a 404, and the live capture is recorded as `refused`. Rather than guess
+/// between the two shapes and be wrong in a way that makes the route unusable,
+/// this accepts both and always hands the caller a `Vec`.
+///
+/// Only the trading and broker crypto-funding routes decode one, so this is
+/// gated to that surface — without the gate it is dead code in a
+/// `--features data` build, which is the kind of thing `just features` exists
+/// to catch.
+#[cfg(feature = "trading")]
+#[derive(Debug, Clone)]
+pub(crate) enum OneOrMany<T> {
+    /// The array form.
+    Many(Vec<T>),
+    /// The single-object form, which becomes a one-element `Vec`.
+    One(T),
+}
+
+#[cfg(feature = "trading")]
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for OneOrMany<T> {
+    /// Hand-written rather than `#[serde(untagged)]`.
+    ///
+    /// Untagged discards both branches' errors and reports only "data did not
+    /// match any variant of untagged enum `OneOrMany`", which says nothing about
+    /// *why*. These are the routes whose payloads this crate has never seen, so
+    /// the first real response that does not fit is the most valuable bug report
+    /// it can receive — and untagged would throw the contents of it away.
+    ///
+    /// Branching on the JSON shape first means the error that comes back is the
+    /// real field error from the branch that was actually taken.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error as _;
+
+        let value = serde_json::Value::deserialize(deserializer)?;
+        match value {
+            serde_json::Value::Array(_) => Vec::<T>::deserialize(value)
+                .map(Self::Many)
+                .map_err(D::Error::custom),
+            other => T::deserialize(other)
+                .map(Self::One)
+                .map_err(D::Error::custom),
+        }
+    }
+}
+
+#[cfg(feature = "trading")]
+impl<T> OneOrMany<T> {
+    /// Both shapes, as the sequence the caller asked for.
+    pub(crate) fn into_vec(self) -> Vec<T> {
+        match self {
+            Self::Many(values) => values,
+            Self::One(value) => vec![value],
+        }
+    }
+}
+
 /// Serde codec for integers Alpaca sends inconsistently as numbers or strings.
 ///
 /// The trading account endpoint returns `"options_approved_level": "1"` but
@@ -314,7 +379,12 @@ where
     deserializer.deserialize_option(StringOrList)
 }
 
-#[cfg(test)]
+// `trading` as well as `test`: every case here goes through `Leg`, which is
+// built from this crate's order enums, so the module does not compile with the
+// surface switched off. The helpers themselves are generic over `Deserialize`
+// and are exercised by the data and broker models too -- what is trading-
+// specific is the fixture, not the behaviour under test.
+#[cfg(all(test, feature = "trading"))]
 mod tests {
     use serde::Deserialize;
     use uuid::Uuid;

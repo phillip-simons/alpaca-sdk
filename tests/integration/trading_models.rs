@@ -8,24 +8,21 @@
 
 #![cfg(feature = "trading")]
 
-use std::path::PathBuf;
-
 use alpaca_sdk::trading::{
     Activity, Asset, AssetClass, AssetExchange, AssetStatus, Calendar, ClosePositionBody,
     ClosePositionResponse, Order, OrderClass, OrderStatus, OrderType, PositionIntent, TimeInForce,
     TradeAccount, Watchlist,
 };
+use alpaca_sdk::types::SupportedCurrencies;
 use rust_decimal::Decimal;
 
-fn fixture(name: &str) -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("reading {}: {e}", path.display()))
-}
+// The raw-text variant: these tests deserialize from the file as captured
+// rather than from a `Value` that has already been through serde once, which is
+// what makes a string-typed integer visible here at all.
+use crate::common::fixture_str;
 
 fn parse<T: serde::de::DeserializeOwned>(name: &str) -> T {
-    let body = fixture(name);
+    let body = fixture_str(name);
     serde_json::from_str(&body).unwrap_or_else(|e| panic!("{name}: {e}\n{body}"))
 }
 
@@ -36,7 +33,9 @@ fn account_deserializes_from_the_captured_response() {
     let account: TradeAccount = parse("trading/test_account_routes__test_get_account__01.json");
 
     assert_eq!(account.account_number, "010203ABCD");
-    assert_eq!(account.currency.as_deref(), Some("USD"));
+    // Typed rather than a `String`, so a case mismatch is a compile error
+    // instead of a comparison that quietly evaluates false.
+    assert_eq!(account.currency, Some(SupportedCurrencies::Usd));
     assert_eq!(account.cash, Some(Decimal::new(-231_402, 1)));
     assert_eq!(account.equity, Some(Decimal::new(10_382_056, 2)));
     assert_eq!(account.shorting_enabled, Some(true));
@@ -71,7 +70,9 @@ fn account_configuration_deserializes() {
         parse("trading/test_account_routes__test_get_account_configurations__01.json");
 
     assert!(!config.no_shorting);
-    assert_eq!(config.max_margin_multiplier, "4");
+    // A decimal now, matching `TradeAccount::multiplier`; the wire form is
+    // still the string `"4"`, which is what the rendering asserts.
+    assert_eq!(config.max_margin_multiplier.to_string(), "4");
 }
 
 #[test]
@@ -185,15 +186,18 @@ fn order_list_deserializes() {
     // Rejecting a non-numeric price is the behavior we want, so the placeholder
     // is patched out here rather than the type being weakened to match. See
     // `a_non_numeric_price_is_rejected` for the other half of this.
-    let body = fixture("trading/test_order_routes__test_get_orders__01.json")
+    let body = fixture_str("trading/test_order_routes__test_get_orders__01.json")
         .replace(r#""hwm": "string""#, r#""hwm": null"#);
     let orders: Vec<Order> = serde_json::from_str(&body).unwrap();
 
     assert!(!orders.is_empty());
     assert_eq!(orders[0].symbol.as_deref(), Some("SPY"));
     assert_eq!(orders[0].qty, Some(Decimal::from(1)));
-    // order_type and type disagree in this payload; both are preserved.
-    assert_eq!(orders[0].order_type_deprecated, Some(OrderType::Market));
+    // order_type and type disagree in this payload; both are preserved. Reading
+    // the legacy key is the point of the assertion, so the deprecation is muted.
+    #[allow(deprecated)]
+    let legacy = &orders[0].legacy_order_type;
+    assert_eq!(legacy, &Some(OrderType::Market));
     assert_eq!(orders[0].order_type, Some(OrderType::Stop));
 }
 
@@ -268,6 +272,9 @@ fn close_all_positions_response_distinguishes_success_from_failure() {
         match &response.body {
             ClosePositionBody::Order(order) => assert!(!order.client_order_id.is_empty()),
             ClosePositionBody::Failed(failure) => assert!(!failure.message.is_empty()),
+            // The type is `#[non_exhaustive]`: Alpaca may add a body shape, and
+            // this crate should not need a major version to describe it.
+            other => panic!("unexpected close-position body: {other:?}"),
         }
     }
 }
@@ -340,7 +347,9 @@ fn multi_leg_order_empty_strings_become_none() {
     assert_eq!(order.side, None);
     assert_eq!(order.position_intent, None);
     assert_eq!(order.order_type, None);
-    assert_eq!(order.order_type_deprecated, None);
+    #[allow(deprecated)]
+    let legacy = &order.legacy_order_type;
+    assert_eq!(legacy, &None);
     assert_eq!(order.order_class, OrderClass::Mleg);
 }
 

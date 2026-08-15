@@ -18,7 +18,7 @@ use futures_util::StreamExt as _;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mut stream = CryptoDataStream::new(Credentials::from_env()?, CryptoFeed::Us);
+    let mut stream = CryptoDataStream::new(Credentials::from_env()?, CryptoFeed::Us)?;
 
     // Subscriptions are declared before the socket opens; the stream replays
     // them on every reconnect, so a dropped connection resubscribes itself.

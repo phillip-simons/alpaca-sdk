@@ -97,6 +97,7 @@ wire_enum! {
 /// eastern-time datetimes. Two calendars, two time representations — which is
 /// the sort of thing that only shows up when both are used.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MarketSession {
     /// The trading day.
     pub date: NaiveDate,
@@ -129,6 +130,7 @@ pub struct MarketSession {
 
 /// Which market a calendar describes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MarketInfo {
     /// Alpaca's short name for it.
     pub acronym: String,
@@ -145,7 +147,17 @@ pub struct MarketInfo {
 }
 
 /// A named market's calendar.
+///
+/// `GET /v3/calendar/{market}` answers with a named market's sessions rather
+/// than the US equities calendar `GET /v2/calendar` returns, and it splits the
+/// day into pre-market, core, lunch and post-market rather than into an open and
+/// a close. For the latter, see [`Calendar`](crate::trading::Calendar).
+///
+/// **This route is `v3`.** The trading client is `v2` and the broker's
+/// equivalent is `v2`, so all three versions of the same idea are live at once —
+/// which is why the version is written at the call site.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct MarketCalendar {
     /// The market described.
     pub market: MarketInfo,

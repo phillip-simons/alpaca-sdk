@@ -2,14 +2,15 @@
 
 #![cfg(feature = "broker")]
 
+use crate::common::{broker_client as client, fixture};
 use alpaca_sdk::broker::{
-    Account, AccountEntities, Agreement, AgreementType, BrokerClient, Contact,
-    CreateAccountRequest, Disclosures, FundingSource, Identity, ListAccountsRequest, TaxIdType,
-    UpdatableContact, UpdateAccountRequest,
+    Account, AccountEntities, Agreement, AgreementType, Contact, CreateAccountRequest, Disclosures,
+    FundingSource, Identity, ListAccountsRequest, TaxIdType, UpdatableContact,
+    UpdateAccountRequest,
 };
 use alpaca_sdk::trading::AccountStatus;
 use alpaca_sdk::types::Sort;
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
+use alpaca_sdk::types::SupportedCurrencies;
 use serde_json::json;
 use uuid::Uuid;
 use wiremock::matchers::{body_json, header, method, path, query_param};
@@ -17,29 +18,9 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const ACCOUNT_ID: &str = "2a87c088-ffb6-472b-a4a3-cd9305c8605c";
 
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
-
 fn parse<T: serde::de::DeserializeOwned>(name: &str) -> T {
     let value = fixture(name);
     serde_json::from_value(value.clone()).unwrap_or_else(|e| panic!("{name}: {e}\n{value:#}"))
-}
-
-fn client(server: &MockServer) -> BrokerClient {
-    let credentials = Credentials::new("broker-key", "broker-secret").unwrap();
-    BrokerClient::with_config(
-        &credentials,
-        RestConfig::new(server.uri())
-            .api_version("v1")
-            .retry(RetryConfig::none()),
-    )
-    .unwrap()
 }
 
 // ------------------------------------------------------------------ auth
@@ -103,7 +84,7 @@ fn account_deserializes_from_the_captured_payload() {
     assert_eq!(account.account_number, "601865070");
     assert_eq!(account.status, AccountStatus::Active);
     assert_eq!(account.crypto_status, Some(AccountStatus::Inactive));
-    assert_eq!(account.currency.as_deref(), Some("USD"));
+    assert_eq!(account.currency, Some(SupportedCurrencies::Usd));
 
     // A string on the wire, kept exact rather than rounded through f64.
     assert_eq!(
@@ -324,43 +305,39 @@ fn a_null_list_reads_as_an_empty_one() {
 
 // ------------------------------------------------------- account requests
 
-fn valid_application() -> CreateAccountRequest {
-    let mut contact = Contact {
-        email_address: "jane@example.com".to_owned(),
-        street_address: vec!["20 N San Mateo Dr".to_owned()],
-        ..Contact::default()
-    };
+/// Reachable from `broker_route_smoke`, which needs an application that gets
+/// past `validate` to reach the network at all — thirty lines of required
+/// fields worth building in one place rather than two.
+pub(crate) fn valid_application() -> CreateAccountRequest {
+    // These are `#[non_exhaustive]`, so they are built from `Default` and then
+    // filled in rather than as struct literals — which is also what an external
+    // caller has to do.
+    let mut contact = Contact::default();
+    contact.email_address = "jane@example.com".to_owned();
+    contact.street_address = vec!["20 N San Mateo Dr".to_owned()];
     contact.city = Some("San Mateo".to_owned());
 
-    let identity = Identity {
-        given_name: "Jane".to_owned(),
-        family_name: "Doe".to_owned(),
-        date_of_birth: Some("1990-01-01".parse().unwrap()),
-        tax_id_type: Some(TaxIdType::UsaSsn),
-        country_of_tax_residence: Some("USA".to_owned()),
-        funding_source: vec![FundingSource::EmploymentIncome],
-        ..Identity::default()
-    };
+    let mut identity = Identity::default();
+    identity.given_name = "Jane".to_owned();
+    identity.family_name = "Doe".to_owned();
+    identity.date_of_birth = Some("1990-01-01".parse().unwrap());
+    identity.tax_id_type = Some(TaxIdType::UsaSsn);
+    identity.country_of_tax_residence = Some("USA".to_owned());
+    identity.funding_source = vec![FundingSource::EmploymentIncome];
 
-    let disclosures = Disclosures {
-        is_control_person: Some(false),
-        is_affiliated_exchange_or_finra: Some(false),
-        is_politically_exposed: Some(false),
-        immediate_family_exposed: Some(false),
-        ..Disclosures::default()
-    };
+    let mut disclosures = Disclosures::default();
+    disclosures.is_control_person = Some(false);
+    disclosures.is_affiliated_exchange_or_finra = Some(false);
+    disclosures.is_politically_exposed = Some(false);
+    disclosures.immediate_family_exposed = Some(false);
 
-    CreateAccountRequest::new(
-        contact,
-        identity,
-        disclosures,
-        vec![Agreement {
-            agreement: AgreementType::Customer,
-            signed_at: "2022-04-28T14:07:04.451420Z".parse().unwrap(),
-            ip_address: Some("127.0.0.1".to_owned()),
-            revision: None,
-        }],
-    )
+    let mut agreement = Agreement::new(
+        AgreementType::Customer,
+        "2022-04-28T14:07:04.451420Z".parse().unwrap(),
+    );
+    agreement.ip_address = Some("127.0.0.1".to_owned());
+
+    CreateAccountRequest::new(contact, identity, disclosures, vec![agreement])
 }
 
 #[test]
@@ -520,10 +497,9 @@ async fn an_update_sends_only_the_fields_it_names() {
         .await;
 
     let mut update = UpdateAccountRequest::default();
-    update.contact = Some(UpdatableContact {
-        email_address: Some("new@example.com".to_owned()),
-        ..Default::default()
-    });
+    let mut contact = UpdatableContact::default();
+    contact.email_address = Some("new@example.com".to_owned());
+    update.contact = Some(contact);
 
     client(&server)
         .update_account(Uuid::parse_str(ACCOUNT_ID).unwrap(), &update)

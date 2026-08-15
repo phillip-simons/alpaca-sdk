@@ -6,8 +6,9 @@
 
 use std::collections::HashMap;
 
+use serde::Deserialize as _;
 use serde::de::DeserializeOwned;
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use crate::auth::Credentials;
 use crate::config::BaseUrl;
@@ -19,6 +20,7 @@ use crate::data::models::{
     AuctionSet, Bar, BarSet, DailyAuctions, ForexRate, ForexRateSet, MostActives, Movers, News,
     NewsSet, OptionsSnapshot, Orderbook, Quote, QuoteSet, Snapshot, Trade, TradeSet, WithSymbol,
 };
+use crate::data::pagination::Merged;
 use crate::data::pagination::{MarketDataRequest, get_marketdata};
 use crate::data::requests::{
     CorporateActionsRequest, CryptoBarsRequest, CryptoLatestRequest, CryptoSnapshotRequest,
@@ -30,20 +32,48 @@ use crate::data::requests::{
 use crate::error::{Error, Result};
 use crate::rest::{Empty, RestClient, RestConfig};
 use crate::types::LogoRequest;
+use crate::types::path::segment;
+
+/// Whether a symbol's entry means "nothing for this one".
+///
+/// A multi-symbol request returns a key per symbol, and Alpaca answers `null`
+/// for a symbol it has nothing for — a delisted or misspelled ticker. That is
+/// not a payload that failed to parse, it is the absence of a payload, and
+/// propagating a decode error for it threw away every *good* symbol in the same
+/// response. A request takes up to 100 symbols, so one bad ticker made the whole
+/// batch unusable.
+///
+/// `fixtures/go/marketdata__test_snapshots__01.json` — a captured payload that
+/// ships in this crate — is exactly this shape: `"INVALID": null` beside a valid
+/// AAPL and MSFT.
+fn is_absent(value: &Value) -> bool {
+    value.is_null()
+}
 
 /// Deserializes a merged payload into a map of symbol to a list of records,
 /// filling in the symbol each list was keyed by.
-fn into_sets<T>(merged: Map<String, Value>) -> Result<HashMap<String, Vec<T>>>
+///
+/// Symbols Alpaca had nothing for are **absent from the result**, not present
+/// with an empty list — so a caller reconciling against a requested set should
+/// compare keys rather than assume one entry per symbol asked for.
+fn into_sets<T>(merged: Merged) -> Result<HashMap<String, Vec<T>>>
 where
     T: DeserializeOwned + WithSymbol,
 {
-    let mut sets = HashMap::with_capacity(merged.len());
+    let mut sets = HashMap::with_capacity(merged.data.len());
 
-    for (symbol, value) in merged {
+    for (symbol, value) in merged.data {
+        if is_absent(&value) {
+            continue;
+        }
+        // `&Value` is itself a `Deserializer`, so the payload is borrowed
+        // rather than cloned. Cloning it here — purely so a failure could report
+        // a body — doubled peak allocation on every *successful* multi-symbol
+        // response, which is the common path.
         let mut records: Vec<T> =
-            serde_json::from_value(value).map_err(|source| Error::Decode {
-                path: symbol.clone(),
-                body: String::new(),
+            Vec::<T>::deserialize(&value).map_err(|source| Error::Decode {
+                path: merged.path.clone(),
+                body: decode_body(&symbol, &value),
                 source,
             })?;
         for record in &mut records {
@@ -55,20 +85,34 @@ where
     Ok(sets)
 }
 
+/// The offending entry, for [`Error::Decode`]'s `body`.
+///
+/// That field is documented as carrying the payload "so the mismatch can be
+/// diagnosed without re-issuing", and these helpers used to pass an empty
+/// string — leaving a decode failure with nothing to diagnose from.
+fn decode_body(key: &str, value: &Value) -> String {
+    crate::rest::truncate(&format!("{key}: {value}"))
+}
+
 /// Deserializes one single-symbol payload: a bare list under `key`, with the
 /// symbol beside it rather than above it.
 ///
 /// The multi-symbol routes key their records by symbol and the record carries
 /// none; these name the symbol in a sibling field. Both end up with the symbol
 /// filled in, so the models are shared.
-fn into_single<T>(mut merged: Map<String, Value>, key: &str, symbol: &str) -> Result<Vec<T>>
+fn into_single<T>(mut merged: Merged, key: &str, symbol: &str) -> Result<Vec<T>>
 where
     T: DeserializeOwned + WithSymbol,
 {
-    let records = merged.remove(key).unwrap_or(Value::Array(Vec::new()));
-    let mut records: Vec<T> = serde_json::from_value(records).map_err(|source| Error::Decode {
-        path: key.to_owned(),
-        body: String::new(),
+    let records = merged.data.remove(key).unwrap_or(Value::Array(Vec::new()));
+    // A `null` under the key means the endpoint had nothing for this symbol,
+    // which is an empty result rather than a malformed one.
+    if is_absent(&records) {
+        return Ok(Vec::new());
+    }
+    let mut records: Vec<T> = Vec::<T>::deserialize(&records).map_err(|source| Error::Decode {
+        path: merged.path.clone(),
+        body: decode_body(key, &records),
         source,
     })?;
     for record in &mut records {
@@ -78,16 +122,19 @@ where
 }
 
 /// Deserializes a merged payload into a map of symbol to a single record.
-fn into_latest<T>(merged: Map<String, Value>) -> Result<HashMap<String, T>>
+fn into_latest<T>(merged: Merged) -> Result<HashMap<String, T>>
 where
     T: DeserializeOwned + WithSymbol,
 {
-    let mut latest = HashMap::with_capacity(merged.len());
+    let mut latest = HashMap::with_capacity(merged.data.len());
 
-    for (symbol, value) in merged {
-        let mut record: T = serde_json::from_value(value).map_err(|source| Error::Decode {
-            path: symbol.clone(),
-            body: String::new(),
+    for (symbol, value) in merged.data {
+        if is_absent(&value) {
+            continue;
+        }
+        let mut record: T = T::deserialize(&value).map_err(|source| Error::Decode {
+            path: merged.path.clone(),
+            body: decode_body(&symbol, &value),
             source,
         })?;
         record.set_symbol(&symbol);
@@ -133,6 +180,9 @@ impl StockHistoricalDataClient {
 
     /// Historical bars, keyed by symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_stock_bars(&self, request: &StockBarsRequest) -> Result<BarSet> {
@@ -146,6 +196,9 @@ impl StockHistoricalDataClient {
     }
 
     /// Historical quotes, keyed by symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -161,6 +214,9 @@ impl StockHistoricalDataClient {
 
     /// Historical trades, keyed by symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_stock_trades(&self, request: &StockTimeseriesRequest) -> Result<TradeSet> {
@@ -174,6 +230,9 @@ impl StockHistoricalDataClient {
     }
 
     /// The latest trade for each symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -192,6 +251,9 @@ impl StockHistoricalDataClient {
 
     /// The latest quote for each symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_stock_latest_quote(
@@ -209,6 +271,9 @@ impl StockHistoricalDataClient {
 
     /// The latest bar for each symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_stock_latest_bar(
@@ -225,6 +290,9 @@ impl StockHistoricalDataClient {
     }
 
     /// A snapshot of the latest trade, quote, and bars for each symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -244,6 +312,9 @@ impl StockHistoricalDataClient {
     }
 
     /// Historical opening and closing auctions, keyed by symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
     ///
     /// Only the `sip` feed serves auctions.
     ///
@@ -273,7 +344,7 @@ impl StockHistoricalDataClient {
         symbol: &str,
         request: &SingleSymbolRequest,
     ) -> Result<Vec<Bar>> {
-        let path = format!("/stocks/{symbol}/bars");
+        let path = format!("/stocks/{}/bars", segment(symbol)?);
         let merged = get_marketdata(
             &self.rest,
             &MarketDataRequest::paged(&path).whole_body(),
@@ -292,7 +363,7 @@ impl StockHistoricalDataClient {
         symbol: &str,
         request: &SingleSymbolRequest,
     ) -> Result<Vec<Quote>> {
-        let path = format!("/stocks/{symbol}/quotes");
+        let path = format!("/stocks/{}/quotes", segment(symbol)?);
         let merged = get_marketdata(
             &self.rest,
             &MarketDataRequest::paged(&path).whole_body(),
@@ -311,7 +382,7 @@ impl StockHistoricalDataClient {
         symbol: &str,
         request: &SingleSymbolRequest,
     ) -> Result<Vec<Trade>> {
-        let path = format!("/stocks/{symbol}/trades");
+        let path = format!("/stocks/{}/trades", segment(symbol)?);
         let merged = get_marketdata(
             &self.rest,
             &MarketDataRequest::paged(&path).whole_body(),
@@ -330,7 +401,7 @@ impl StockHistoricalDataClient {
         symbol: &str,
         request: &SingleSymbolRequest,
     ) -> Result<Vec<DailyAuctions>> {
-        let path = format!("/stocks/{symbol}/auctions");
+        let path = format!("/stocks/{}/auctions", segment(symbol)?);
         let merged = get_marketdata(
             &self.rest,
             &MarketDataRequest::paged(&path).whole_body(),
@@ -349,7 +420,7 @@ impl StockHistoricalDataClient {
         symbol: &str,
         request: &SingleSymbolRequest,
     ) -> Result<Bar> {
-        let path = format!("/stocks/{symbol}/bars/latest");
+        let path = format!("/stocks/{}/bars/latest", segment(symbol)?);
         self.latest_for_symbol(&path, "bar", symbol, request).await
     }
 
@@ -362,7 +433,7 @@ impl StockHistoricalDataClient {
         symbol: &str,
         request: &SingleSymbolRequest,
     ) -> Result<Quote> {
-        let path = format!("/stocks/{symbol}/quotes/latest");
+        let path = format!("/stocks/{}/quotes/latest", segment(symbol)?);
         self.latest_for_symbol(&path, "quote", symbol, request)
             .await
     }
@@ -376,7 +447,7 @@ impl StockHistoricalDataClient {
         symbol: &str,
         request: &SingleSymbolRequest,
     ) -> Result<Trade> {
-        let path = format!("/stocks/{symbol}/trades/latest");
+        let path = format!("/stocks/{}/trades/latest", segment(symbol)?);
         self.latest_for_symbol(&path, "trade", symbol, request)
             .await
     }
@@ -392,7 +463,7 @@ impl StockHistoricalDataClient {
     ) -> Result<Snapshot> {
         // No wrapping key at all on this one, unlike its three siblings: the
         // snapshot's fields are the response body.
-        let path = format!("/stocks/{symbol}/snapshot");
+        let path = format!("/stocks/{}/snapshot", segment(symbol)?);
         let merged = get_marketdata(
             &self.rest,
             &MarketDataRequest::latest(&path).whole_body(),
@@ -400,10 +471,11 @@ impl StockHistoricalDataClient {
         )
         .await?;
 
+        let body = Value::Object(merged.data);
         let mut snapshot: Snapshot =
-            serde_json::from_value(Value::Object(merged)).map_err(|source| Error::Decode {
-                path,
-                body: String::new(),
+            Snapshot::deserialize(&body).map_err(|source| Error::Decode {
+                path: merged.path,
+                body: crate::rest::truncate(&body.to_string()),
                 source,
             })?;
         snapshot.set_symbol(symbol);
@@ -429,19 +501,29 @@ impl StockHistoricalDataClient {
         )
         .await?;
 
-        let Some(record) = merged.remove(key) else {
-            // `remove` left `merged` untouched when it answered `None`, so the
-            // response can still be reported alongside the reason.
-            let body = serde_json::to_string(&merged).unwrap_or_default();
+        let Some(record) = merged.data.remove(key) else {
+            // `remove` left the payload untouched when it answered `None`, so
+            // the response can still be reported alongside the reason.
+            let body = serde_json::to_string(&merged.data).unwrap_or_default();
             return Err(Error::decode_shape(
                 path,
                 &body,
                 format_args!("the response carried no `{key}`"),
             ));
         };
-        let mut record: T = serde_json::from_value(record).map_err(|source| Error::Decode {
+        // `null` under the key means the endpoint had nothing for this symbol,
+        // the same as it does in `into_single` — an empty result rather than a
+        // malformed one.
+        if is_absent(&record) {
+            return Err(Error::decode_shape(
+                path,
+                "null",
+                format_args!("the response carried no `{key}` for this symbol"),
+            ));
+        }
+        let mut record: T = T::deserialize(&record).map_err(|source| Error::Decode {
             path: path.to_owned(),
-            body: String::new(),
+            body: decode_body(key, &record),
             source,
         })?;
         record.set_symbol(symbol);
@@ -471,7 +553,7 @@ impl StockHistoricalDataClient {
         tick_type: &TickType,
         tape: Tape,
     ) -> Result<Codes> {
-        let path = format!("/stocks/meta/conditions/{tick_type}");
+        let path = format!("/stocks/meta/conditions/{}", segment(tick_type)?);
         self.rest.get(&path, &TapeQuery { tape }).await
     }
 }
@@ -529,6 +611,9 @@ impl CryptoHistoricalDataClient {
 
     /// Historical bars, keyed by symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_crypto_bars(
@@ -536,12 +621,15 @@ impl CryptoHistoricalDataClient {
         request: &CryptoBarsRequest,
         feed: CryptoFeed,
     ) -> Result<BarSet> {
-        let path = format!("/crypto/{feed}/bars");
+        let path = format!("/crypto/{}/bars", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::paged(&path), request).await?;
         into_sets(merged)
     }
 
     /// Historical quotes, keyed by symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -550,12 +638,15 @@ impl CryptoHistoricalDataClient {
         request: &TimeseriesRequest,
         feed: CryptoFeed,
     ) -> Result<QuoteSet> {
-        let path = format!("/crypto/{feed}/quotes");
+        let path = format!("/crypto/{}/quotes", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::paged(&path), request).await?;
         into_sets(merged)
     }
 
     /// Historical trades, keyed by symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -564,12 +655,15 @@ impl CryptoHistoricalDataClient {
         request: &TimeseriesRequest,
         feed: CryptoFeed,
     ) -> Result<TradeSet> {
-        let path = format!("/crypto/{feed}/trades");
+        let path = format!("/crypto/{}/trades", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::paged(&path), request).await?;
         into_sets(merged)
     }
 
     /// The latest trade for each symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -578,12 +672,15 @@ impl CryptoHistoricalDataClient {
         request: &CryptoLatestRequest,
         feed: CryptoFeed,
     ) -> Result<HashMap<String, Trade>> {
-        let path = format!("/crypto/{feed}/latest/trades");
+        let path = format!("/crypto/{}/latest/trades", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::latest(&path), request).await?;
         into_latest(merged)
     }
 
     /// The latest quote for each symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -592,12 +689,15 @@ impl CryptoHistoricalDataClient {
         request: &CryptoLatestRequest,
         feed: CryptoFeed,
     ) -> Result<HashMap<String, Quote>> {
-        let path = format!("/crypto/{feed}/latest/quotes");
+        let path = format!("/crypto/{}/latest/quotes", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::latest(&path), request).await?;
         into_latest(merged)
     }
 
     /// The latest bar for each symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -606,12 +706,15 @@ impl CryptoHistoricalDataClient {
         request: &CryptoLatestRequest,
         feed: CryptoFeed,
     ) -> Result<HashMap<String, Bar>> {
-        let path = format!("/crypto/{feed}/latest/bars");
+        let path = format!("/crypto/{}/latest/bars", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::latest(&path), request).await?;
         into_latest(merged)
     }
 
     /// The latest orderbook for each symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -620,12 +723,15 @@ impl CryptoHistoricalDataClient {
         request: &CryptoLatestRequest,
         feed: CryptoFeed,
     ) -> Result<HashMap<String, Orderbook>> {
-        let path = format!("/crypto/{feed}/latest/orderbooks");
+        let path = format!("/crypto/{}/latest/orderbooks", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::latest(&path), request).await?;
         into_latest(merged)
     }
 
     /// A snapshot of the latest data for each symbol.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -634,7 +740,7 @@ impl CryptoHistoricalDataClient {
         request: &CryptoSnapshotRequest,
         feed: CryptoFeed,
     ) -> Result<HashMap<String, Snapshot>> {
-        let path = format!("/crypto/{feed}/snapshots");
+        let path = format!("/crypto/{}/snapshots", segment(feed)?);
         let merged = get_marketdata(&self.rest, &MarketDataRequest::latest(&path), request).await?;
         into_latest(merged)
     }
@@ -676,6 +782,9 @@ impl OptionHistoricalDataClient {
 
     /// Historical bars, keyed by contract symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_option_bars(&self, request: &OptionBarsRequest) -> Result<BarSet> {
@@ -690,6 +799,9 @@ impl OptionHistoricalDataClient {
 
     /// Historical trades, keyed by contract symbol.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_option_trades(&self, request: &TimeseriesRequest) -> Result<TradeSet> {
@@ -703,6 +815,9 @@ impl OptionHistoricalDataClient {
     }
 
     /// The latest quote for each contract.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -721,6 +836,9 @@ impl OptionHistoricalDataClient {
 
     /// The latest trade for each contract.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_option_latest_trade(
@@ -737,6 +855,9 @@ impl OptionHistoricalDataClient {
     }
 
     /// A snapshot of the latest data for each contract.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -755,13 +876,19 @@ impl OptionHistoricalDataClient {
 
     /// Every contract in an underlying's option chain.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_option_chain(
         &self,
         request: &OptionChainRequest,
     ) -> Result<HashMap<String, OptionsSnapshot>> {
-        let path = format!("/options/snapshots/{}", request.underlying_symbol);
+        let path = format!(
+            "/options/snapshots/{}",
+            segment(&request.underlying_symbol)?
+        );
         let merged = get_marketdata(
             &self.rest,
             &MarketDataRequest::paged_with_limit(&path, 1000),
@@ -786,7 +913,7 @@ impl OptionHistoricalDataClient {
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_option_condition_codes(&self, tick_type: &TickType) -> Result<Codes> {
-        let path = format!("/options/meta/conditions/{tick_type}");
+        let path = format!("/options/meta/conditions/{}", segment(tick_type)?);
         self.rest.get(&path, &Empty).await
     }
 }
@@ -835,6 +962,9 @@ impl ForexDataClient {
 
     /// Historical rates, keyed by currency pair.
     ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_forex_rates(&self, request: &ForexRatesRequest) -> Result<ForexRateSet> {
@@ -848,6 +978,9 @@ impl ForexDataClient {
     }
 
     /// The latest rate for each currency pair.
+    ///
+    /// A symbol Alpaca has nothing for is absent from the map rather than
+    /// present with an empty value.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -914,7 +1047,7 @@ impl LogoClient {
     /// # Errors
     /// Propagates transport and API failures.
     pub async fn get_logo(&self, symbol: &str, request: &LogoRequest) -> Result<Vec<u8>> {
-        let path = format!("/logos/{symbol}");
+        let path = format!("/logos/{}", segment(symbol)?);
         self.rest.get_bytes(&path, request).await
     }
 }
@@ -953,7 +1086,32 @@ impl NewsClient {
         &self.rest
     }
 
-    /// News articles matching the filter.
+    /// Fetches one page of news articles.
+    ///
+    /// The page carries the token for the next one in
+    /// [`NewsSet::next_page_token`]; feed it back through
+    /// [`NewsRequest::page_token`] to resume. See
+    /// [`get_news`](Self::get_news) to walk them all.
+    ///
+    /// Prefer this one when the caller paginates on its own schedule — news
+    /// pages at 50 articles, so a broad query walks many pages, and this is
+    /// the only way to stop part-way, or to hand a resume token to something
+    /// that will continue later.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_news_page(&self, request: &NewsRequest) -> Result<NewsSet> {
+        self.rest.get("/news", request).await
+    }
+
+    /// Walks every page of news articles.
+    ///
+    /// Returns once Alpaca stops handing back a token, so
+    /// [`NewsSet::next_page_token`] on the result is always `None` — there is
+    /// nothing left to resume. Cap the walk with
+    /// [`NewsRequest::limit`], which counts articles across all pages, and
+    /// prefer [`get_news_page`](Self::get_news_page) when the caller wants the
+    /// pages one at a time.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -966,23 +1124,20 @@ impl NewsClient {
         )
         .await?;
 
-        let articles: Vec<News> = merged
-            .get("news")
-            .cloned()
-            .map(serde_json::from_value)
-            .transpose()
-            .map_err(|source| Error::Decode {
-                path: "/news".to_owned(),
-                body: String::new(),
+        let articles: Vec<News> = match merged.data.get("news") {
+            Some(value) => Vec::<News>::deserialize(value).map_err(|source| Error::Decode {
+                path: merged.path.clone(),
+                body: decode_body("news", value),
                 source,
-            })?
-            .unwrap_or_default();
+            })?,
+            None => Vec::new(),
+        };
 
         Ok(NewsSet {
             news: articles,
             // The merge loop follows every page, so nothing is left to resume.
-            // Always None once pagination has run to completion; the field
-            // exists for the single-page shape.
+            // Always None once pagination has run to completion; `get_news_page`
+            // is the accessor that hands back a live token.
             next_page_token: None,
         })
     }
@@ -1038,7 +1193,7 @@ impl ScreenerClient {
     /// Propagates transport, API, and decoding failures.
     pub async fn get_market_movers(&self, request: &MarketMoversRequest) -> Result<Movers> {
         // The market type selects the path rather than filtering the query.
-        let path = format!("/screener/{}/movers", request.market_type.as_str());
+        let path = format!("/screener/{}/movers", segment(&request.market_type)?);
         self.rest.get(&path, request).await
     }
 }
@@ -1073,7 +1228,7 @@ impl CorporateActionsClient {
     /// Returns an error if the credentials cannot be encoded as headers.
     pub fn with_config(credentials: &Credentials, config: RestConfig) -> Result<Self> {
         Ok(Self {
-            raw: crate::sse::streaming_client(credentials, &config)?,
+            raw: crate::sse::streaming_client(credentials)?,
             base_url: config.base_url.clone(),
             rest: RestClient::new(credentials, config)?,
         })
@@ -1100,9 +1255,10 @@ impl CorporateActionsClient {
         )
         .await?;
 
-        serde_json::from_value(Value::Object(merged)).map_err(|source| Error::Decode {
-            path: "/corporate-actions".to_owned(),
-            body: String::new(),
+        let body = Value::Object(merged.data);
+        CorporateActions::deserialize(&body).map_err(|source| Error::Decode {
+            path: merged.path,
+            body: crate::rest::truncate(&body.to_string()),
             source,
         })
     }

@@ -1,44 +1,38 @@
-//! Unofficial Rust SDK for the [Alpaca](https://alpaca.markets) trading, market
-//! data, and broker APIs.
-//!
 //! Targets the Alpaca API itself, documented at [docs.alpaca.markets]. Where these
 //! docs describe what an endpoint does, they describe the API; where they describe
-//! how this crate represents it, that is a choice made here. Money is
-//! [`rust_decimal::Decimal`] rather than a string-or-float union, unknown API enum
-//! values deserialize into an `Unknown` variant instead of failing, and paginated
-//! endpoints offer both a single page and a walk.
+//! how this crate represents it, that is a choice made here.
 //!
-//! It is not affiliated with or endorsed by Alpaca Securities LLC. See `NOTICE`
-//! for the works this one derives from.
+//! Each API surface is its own feature-gated module — `trading`, `data` and
+//! `broker`. The `blocking` feature adds `blocking::Blocking`, a synchronous
+//! façade over any of them; `polars` adds `data::ToFrame`, and implies `data`.
 //!
-//! # What the routes are checked against
-//!
-//! Alpaca publishes an API reference, vendors `OpenAPI` specs, and ships five
-//! SDKs, and they do not always agree. This crate treats them in order of how
-//! close each is to the wire: a captured response beats a specification, a
-//! specification beats an SDK, and the published reference is what says whether
-//! a route is still current at all — three event streams were in the specs,
-//! looked healthy, and had been switched off.
-//!
-//! `just coverage`, `just parameters` and `just enums-drift` diff this crate
-//! against those sources, and `COVERAGE.md` is checked in rather than trusted
-//! to memory.
-//!
-//! # Feature flags
-//!
-//! | Feature | Default | What it enables |
-//! |---|---|---|
-//! | `trading` | yes | The trading REST client and trade-update stream |
-//! | `data` | yes | Historical and live market data |
-//! | `broker` | no | The broker API, including its SSE event streams |
-//! | `blocking` | no | A synchronous façade over the async clients, via [`blocking::Blocking`] |
-//! | `polars` | no | `DataFrame` conversion for market data collections, via [`data::ToFrame`]. Implies `data` |
-//! | `rustls-tls` | yes | TLS via rustls |
-//! | `native-tls` | no | TLS via the platform library |
+//! The README is the rest of this page: what the crate is, the feature table,
+//! the quick-start examples, how the types behave, how the routes are verified,
+//! and the minimum supported Rust version.
 //!
 //! [docs.alpaca.markets]: https://docs.alpaca.markets/us/reference/
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
+// The README is included so that its five examples compile as doctests. They
+// are the crate's front door and nothing was checking them, so five batches of
+// breaking changes went past without anything noticing whether they still
+// built. They did — but only because nobody had needed to find out.
+#![doc = include_str!("../README.md")]
+
+// `reqwest` is depended on with `default-features = false`, and none of
+// `trading`, `data` or `broker` implies a TLS backend — only the two features
+// below reach `reqwest/rustls` and `reqwest/native-tls`. So
+// `default-features = false, features = ["broker"]` used to compile cleanly and
+// then fail *every* HTTPS request at runtime, because the client in
+// `rest::Rest` was built with no backend to negotiate with. Failing the build
+// is the only place that mistake is cheap to find.
+#[cfg(not(any(feature = "rustls-tls", feature = "native-tls")))]
+compile_error!(
+    "alpaca-sdk requires a TLS backend: enable exactly one of the `rustls-tls` \
+     or `native-tls` features. Disabling default features turns off \
+     `rustls-tls`, and none of `trading`, `data` or `broker` enables a backend \
+     on its own, so every HTTPS request would fail at runtime."
+);
 
 pub mod auth;
 pub mod backoff;
@@ -69,17 +63,27 @@ pub mod trading;
 /// `polars::prelude::DataFrame`, and a caller who depends on a different polars
 /// version gets two incompatible `DataFrame` types with the same name. Reach for
 /// this one, or match the version in `Cargo.toml`.
+///
+/// Because the version is part of this crate's public API, **a major or minor
+/// bump of `polars` is treated as a breaking change of `alpaca-sdk`** and gets
+/// one here too. `polars` is pre-1.0 and moves quickly, where a minor bump is
+/// the breaking one — so in practice its release cadence, not this crate's,
+/// drives how often `alpaca-sdk`'s own version has to break.
 #[cfg(feature = "polars")]
 #[cfg_attr(docsrs, doc(cfg(feature = "polars")))]
 pub use polars;
 
 /// The `rust_decimal` this crate was built against.
 ///
-/// Re-exported for the same reason as [`polars`]: every price, quantity and
+/// Re-exported for the same reason as the `polars` re-export: every price, quantity and
 /// balance in this crate is a `rust_decimal::Decimal`, and a caller who depends
 /// on a different `rust_decimal` version gets two incompatible `Decimal` types
 /// with the same name and an error that does not explain itself. Reach for this
 /// one, or match the version in `Cargo.toml`.
+///
+/// Because the version is part of this crate's public API, **a major or minor
+/// bump of `rust_decimal` is treated as a breaking change of `alpaca-sdk`** and
+/// gets one here too.
 ///
 /// It is also the way to the rest of that crate without declaring the
 /// dependency twice — `RoundingStrategy` for the rounding modes, and the
@@ -108,7 +112,7 @@ pub use rust_decimal::Decimal;
 
 pub use auth::Credentials;
 pub use config::{BaseUrl, RetryBackoff, RetryConfig};
-pub use error::{ApiError, Error, Result};
-pub use rest::{RestClient, RestConfig};
+pub use error::{ApiError, Error, Result, TransportError};
+pub use rest::{Replay, RestClient, RestConfig};
 #[cfg(feature = "_sse")]
 pub use sse::{Event as SseEvent, EventStreamRequest};

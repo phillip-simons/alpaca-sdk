@@ -148,60 +148,9 @@ fn a_timestamp_round_trips_through_json() {
     assert_eq!(original, again);
 }
 
-/// The three msgpack timestamp encodings, which is what the live market data
-/// stream actually sends. Nothing decodes extension type -1 out of the box —
-/// not `DateTime`, not `String`, not `serde_json::Value` — so this codec is the
-/// only thing standing between the stream and a decode failure on every frame.
-#[test]
-fn all_three_msgpack_timestamp_widths_decode() {
-    use alpaca_sdk::types::timestamp::from_extension;
-
-    // timestamp32: 4 bytes of seconds.
-    let seconds = 1_646_816_400u32;
-    let decoded = from_extension(-1, &seconds.to_be_bytes()).unwrap();
-    assert_eq!(decoded.timestamp(), 1_646_816_400);
-    assert_eq!(decoded.timestamp_subsec_nanos(), 0);
-
-    // timestamp64: 30 bits of nanoseconds, then 34 bits of seconds.
-    let packed = (59_000u64 << 34) | 1_646_816_400u64;
-    let decoded = from_extension(-1, &packed.to_be_bytes()).unwrap();
-    assert_eq!(decoded.timestamp(), 1_646_816_400);
-    assert_eq!(decoded.timestamp_subsec_nanos(), 59_000);
-
-    // timestamp96: 32 bits of nanoseconds, then 64 signed bits of seconds.
-    let mut wide = Vec::new();
-    wide.extend_from_slice(&59_000u32.to_be_bytes());
-    wide.extend_from_slice(&1_646_816_400i64.to_be_bytes());
-    let decoded = from_extension(-1, &wide).unwrap();
-    assert_eq!(decoded.timestamp(), 1_646_816_400);
-    assert_eq!(decoded.timestamp_subsec_nanos(), 59_000);
-}
-
-#[test]
-fn a_msgpack_extension_that_is_not_a_timestamp_is_rejected() {
-    use alpaca_sdk::types::timestamp::from_extension;
-
-    // Right width, wrong extension type.
-    let wrong_tag = from_extension(5, &1_646_816_400u32.to_be_bytes()).unwrap_err();
-    assert!(wrong_tag.contains("extension type 5"), "{wrong_tag}");
-
-    // Right extension type, a width the msgpack specification does not define.
-    let wrong_width = from_extension(-1, &[0, 1, 2]).unwrap_err();
-    assert!(!wrong_width.is_empty());
-}
-
-/// A timestamp before the epoch is a negative seconds value, which only the
-/// 96-bit encoding can carry. Corporate actions reach back decades.
-#[test]
-fn a_pre_epoch_timestamp_decodes() {
-    use alpaca_sdk::types::timestamp::from_extension;
-
-    let mut wide = Vec::new();
-    wide.extend_from_slice(&0u32.to_be_bytes());
-    wide.extend_from_slice(&(-86_400i64).to_be_bytes());
-
-    assert_eq!(from_extension(-1, &wide).unwrap().timestamp(), -86_400);
-}
+// The three msgpack extension-decoding tests that stood here moved into
+// `src/types/timestamp.rs` when `from_extension` became crate-private; they
+// call it directly and an integration test no longer can.
 
 // ------------------------------------------------------------- wire quirks
 

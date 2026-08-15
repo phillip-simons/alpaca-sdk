@@ -5,13 +5,36 @@ use std::time::Duration;
 /// Maximum number of items the market data API returns per page.
 pub const DATA_MAX_LIMIT: u32 = 10_000;
 
+/// How long a stream session must last before it counts as healthy.
+///
+/// The reconnect backoff curve is indexed by consecutive *failures*, and a
+/// connection that came up and immediately dropped is a failure however far it
+/// got through the handshake. Resetting the counter on connect alone pins the
+/// delay at its minimum against a server that accepts and hangs up — roughly one
+/// connection a second, at an endpoint that allows one per account.
+///
+/// So a session resets the curve when it either delivered data or stayed up this
+/// long. That covers the case the reset exists for — a quiet stream whose server
+/// recycles it — without rewarding a server that is only pretending to work.
+///
+/// Lives here rather than in either stream module so that both can re-export the
+/// same item: two constants of the same name would collide under a glob import
+/// of `data::*` and `trading::*`.
+pub const DEFAULT_STABLE_SESSION: Duration = Duration::from_secs(30);
+
+/// Maximum number of orders `/v2/orders` and its broker twin serve in one page.
+///
+/// The default is 50; this is the ceiling, and what the order walkers ask for.
+pub const ORDERS_MAX_LIMIT: u32 = 500;
+
 /// Default page size for the broker account-activities endpoint.
 pub const ACCOUNT_ACTIVITIES_DEFAULT_PAGE_SIZE: u32 = 100;
 
 /// Maximum number of documents accepted by a single broker upload request.
 pub const BROKER_DOCUMENT_UPLOAD_LIMIT: usize = 10;
 
-/// Retries attempted after the initial request, matching `DEFAULT_RETRY_ATTEMPTS`.
+/// Retries attempted after the initial request, matching alpaca-py's
+/// `DEFAULT_RETRY_ATTEMPTS`, which carries the same name.
 pub const DEFAULT_RETRY_ATTEMPTS: u32 = 3;
 
 /// Base delay before the first retry, doubling from there.
@@ -170,6 +193,15 @@ pub enum RetryBackoff {
 /// — on HTTP 429 and 504, waiting about a second before the first and doubling
 /// from there, capped at 30 seconds and jittered.
 ///
+/// **The method has a veto.** Whatever this configuration allows, the client
+/// will not replay a `POST` or a `PATCH` on anything except a 429: a 504 on
+/// `POST /v2/orders` means the gateway stopped waiting for the answer, not that
+/// nothing happened, and replaying it places a second order. So a policy of
+/// `status_codes([429, 500, 502, 504])` retries all four on `GET`, `PUT` and
+/// `DELETE`, and only the 429 on `POST` and `PATCH`. See
+/// [`RetryConfig::should_retry`], which reports this configuration's own answer
+/// and not the client's.
+///
 /// **A response carrying `Retry-After` overrides all of that.** The server is
 /// stating the answer this configuration is otherwise guessing at, so its value
 /// is used in place of the computed delay — clamped to the backoff's own ceiling,
@@ -248,7 +280,11 @@ impl RetryConfig {
         self
     }
 
-    /// Whether `status` should be retried under this configuration.
+    /// Whether `status` is in this configuration's retry set.
+    ///
+    /// **Not the same question as "will the client retry it".** The method has a
+    /// veto that this type cannot see: a `POST` or `PATCH` is never replayed
+    /// except on a 429, however this is configured. See the type documentation.
     #[must_use]
     pub fn should_retry(&self, status: u16) -> bool {
         self.status_codes.contains(&status)

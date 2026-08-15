@@ -17,12 +17,20 @@ alpaca_py := env_var_or_default("ALPACA_PY", "../alpaca-py")
 
 default: check
 
-# The gate. Run before every commit.
+# What is here catches something on an ordinary edit. What is in `ci` catches
+# something rarer, or something only a second toolchain can see.
 #
-# `features` is in here rather than only in `ci` because a missing cfg gate is
-# invisible to every other recipe — it compiles fine under --all-features and
-# fails only when a surface is built alone. It costs half a second warm.
-check: fmt-check clippy doc test features
+# `features` used to be in this list, on the argument that a missing cfg gate is
+# invisible to every other recipe and "costs half a second warm". That was true
+# when the test suite was 33 separate binaries and cargo could reuse almost all
+# of the work; it is not true now. Measured after a one-line edit to `src/`, it
+# was 98.9s of a 305s gate — a third of the wall clock to catch a bug class you
+# can only introduce while adding feature-specific code. CI runs it on every
+# push and pull request, and branch protection means a miss costs a fixup push
+# rather than a broken `main`.
+#
+# The gate. Run before every commit.
+check: fmt-check clippy doc test
 
 # Rewrite formatting in place.
 fmt:
@@ -39,8 +47,24 @@ clippy:
 # Build the docs with rustdoc lints denied.
 doc:
     # These lints only fire here — clippy does not run rustdoc, so without this
-    # recipe `missing_docs` and the intra-doc link lints are decoration.
+    # recipe `missing_docs` and the intra-doc link lints are decoration. This one
+    # is in `check` because any doc edit can trip it.
     RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --locked
+
+# An intra-doc link that crosses a feature boundary resolves under
+# --all-features and dangles everywhere else, so the all-features build alone
+# cannot see it. Anyone running `cargo doc --features trading` can.
+#
+# In `ci` rather than `check`: it only fires on a link written across a feature
+# boundary, which is rare, and the `docs` job runs it on every push and pull
+# request. It was ~two thirds of the four rustdoc invocations `just doc` used
+# to make.
+#
+# Build the docs once per surface, which the all-features build cannot check.
+doc-surfaces:
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked --no-default-features --features trading,rustls-tls
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked --no-default-features --features data,rustls-tls
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked --no-default-features --features broker,rustls-tls
 
 # Build and open the docs, to review a module's public surface.
 doc-open:
@@ -66,19 +90,24 @@ fix:
 features:
     # This crate is heavily cfg-gated, and a missing `#[cfg(feature = ...)]`
     # compiles fine under --all-features and only fails here.
-    cargo check --no-default-features --features rustls-tls
-    cargo check --no-default-features --features trading,rustls-tls
-    cargo check --no-default-features --features data,rustls-tls
-    cargo check --no-default-features --features broker,rustls-tls
+    #
+    # `--all-targets` because plain `cargo check` builds only the library: an
+    # unguarded *test* file is just as broken under a reduced feature set, and
+    # without this the matrix cannot see it. `tests/enum_parity.rs` was in
+    # exactly that state.
+    cargo check --all-targets --no-default-features --features rustls-tls
+    cargo check --all-targets --no-default-features --features trading,rustls-tls
+    cargo check --all-targets --no-default-features --features data,rustls-tls
+    cargo check --all-targets --no-default-features --features broker,rustls-tls
     # `polars` alone, to pin the implication: it enables `data`, because the
     # frame conversion is for the market data collections and the feature would
     # otherwise compile all of polars and expose nothing.
-    cargo check --no-default-features --features polars,rustls-tls
+    cargo check --all-targets --no-default-features --features polars,rustls-tls
     # `blocking` alone. It is generic over the client rather than a mirrored API,
     # so it compiles without any surface enabled — which is worth knowing stays
     # true, since a mirrored one would not.
-    cargo check --no-default-features --features blocking,rustls-tls
-    cargo check --no-default-features --features trading,data,broker,blocking,polars,native-tls
+    cargo check --all-targets --no-default-features --features blocking,rustls-tls
+    cargo check --all-targets --no-default-features --features trading,data,broker,blocking,polars,native-tls
 
 # Build against the MSRV. Needs `rustup toolchain install 1.88.0`.
 msrv:
@@ -96,8 +125,23 @@ deny:
 semver:
     cargo semver-checks check-release
 
+# Reproduce CI's nightly `docs` job. Needs `rustup toolchain install nightly`.
+#
+# `src/lib.rs` gates `feature(doc_cfg)` behind `--cfg docsrs`, which only the
+# workflow set, so a malformed `doc(cfg(...))` attribute compiled under every
+# other recipe in this file and failed in CI. That was the whole of the gap
+# between `just ci` and the workflow, and it was load-bearing in a second
+# place: `release.yml` gates publishing on `just publish-dry`, so the same
+# blind spot sat in front of a release.
+#
+# Stable cannot stand in for nightly here. `--cfg docsrs` is what turns the
+# feature on, and the attribute it enables is unstable, so the check does not
+# exist on a stable toolchain rather than merely being weaker there.
+doc-docsrs:
+    RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc --all-features --no-deps
+
 # Everything CI runs.
-ci: check msrv deny
+ci: check doc-surfaces doc-docsrs features msrv deny
 
 # Install the repo's git hooks (once per clone).
 hooks:
@@ -125,6 +169,10 @@ fixtures source=alpaca_py:
 # Read-only GETs against live market data. Records refusals as well as
 # successes: several of these routes are plan-gated, and a 403 is a finding.
 # Needs credentials, same as `just live`.
+#
+# This is the recipe that writes: it overwrites fixtures/live/*.json and
+# fixtures/live/index.json, which are tracked. Commit or stash first, and diff
+# fixtures/live/ afterwards. `just live` does not touch them.
 capture:
     cargo test --all-features --test live_capture -- --ignored --nocapture
 
@@ -207,6 +255,16 @@ parameters:
 # ---------------------------------------------------------------------------
 
 # Run the tests that hit real paper endpoints, which `just test` skips.
+#
+# Reads only: this recipe spends credentials and network time, and writes
+# nothing. `--test integration` is what keeps it that way. Without it,
+# `--ignored` selects every ignored test in *every* target, which picks up
+# tests/live_capture.rs and rewrites fixtures/live/*.json as a side effect of
+# asking for a smoke test — so `just live` used to be `just capture` as well,
+# and the tracked fixtures moved under you.
+#
+# The division: `live` runs the tests that need real credentials, `capture`
+# re-records fixtures. Only `capture` writes.
 live:
     # They are #[ignore]d so a normal run never spends network time or
     # credentials. Needs APCA_API_KEY_ID and APCA_API_SECRET_KEY set.
@@ -214,7 +272,7 @@ live:
     # The login shell does not export them; they come from .envrc via direnv.
     # If this fails with "APCA_API_KEY_ID is not set", run:
     #     direnv exec . just live
-    cargo test --all-features --locked -- --ignored --test-threads=1
+    cargo test --all-features --locked --test integration -- --ignored --test-threads=1
 
 # ---------------------------------------------------------------------------
 # Release

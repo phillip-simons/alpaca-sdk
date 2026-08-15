@@ -16,21 +16,26 @@ use uuid::Uuid;
 use crate::broker::enums::{
     ACHRelationshipStatus, AccountType, AgreementType, BankAccountType, BankStatus,
     CIPApprovalStatus, CIPProvider, CIPResult, CIPStatus, CalendarSubType, ClearingBroker,
-    DocumentType, DriftBandSubType, FeePaymentMethod, FundingSource, IdentifierType,
-    JournalEntryType, JournalStatus, PortfolioStatus, RebalancingConditionsType, RunInitiatedFrom,
-    RunStatus, RunType, TaxIdType, TradeDocumentSubType, TradeDocumentType, TransferDirection,
-    TransferStatus, TransferType, VisaType, WeightType,
+    DocumentType, DriftBandSubType, EmploymentStatus, FeePaymentMethod, FundingSource,
+    IdentifierType, JournalEntryType, JournalStatus, PortfolioStatus, RebalancingConditionsType,
+    RunInitiatedFrom, RunStatus, RunType, TaxIdType, TradeDocumentSubType, TradeDocumentType,
+    TransferDirection, TransferStatus, TransferType, VisaType, WeightType,
 };
 use crate::trading::AccountStatus;
 use crate::types::serde_util::empty_string_as_none;
 
 /// How to reach the account holder.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Contact {
     /// Primary email address.
     pub email_address: String,
     /// Primary phone number.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub phone_number: Option<String>,
     /// Street address lines.
     #[serde(
@@ -39,49 +44,98 @@ pub struct Contact {
     )]
     pub street_address: Vec<String>,
     /// Unit or apartment.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub unit: Option<String>,
     /// City.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub city: Option<String>,
     /// State or province.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub state: Option<String>,
     /// Postal code.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub postal_code: Option<String>,
     /// Country.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub country: Option<String>,
 }
 
 /// Who the account holder is.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Identity {
     /// Given name.
     pub given_name: String,
     /// Middle name.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub middle_name: Option<String>,
     /// Family name.
     pub family_name: String,
     /// Date of birth.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub date_of_birth: Option<NaiveDate>,
     /// Tax identification number.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub tax_id: Option<String>,
     /// Which national scheme the tax id belongs to.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub tax_id_type: Option<TaxIdType>,
     /// Country of citizenship.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub country_of_citizenship: Option<String>,
     /// Country of birth.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub country_of_birth: Option<String>,
     /// Country of tax residence.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub country_of_tax_residence: Option<String>,
     /// Where the account's funds come from.
     #[serde(
@@ -90,89 +144,177 @@ pub struct Identity {
     )]
     pub funding_source: Vec<FundingSource>,
     /// Annual income, lower bound.
-    #[serde(default)]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub annual_income_min: Option<Decimal>,
     /// Annual income, upper bound.
-    #[serde(default)]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub annual_income_max: Option<Decimal>,
     /// Liquid net worth, lower bound.
-    #[serde(default)]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub liquid_net_worth_min: Option<Decimal>,
     /// Liquid net worth, upper bound.
-    #[serde(default)]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub liquid_net_worth_max: Option<Decimal>,
     /// Total net worth, lower bound.
-    #[serde(default)]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub total_net_worth_min: Option<Decimal>,
     /// Total net worth, upper bound.
-    #[serde(default)]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub total_net_worth_max: Option<Decimal>,
     /// Visa category, for non-permanent residents.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub visa_type: Option<VisaType>,
     /// When the visa expires.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub visa_expiration_date: Option<NaiveDate>,
     /// Intended date of departure from the USA.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub date_of_departure_from_usa: Option<NaiveDate>,
     /// Whether the holder is a permanent resident.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permanent_resident: Option<bool>,
 }
 
 /// Regulatory disclosures about the account holder.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Disclosures {
     /// Whether the holder controls a public company.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_control_person: Option<bool>,
     /// Whether the holder is affiliated with an exchange or FINRA.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_affiliated_exchange_or_finra: Option<bool>,
     /// Whether the holder is affiliated with an exchange or FINRA member.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_affiliated_exchange_or_iiroc: Option<bool>,
     /// Whether the holder is a politically exposed person.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_politically_exposed: Option<bool>,
     /// Whether an immediate family member is exposed.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub immediate_family_exposed: Option<bool>,
     /// Whether the account is discretionary.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_discretionary: Option<bool>,
     /// Employment status.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
-    pub employment_status: Option<String>,
+    ///
+    /// The enum, not a `String`. `broker::EmploymentStatus` existed, was
+    /// exported, and was referenced by nothing — so a caller filling in the
+    /// required `Disclosures` had no way to learn the vocabulary is `EMPLOYED`
+    /// rather than `employed`, and the application 400'd. It carries an
+    /// `Unknown(String)` variant, so a value this crate does not know still
+    /// decodes.
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub employment_status: Option<EmploymentStatus>,
     /// Employer name.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub employer_name: Option<String>,
     /// Employer address.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub employer_address: Option<String>,
     /// Employment position.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub employment_position: Option<String>,
 }
 
 /// An agreement the account holder signed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Agreement {
     /// Which agreement was signed.
     pub agreement: AgreementType,
     /// When it was signed.
     pub signed_at: DateTime<Utc>,
     /// The IP address it was signed from.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ip_address: Option<String>,
     /// The agreement revision.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub revision: Option<String>,
+}
+
+impl Agreement {
+    /// A signed agreement, with the optional attribution left unset.
+    ///
+    /// The type is `#[non_exhaustive]` — Alpaca adds agreement fields — so this
+    /// is how one is built from outside the crate. Set `ip_address` and
+    /// `revision` on the result if you have them; Alpaca wants the IP for
+    /// anything signed through your own interface.
+    #[must_use]
+    pub fn new(agreement: AgreementType, signed_at: DateTime<Utc>) -> Self {
+        Self {
+            agreement,
+            signed_at,
+            ip_address: None,
+            revision: None,
+        }
+    }
 }
 
 /// A document attached to an account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountDocument {
     /// Alpaca's id for the document.
     #[serde(default, deserialize_with = "empty_string_as_none")]
@@ -192,33 +334,70 @@ pub struct AccountDocument {
 
 /// Someone to contact about the account other than the holder.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TrustedContact {
     /// Given name.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub given_name: Option<String>,
     /// Family name.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub family_name: Option<String>,
     /// Email address.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub email_address: Option<String>,
     /// Phone number.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub phone_number: Option<String>,
     /// Street address.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub street_address: Option<String>,
     /// City.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub city: Option<String>,
     /// State.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub state: Option<String>,
     /// Postal code.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub postal_code: Option<String>,
     /// Country.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub country: Option<String>,
 }
 
@@ -227,6 +406,7 @@ pub struct TrustedContact {
 /// The per-check payloads vary by provider and are not modelled; they are kept
 /// as raw JSON rather than guessed at.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct KycResults {
     /// Checks that rejected.
     #[serde(default)]
@@ -247,6 +427,7 @@ pub struct KycResults {
 
 /// A brokerage account opened through the broker API.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Account {
     /// Alpaca's id for the account.
     pub id: Uuid,
@@ -259,7 +440,7 @@ pub struct Account {
     pub crypto_status: Option<AccountStatus>,
     /// Account currency.
     #[serde(default, deserialize_with = "empty_string_as_none")]
-    pub currency: Option<String>,
+    pub currency: Option<crate::types::SupportedCurrencies>,
     /// Equity as of the previous trading day's close.
     #[serde(default, with = "crate::types::option_decimal")]
     pub last_equity: Option<Decimal>,
@@ -305,6 +486,7 @@ pub struct Account {
 /// fields through
 /// [`account`](Self::account).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TradeAccount {
     /// Every field the trading API also returns.
     #[serde(flatten)]
@@ -357,6 +539,7 @@ pub struct TradeAccount {
 /// Identical to the trading API's [`crate::trading::Order`] but for the
 /// commission the correspondent charged, which only the broker API reports.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Order {
     /// Every field the trading API also returns.
     #[serde(flatten)]
@@ -371,6 +554,7 @@ pub struct Order {
 
 /// A link between an account and a bank account, for ACH transfers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ACHRelationship {
     /// Alpaca's id for the relationship.
     pub id: Uuid,
@@ -403,6 +587,7 @@ pub struct ACHRelationship {
 
 /// A bank an account may wire money to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Bank {
     /// Alpaca's id for the bank connection.
     pub id: Uuid,
@@ -444,6 +629,7 @@ pub struct Bank {
 
 /// Money moving into or out of an account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Transfer {
     /// Alpaca's id for the transfer.
     pub id: Uuid,
@@ -496,6 +682,7 @@ pub struct Transfer {
 /// payload — so they are [`Decimal`] here. Reading a string price as a float is
 /// the precision loss the money types exist to avoid.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Journal {
     /// Alpaca's id for the journal.
     pub id: Uuid,
@@ -554,6 +741,7 @@ pub struct Journal {
 /// carries its reason rather than failing the whole request — so
 /// `error_message` has to be read, not assumed empty.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct BatchJournalResponse {
     /// The journal itself.
     #[serde(flatten)]
@@ -568,6 +756,7 @@ pub struct BatchJournalResponse {
 /// Distinct from [`AccountDocument`], which is the identity paperwork attached
 /// to the brokerage account itself.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TradeDocument {
     /// Alpaca's id for the document.
     pub id: Uuid,
@@ -589,6 +778,13 @@ pub struct TradeDocument {
 }
 
 /// A W-8BEN form filled in field by field rather than uploaded as a file.
+///
+/// Deliberately **not** `#[non_exhaustive]`, unlike every other model here. The
+/// reason the rest carry it is that Alpaca adds fields on its own schedule; this
+/// one transcribes an IRS form, whose fields change when the IRS changes them,
+/// and it has eleven required fields — so a constructor taking all of them would
+/// be a row of interchangeable `String`s, which is a worse hazard than the one
+/// the attribute prevents. A caller fills it in as a struct literal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct W8BenDocument {
     /// The country the applicant is a citizen of.
@@ -679,12 +875,17 @@ impl W8BenDocument {
 /// the inconsistency — and a `percent` assigned directly to the field is the
 /// caller's to round.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Weight {
     /// Whether this line is cash or a security.
     #[serde(rename = "type")]
     pub weight_type: WeightType,
     /// The security, for asset lines.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub symbol: Option<String>,
     /// The share of the portfolio, as a percentage.
     ///
@@ -747,6 +948,7 @@ impl Weight {
 /// the first one tried would always match. The two value sets are disjoint, so
 /// the wire value alone decides.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum RebalancingSubType {
     /// A drift band condition's sub type.
     DriftBand(DriftBandSubType),
@@ -806,6 +1008,7 @@ impl<'de> Deserialize<'de> for RebalancingSubType {
 
 /// When a portfolio should be rebalanced.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct RebalancingCondition {
     /// Whether the trigger is drift or the calendar.
     #[serde(rename = "type")]
@@ -813,15 +1016,57 @@ pub struct RebalancingCondition {
     /// The specific trigger, from the set the type implies.
     pub sub_type: RebalancingSubType,
     /// The drift threshold, for drift band conditions.
-    #[serde(default, with = "crate::types::option_decimal")]
+    #[serde(
+        default,
+        with = "crate::types::option_decimal",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub percent: Option<Decimal>,
     /// The day the calendar condition fires on.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub day: Option<String>,
+}
+
+impl RebalancingCondition {
+    /// Rebalance when an asset drifts `percent` away from its target weight.
+    ///
+    /// Two constructors rather than a struct literal, for the same reason
+    /// [`Weight`] has two: the type is `#[non_exhaustive]`, and the pairing of
+    /// `condition_type` with `sub_type` is not free — a drift band with a
+    /// calendar sub type is a request Alpaca rejects. Naming the two shapes
+    /// makes the invalid pairing unspellable.
+    #[must_use]
+    pub fn drift_band(sub_type: DriftBandSubType, percent: Decimal) -> Self {
+        Self {
+            condition_type: RebalancingConditionsType::DriftBand,
+            sub_type: RebalancingSubType::DriftBand(sub_type),
+            percent: Some(percent),
+            day: None,
+        }
+    }
+
+    /// Rebalance on a schedule.
+    ///
+    /// `day` is the day the condition fires on, where the cadence needs one —
+    /// `"monday"` for a weekly condition, `"1"` for a monthly one.
+    #[must_use]
+    pub fn calendar(sub_type: CalendarSubType, day: Option<String>) -> Self {
+        Self {
+            condition_type: RebalancingConditionsType::Calendar,
+            sub_type: RebalancingSubType::Calendar(sub_type),
+            percent: None,
+            day,
+        }
+    }
 }
 
 /// A target allocation that accounts can subscribe to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Portfolio {
     /// Alpaca's id for the portfolio.
     pub id: Uuid,
@@ -852,6 +1097,7 @@ pub struct Portfolio {
 
 /// An account's subscription to a portfolio.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Subscription {
     /// Alpaca's id for the subscription.
     pub id: Uuid,
@@ -868,6 +1114,7 @@ pub struct Subscription {
 
 /// An order a rebalancing run chose not to place.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SkippedOrder {
     /// The security the order would have been for.
     pub symbol: String,
@@ -879,7 +1126,7 @@ pub struct SkippedOrder {
     pub notional: Option<Decimal>,
     /// The currency of that value.
     #[serde(default, deserialize_with = "empty_string_as_none")]
-    pub currency: Option<String>,
+    pub currency: Option<crate::types::SupportedCurrencies>,
     /// Why it was skipped.
     #[serde(default)]
     pub reason: String,
@@ -890,6 +1137,7 @@ pub struct SkippedOrder {
 
 /// One attempt to move an account towards its portfolio's weights.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct RebalancingRun {
     /// Alpaca's id for the run.
     pub id: Uuid,
@@ -943,6 +1191,7 @@ pub struct RebalancingRun {
 /// Unlike the portfolio list, which is a bare array, this route wraps its
 /// results and pages by token.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SubscriptionsPage {
     /// The subscriptions on this page.
     #[serde(
@@ -957,6 +1206,7 @@ pub struct SubscriptionsPage {
 
 /// One page of rebalancing runs.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct RunsPage {
     /// The runs on this page.
     #[serde(
@@ -972,146 +1222,301 @@ pub struct RunsPage {
 /// The KYC provider's verdict on the account holder.
 ///
 /// Every field is optional, because which of them a provider fills in varies.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CIPKycInfo {
     /// The provider's id for this check.
     pub id: String,
     /// The risk score assigned.
-    #[serde(default, with = "crate::types::serde_util::int::option")]
+    #[serde(
+        default,
+        with = "crate::types::serde_util::int::option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub risk_score: Option<i64>,
     /// The risk level assigned.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub risk_level: Option<String>,
     /// Which risk categories applied.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub risk_categories: Option<Vec<String>>,
     /// The applicant's name.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub applicant_name: Option<String>,
     /// The applicant's email address.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub email_address: Option<String>,
     /// The applicant's nationality.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub nationality: Option<String>,
     /// The applicant's date of birth.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date_of_birth: Option<DateTime<Utc>>,
     /// The applicant's address.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub address: Option<String>,
     /// The applicant's postal code.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub postal_code: Option<String>,
     /// The applicant's country of residency.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub country_of_residency: Option<String>,
     /// When KYC finished.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kyc_completed_at: Option<DateTime<Utc>>,
     /// The IP address the applicant used.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ip_address: Option<String>,
     /// When the check started.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub check_initiated_at: Option<DateTime<Utc>>,
     /// When the check finished.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub check_completed_at: Option<DateTime<Utc>>,
     /// Whether the applicant was approved.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub approval_status: Option<CIPApprovalStatus>,
     /// Who approved them.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub approved_by: Option<String>,
     /// Why.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub approved_reason: Option<String>,
     /// When.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approved_at: Option<DateTime<Utc>>,
 }
 
+impl CIPKycInfo {
+    /// A record for the KYC verdict, identified by `id`, with every finding unset.
+    ///
+    /// This type is `#[non_exhaustive]`, so a caller assembling a
+    /// [`CIPInfo`] for upload builds it here and then sets the fields that
+    /// apply. Without a constructor `CIPInfo::new`'s own instruction — "set the
+    /// check fields that apply on the result" — could not be followed at all.
+    #[must_use]
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            ..Self::default()
+        }
+    }
+}
+
 /// The provider's checks on an identity document.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CIPDocument {
     /// The provider's id for this check.
     pub id: String,
     /// The overall result.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub result: Option<CIPResult>,
     /// Where the check is in its lifecycle.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub status: Option<CIPStatus>,
     /// When the check was created.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
     /// The date of birth on the document.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date_of_birth: Option<DateTime<Utc>>,
     /// When the document expires.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date_of_expiry: Option<DateTime<Utc>>,
     /// The numbers printed on the document.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub document_numbers: Option<Vec<String>>,
     /// What kind of document it is.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub document_type: Option<String>,
     /// The first name on the document.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub first_name: Option<String>,
     /// The last name on the document.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub last_name: Option<String>,
     /// The gender on the document.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub gender: Option<String>,
     /// The country that issued it.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub issuing_country: Option<String>,
     /// The nationality on the document.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub nationality: Option<String>,
     /// Whether the age checks out.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub age_validation: Option<CIPResult>,
     /// Whether the document is known to be compromised.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub compromised_document: Option<CIPResult>,
     /// Whether there is a police record against it.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub police_record: Option<CIPStatus>,
     /// Whether the data matches what was submitted.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub data_comparison: Option<CIPResult>,
     /// The detail behind that comparison.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub data_comparison_breakdown: Option<String>,
     /// Whether the image is intact.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub image_integrity: Option<CIPResult>,
     /// The detail behind that.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub image_integrity_breakdown: Option<String>,
     /// Whether the document looks genuine.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub visual_authenticity: Option<String>,
 }
 
+impl CIPDocument {
+    /// A record for the document check, identified by `id`, with every finding unset.
+    ///
+    /// This type is `#[non_exhaustive]`, so a caller assembling a
+    /// [`CIPInfo`] for upload builds it here and then sets the fields that
+    /// apply. Without a constructor `CIPInfo::new`'s own instruction — "set the
+    /// check fields that apply on the result" — could not be followed at all.
+    #[must_use]
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            ..Self::default()
+        }
+    }
+}
+
 /// The provider's checks on a submitted photo.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CIPPhoto {
     /// The provider's id for this check.
     pub id: String,
     /// The overall result.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub result: Option<CIPResult>,
     /// Where the check is in its lifecycle.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub status: Option<CIPStatus>,
     /// When the check was created.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
     /// Whether the face matches the document.
     ///
@@ -1120,101 +1525,248 @@ pub struct CIPPhoto {
     #[serde(
         default,
         rename = "face_comparision",
-        deserialize_with = "empty_string_as_none"
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
     )]
     pub face_comparison: Option<CIPResult>,
     /// The detail behind that comparison.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub face_comparison_breakdown: Option<String>,
     /// Whether the image is intact.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub image_integrity: Option<CIPResult>,
     /// The detail behind that.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub image_integrity_breakdown: Option<String>,
     /// Whether the photo looks genuine.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub visual_authenticity: Option<CIPResult>,
     /// The detail behind that.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub visual_authenticity_breakdown: Option<String>,
 }
 
+impl CIPPhoto {
+    /// A record for the photo check, identified by `id`, with every finding unset.
+    ///
+    /// This type is `#[non_exhaustive]`, so a caller assembling a
+    /// [`CIPInfo`] for upload builds it here and then sets the fields that
+    /// apply. Without a constructor `CIPInfo::new`'s own instruction — "set the
+    /// check fields that apply on the result" — could not be followed at all.
+    #[must_use]
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            ..Self::default()
+        }
+    }
+}
+
 /// The provider's checks against identity databases.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CIPIdentity {
     /// The provider's id for this check.
     pub id: String,
     /// The overall result.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub result: Option<CIPResult>,
     /// Where the check is in its lifecycle.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub status: Option<CIPStatus>,
     /// When the check was created.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
     /// Whether the address matched.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub matched_address: Option<CIPResult>,
     /// Which addresses matched.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub matched_addresses: Option<String>,
     /// Whether the sources agreed.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub sources: Option<CIPResult>,
     /// The detail behind that.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub sources_breakdown: Option<String>,
     /// Whether the address checks out.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub address: Option<CIPResult>,
     /// The detail behind that.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub address_breakdown: Option<String>,
     /// Whether the date of birth checks out.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub date_of_birth: Option<CIPResult>,
     /// The detail behind that.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub date_of_birth_breakdown: Option<String>,
     /// Whether the tax id checks out.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub tax_id: Option<CIPResult>,
     /// The detail behind that.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub tax_id_breakdown: Option<String>,
 }
 
+impl CIPIdentity {
+    /// A record for the identity-database check, identified by `id`, with every finding unset.
+    ///
+    /// This type is `#[non_exhaustive]`, so a caller assembling a
+    /// [`CIPInfo`] for upload builds it here and then sets the fields that
+    /// apply. Without a constructor `CIPInfo::new`'s own instruction — "set the
+    /// check fields that apply on the result" — could not be followed at all.
+    #[must_use]
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            ..Self::default()
+        }
+    }
+}
+
 /// The provider's checks against sanctions and watchlists.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CIPWatchlist {
     /// The provider's id for this check.
     pub id: String,
     /// The overall result.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub result: Option<CIPResult>,
     /// Where the check is in its lifecycle.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub status: Option<CIPStatus>,
     /// When the check was created.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
     /// The records that matched.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub records: Option<String>,
     /// Whether the applicant is politically exposed.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub politically_exposed_person: Option<CIPResult>,
     /// Whether they appear on a sanctions list.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub sanction: Option<CIPResult>,
     /// Whether there is adverse media about them.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub adverse_media: Option<CIPResult>,
     /// Whether they appear on a monitored list.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub monitored_lists: Option<CIPResult>,
+}
+
+impl CIPWatchlist {
+    /// A record for the watchlist check, identified by `id`, with every finding unset.
+    ///
+    /// This type is `#[non_exhaustive]`, so a caller assembling a
+    /// [`CIPInfo`] for upload builds it here and then sets the fields that
+    /// apply. Without a constructor `CIPInfo::new`'s own instruction — "set the
+    /// check fields that apply on the result" — could not be followed at all.
+    #[must_use]
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            ..Self::default()
+        }
+    }
 }
 
 /// A Customer Identification Program record for an account.
@@ -1227,6 +1779,7 @@ pub struct CIPWatchlist {
 /// ever met a real payload. They follow the broker spec. Treat a
 /// decode failure here as a bug report rather than a surprise.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CIPInfo {
     /// Alpaca's id for the record.
     pub id: Uuid,
@@ -1235,32 +1788,74 @@ pub struct CIPInfo {
     /// Which KYC providers the information came from.
     #[serde(
         default,
-        deserialize_with = "crate::types::serde_util::null_as_default"
+        deserialize_with = "crate::types::serde_util::null_as_default",
+        skip_serializing_if = "Vec::is_empty"
     )]
     pub provider_name: Vec<CIPProvider>,
     /// When the record was first uploaded.
-    pub created_at: DateTime<Utc>,
+    ///
+    /// `Option` because this type is both a response and an upload body, and on
+    /// the upload side the timestamps are Alpaca's to assign. A response always
+    /// carries them; a body built by [`CIPInfo::new`] does not, and omits them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<DateTime<Utc>>,
     /// When it last changed.
-    pub updated_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<DateTime<Utc>>,
     /// The KYC verdict.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kyc: Option<Box<CIPKycInfo>>,
     /// The document checks.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub document: Option<Box<CIPDocument>>,
     /// The photo checks.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub photo: Option<Box<CIPPhoto>>,
     /// The identity database checks.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity: Option<Box<CIPIdentity>>,
     /// The watchlist checks.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub watchlist: Option<Box<CIPWatchlist>>,
+}
+
+impl CIPInfo {
+    /// A record identified by `id` for `account_id`, with every check unset.
+    ///
+    /// This type is both a response and the body of
+    /// [`upload_cip_data_for_account_by_id`](crate::broker::BrokerClient::upload_cip_data_for_account_by_id), and it
+    /// is `#[non_exhaustive]` — so an uploading caller needs a way in that a
+    /// struct literal no longer provides. Set the check fields that apply on the
+    /// result; Alpaca fills the rest.
+    ///
+    /// `created_at` and `updated_at` are left unset and omitted from the body:
+    /// both are Alpaca's to assign, and inventing a timestamp to fill a required
+    /// field would put the client's clock into a KYC record.
+    ///
+    /// `provider_name` starts empty but is **yours to fill in** — the spec calls
+    /// it "list of KYC providers this information came from", which is a
+    /// statement by the correspondent who ran the checks. It is omitted only
+    /// while it is empty.
+    #[must_use]
+    pub fn new(id: Uuid, account_id: Uuid) -> Self {
+        Self {
+            id,
+            account_id,
+            provider_name: Vec::new(),
+            created_at: None,
+            updated_at: None,
+            kyc: None,
+            document: None,
+            photo: None,
+            identity: None,
+            watchlist: None,
+        }
+    }
 }
 
 /// Positions held across every account, as of the last market close.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AllAccountsPositions {
     /// When the snapshot was taken.
     pub as_of: DateTime<Utc>,

@@ -15,15 +15,12 @@
 
 use std::time::Duration;
 
+use crate::common::credentials;
 use alpaca_sdk::Credentials;
 use alpaca_sdk::data::{
     Channel, CryptoDataStream, CryptoFeed, DataFeed, NewsDataStream, OptionDataStream, OptionsFeed,
     StockDataStream,
 };
-
-fn credentials() -> Credentials {
-    Credentials::new("key", "secret").unwrap()
-}
 
 // ------------------------------------------------------------------ stocks
 
@@ -109,7 +106,7 @@ fn only_the_two_feeds_that_carry_a_live_stock_stream_are_accepted() {
 
 #[test]
 fn a_crypto_stream_carries_orderbooks_and_no_trading_statuses() {
-    let mut stream = CryptoDataStream::new(credentials(), CryptoFeed::Us);
+    let mut stream = CryptoDataStream::new(credentials(), CryptoFeed::Us).unwrap();
 
     stream.subscribe_trades(["BTC/USD"]);
     stream.subscribe_quotes(["BTC/USD"]);
@@ -137,7 +134,7 @@ fn a_crypto_stream_carries_orderbooks_and_no_trading_statuses() {
 
 #[test]
 fn an_option_stream_carries_trades_and_quotes_only() {
-    let mut stream = OptionDataStream::new(credentials(), OptionsFeed::Opra);
+    let mut stream = OptionDataStream::new(credentials(), OptionsFeed::Opra).unwrap();
 
     stream.subscribe_trades(["AAPL240119C00150000"]);
     stream.subscribe_quotes(["AAPL240119C00150000"]);
@@ -172,9 +169,9 @@ fn a_news_stream_carries_one_channel() {
 fn a_staleness_timeout_must_be_positive() {
     let mut stream = StockDataStream::new(credentials(), DataFeed::Iex).unwrap();
 
-    assert!(stream.data_timeout(Duration::from_secs(30)).is_ok());
+    assert!(stream.set_data_timeout(Duration::from_secs(30)).is_ok());
     // Zero would reconnect continuously rather than never.
-    assert!(stream.data_timeout(Duration::ZERO).is_err());
+    assert!(stream.set_data_timeout(Duration::ZERO).is_err());
 }
 
 /// Every stream takes an explicit endpoint, which is what the mock-server tests
@@ -198,4 +195,47 @@ fn every_stream_can_be_pointed_somewhere_else() {
     let mut news = NewsDataStream::with_endpoint(credentials(), endpoint);
     news.subscribe_news(["*"]);
     assert!(!news.subscriptions().is_empty());
+}
+
+// ------------------------------------------------------------ feed guards
+
+/// A `wire_enum!`'s `Unknown(String)` variant is publicly constructible, so an
+/// unrecognised feed name would otherwise be interpolated straight into the
+/// websocket endpoint URL — the same hazard the REST path encoder exists for.
+/// There is no live stream behind a feed this crate does not know, so refusing
+/// loses nothing.
+#[test]
+fn an_unknown_feed_is_refused_rather_than_put_in_the_endpoint() {
+    let creds = || Credentials::new("key", "secret").unwrap();
+
+    let crypto = CryptoDataStream::new(creds(), CryptoFeed::from("../../v2/account"));
+    assert!(
+        matches!(crypto, Err(alpaca_sdk::Error::InvalidRequest(_))),
+        "an unknown crypto feed must not reach the endpoint URL"
+    );
+
+    let options = OptionDataStream::new(creds(), OptionsFeed::from("../../v2/account"));
+    assert!(
+        matches!(options, Err(alpaca_sdk::Error::InvalidRequest(_))),
+        "an unknown options feed must not reach the endpoint URL"
+    );
+
+    // And a stock feed that is known but has no live stream is refused too.
+    assert!(StockDataStream::new(creds(), DataFeed::Otc).is_err());
+}
+
+/// The known feeds still build.
+///
+/// The test above refuses an unknown feed; on its own, a `known_feed` that
+/// refused *everything* would satisfy it. This is the other half, and the pair
+/// is what pins the boundary rather than one side of it.
+#[test]
+fn the_known_feeds_still_construct() {
+    let creds = || Credentials::new("key", "secret").unwrap();
+
+    assert!(CryptoDataStream::new(creds(), CryptoFeed::Us).is_ok());
+    assert!(OptionDataStream::new(creds(), OptionsFeed::Opra).is_ok());
+    assert!(OptionDataStream::new(creds(), OptionsFeed::Indicative).is_ok());
+    assert!(StockDataStream::new(creds(), DataFeed::Iex).is_ok());
+    assert!(StockDataStream::new(creds(), DataFeed::Sip).is_ok());
 }

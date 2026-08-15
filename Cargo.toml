@@ -1,6 +1,6 @@
 [package]
 name = "alpaca-sdk"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Unofficial Rust SDK for the Alpaca trading, market data, and broker APIs"
@@ -8,17 +8,18 @@ authors = ["Phillip Simons <phillip@simons.gg>"]
 license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/phillip-simons/alpaca-sdk"
+homepage = "https://github.com/phillip-simons/alpaca-sdk"
 documentation = "https://docs.rs/alpaca-sdk"
 keywords = ["alpaca", "trading", "stocks", "crypto", "finance"]
 categories = ["api-bindings", "finance"]
 # `fixtures/` is deliberately included: `tests/` ships too, and every one of
 # those tests reads a captured payload out of it at runtime. Shipping tests
-# that cannot run would be worse than shipping neither. It costs 135KB.
+# that cannot run would be worse than shipping neither. It costs 232KiB.
 #
 # What is excluded is what cannot work, or has no meaning, outside a clone:
 # `scripts/` needs other SDKs' checkouts and downloaded specs, `RELEASING.md`
 # describes publishing this crate, and `.github/` is CI.
-exclude = [".github/", "scripts/", "RELEASING.md"]
+exclude = [".github/", ".githooks/", "scripts/", "RELEASING.md"]
 
 [features]
 default = ["trading", "data", "rustls-tls"]
@@ -54,11 +55,19 @@ base64 = "0.23.1"
 chrono = { version = "0.4.45", features = ["serde"] }
 eventsource-stream = { version = "0.2.3", optional = true }
 futures-util = "0.3.34"
+percent-encoding = "2.3"
 # No `lazy`. Nothing here needs it, it is the expensive half of polars to
 # compile, and a caller doing frame work depends on polars directly anyway — so
 # they enable it themselves and cargo unifies the two.
+#
+# `fmt_no_tty` is here for the opposite reason: without it a `DataFrame` prints
+# its shape and then "to see more, compile with the 'fmt' or 'fmt_no_tty'
+# feature", every cell suppressed — including in this crate's own `ToFrame`
+# example. `fmt_no_tty` rather than `fmt` because the difference between them is
+# terminal-width detection, which a library has no business doing.
 polars = { version = "0.55.2", default-features = false, features = [
     "dtype-full",
+    "fmt_no_tty",
 ], optional = true }
 rand = "0.10.2"
 reqwest = { version = "0.13.4", default-features = false, features = [
@@ -85,7 +94,6 @@ uuid = { version = "1.24.0", features = ["serde", "v4"] }
 rustc_version = "0.4.1"
 
 [dev-dependencies]
-pretty_assertions = "1.4.1"
 rmp-serde = "1.3.1"
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros"] }
 wiremock = "0.6.5"
@@ -107,7 +115,15 @@ required-features = ["data"]
 
 [lints.rust]
 unsafe_code = "forbid"
-missing_docs = "warn"
+# `deny`, not `warn`. Every gate that matters already passes `-D warnings` —
+# the justfile exports it for every recipe and ci.yml sets it workflow-wide —
+# so as a practical matter this was already an error along every path either
+# of those covers, `just features` included. What `deny` adds is that the rule
+# stops depending on how the compiler was invoked: a plain `cargo check` or
+# `cargo build`, run by hand outside the harness, now enforces it too. A public
+# item with no documentation is a defect in a published crate whoever asked
+# the compiler to look.
+missing_docs = "deny"
 
 [lints.clippy]
 doc_markdown = "warn"
@@ -115,5 +131,8 @@ must_use_candidate = "allow"
 module_name_repetitions = "allow"
 
 [package.metadata.docs.rs]
-all-features = true
+# Not `all-features`: it enables both TLS backends at once, against the "pick
+# exactly one" rule above, and lists the internal `_ws`/`_sse` features in the
+# sidebar as though a caller were meant to reach for them.
+features = ["trading", "data", "broker", "blocking", "polars", "rustls-tls"]
 rustdoc-args = ["--cfg", "docsrs"]

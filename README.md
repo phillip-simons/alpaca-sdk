@@ -2,7 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/alpaca-sdk.svg)](https://crates.io/crates/alpaca-sdk)
 [![docs.rs](https://docs.rs/alpaca-sdk/badge.svg)](https://docs.rs/alpaca-sdk)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/phillip-simons/alpaca-sdk/blob/main/LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.88-blue.svg)](#minimum-supported-rust-version)
 
 Unofficial Rust SDK for the [Alpaca](https://alpaca.markets) trading, market
@@ -14,7 +14,7 @@ distinction is the point of the crate, and [what it means in practice](#how-this
 is written down below.
 
 > **Unofficial.** Not affiliated with, endorsed by, or sponsored by Alpaca
-> Securities LLC. See [NOTICE](NOTICE).
+> Securities LLC. See [NOTICE](https://github.com/phillip-simons/alpaca-sdk/blob/main/NOTICE).
 
 ## Install
 
@@ -119,7 +119,7 @@ use futures_util::StreamExt as _;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mut stream = CryptoDataStream::new(Credentials::from_env()?, CryptoFeed::Us);
+    let mut stream = CryptoDataStream::new(Credentials::from_env()?, CryptoFeed::Us)?;
     stream.subscribe_trades(["BTC/USD"]);
 
     let mut messages = Box::pin(stream.run());
@@ -148,6 +148,11 @@ async fn main() -> Result<()> {
 | `rustls-tls` | ✅ | TLS via rustls |
 | `native-tls` | | TLS via the platform library |
 
+**Exactly one TLS backend is required.** None of `trading`, `data` or `broker`
+implies one, so turning off default features without naming `rustls-tls` or
+`native-tls` fails the build — rather than compiling into a client that fails
+every HTTPS request at runtime.
+
 Streams stay async even under `blocking`: a blocking iterator over a live feed
 deadlocks as soon as the caller is slower than the socket's read buffer.
 
@@ -168,10 +173,13 @@ The decisions a caller actually runs into, and why each one is the way it is.
 - **Unknown response fields are ignored**, for the same reason.
 - **Paginated endpoints offer two methods.** `get_x` fetches one page;
   `get_all_x` walks every page, with an optional cap.
-- **Request structs are `#[non_exhaustive]`.** Build one with `new` or
-  `default` and assign fields:
+- **Request structs are `#[non_exhaustive]`.** Build one with the constructor
+  the type provides — `new`, `default`, or a named one like the
+  `OrderRequest::limit` in the example above — and assign fields:
 
-  ```rust
+  ```rust,no_run
+  use alpaca_sdk::trading::GetOrdersRequest;
+
   let mut filter = GetOrdersRequest::default();
   filter.limit = Some(50);
   ```
@@ -182,12 +190,19 @@ The decisions a caller actually runs into, and why each one is the way it is.
   attempts after the first, ~1s doubling to a 30s ceiling with jitter. A
   response carrying `Retry-After` overrides that curve, clamped to the same
   ceiling.
+
+  **A request that acts is never replayed.** A 504 means the gateway stopped
+  waiting for the answer, not that nothing happened — so `submit_order`,
+  `create_journal`, and the position-closing routes are reported rather than
+  retried, whatever the status list says. Only a 429 is replayed regardless,
+  because the rate limiter refuses the request before anything acts on it. If
+  you re-issue one of these yourself, that is the same hazard in your own hands.
 - **`request_raw` is the escape hatch** for routes this crate does not wrap. The
   transport is public and hands back the body undecoded.
 
 ## How this is verified
 
-Alpaca publishes an API reference, vendors OpenAPI specs, and ships five SDKs —
+Alpaca publishes an API reference, vendors `OpenAPI` specs, and ships five SDKs —
 and they do not always agree. This crate ranks its sources by how close each is
 to the wire:
 
@@ -199,11 +214,11 @@ That order is not academic. Three event streams were in the specs, looked
 healthy from the crate's side, and had been switched off; the reference was the
 only source that said so.
 
-`fixtures/` holds 135 real API responses, and every model is checked against
+`fixtures/` holds 224 real API responses, and every model is checked against
 them. `just coverage`, `just parameters` and `just enums-drift` diff this crate
 against the specs and the reference by machine, because reading does not scale
 to 251 routes — each of the three found something a careful read had missed.
-Route results are checked in at [COVERAGE.md](COVERAGE.md).
+Route results are checked in at [COVERAGE.md](https://github.com/phillip-simons/alpaca-sdk/blob/main/COVERAGE.md).
 
 ### What is *not* verified against a live server
 
@@ -219,7 +234,7 @@ built:
   that reaches SIP; they are per-product entitlements.
 
 Treat a decode failure on a first real payload in those areas as expected work
-rather than a regression — and please [report it](.github/CONTRIBUTING.md#reporting-a-bug)
+rather than a regression — and please [report it](https://github.com/phillip-simons/alpaca-sdk/blob/main/.github/CONTRIBUTING.md#reporting-a-bug)
 with the raw body.
 
 ## Minimum supported Rust version
@@ -229,15 +244,15 @@ by default — a convenience feature does not get to set the crate's floor.
 
 ## Contributing
 
-See [CONTRIBUTING.md](.github/CONTRIBUTING.md). The most useful contribution is
+See [CONTRIBUTING.md](https://github.com/phillip-simons/alpaca-sdk/blob/main/.github/CONTRIBUTING.md). The most useful contribution is
 usually a captured API response or a precise bug report rather than a large
-patch. Security issues: [SECURITY.md](.github/SECURITY.md).
+patch. Security issues: [SECURITY.md](https://github.com/phillip-simons/alpaca-sdk/blob/main/.github/SECURITY.md).
 
-Release notes are in [CHANGELOG.md](CHANGELOG.md).
+Release notes are in [CHANGELOG.md](https://github.com/phillip-simons/alpaca-sdk/blob/main/CHANGELOG.md).
 
 ## License
 
-Apache-2.0. This crate derives from Apache-2.0 works; see [NOTICE](NOTICE).
+Apache-2.0. This crate derives from Apache-2.0 works; see [NOTICE](https://github.com/phillip-simons/alpaca-sdk/blob/main/NOTICE).
 
 [docs]: https://docs.alpaca.markets/us/reference/
 [rate-limits]: https://docs.alpaca.markets/us/docs/broker-api-rate-limits

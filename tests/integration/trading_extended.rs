@@ -15,31 +15,15 @@ use alpaca_sdk::trading::{
     ActivityCategory, ActivityType, CreateLocateRequest, CreateWhitelistedAddressRequest,
     CryptoChain, GetAccountActivitiesRequest, GetLocateQuotesRequest, GetLocatesRequest,
     LocateStatus, Market, MintTokenRequest, TokenizationIssuer, TokenizationNetwork,
-    TokenizationStatus, TradingClient, UpdateWatchlistRequest, WhitelistStatus,
+    TokenizationStatus, UpdateWatchlistRequest, WhitelistStatus,
 };
 use alpaca_sdk::types::{AssetIdent, Sort};
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
+use crate::common::{fixture, trading_client as client};
 use rust_decimal::Decimal;
 use serde_json::json;
 use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-fn client(server: &MockServer) -> TradingClient {
-    TradingClient::with_config(
-        &Credentials::new("key", "secret").unwrap(),
-        RestConfig::new(server.uri()).retry(RetryConfig::none()),
-    )
-    .unwrap()
-}
 
 // --------------------------------------------------------------- locates
 

@@ -7,14 +7,14 @@
 
 #![cfg(feature = "broker")]
 
+use crate::common::{broker_client as client, fixture};
 use alpaca_sdk::broker::{
-    ACHRelationship, ACHRelationshipStatus, Bank, BankAccountType, BankAddress, BrokerClient,
+    ACHRelationship, ACHRelationshipStatus, Bank, BankAccountType, BankAddress,
     CreateACHRelationshipRequest, CreateACHTransferRequest, CreateBankRequest,
     CreateBankTransferRequest, CreateTransferRequest, FeePaymentMethod, GetTransfersRequest,
     IdentifierType, ManualACHRelationship, PlaidACHRelationship, Transfer, TransferDirection,
     TransferStatus, TransferTiming, TransferType,
 };
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use rust_decimal::Decimal;
 use serde_json::json;
 use uuid::Uuid;
@@ -26,29 +26,21 @@ const RELATIONSHIP_ID: &str = "0f08c6bc-8e9f-463d-a73f-fd047fdb5e94";
 const BANK_ID: &str = "9a7fb9b5-1f4d-420f-b6d4-0fd32008cec8";
 const TRANSFER_ID: &str = "be3c368a-4c7c-4384-808e-f02c9f5a8afe";
 
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
-
 fn parse<T: serde::de::DeserializeOwned>(name: &str) -> T {
     let value = fixture(name);
     serde_json::from_value(value.clone()).unwrap_or_else(|e| panic!("{name}: {e}\n{value:#}"))
 }
 
-fn client(server: &MockServer) -> BrokerClient {
-    let credentials = Credentials::new("broker-key", "broker-secret").unwrap();
-    BrokerClient::with_config(
-        &credentials,
-        RestConfig::new(server.uri())
-            .api_version("v1")
-            .retry(RetryConfig::none()),
-    )
-    .unwrap()
+/// `BankAddress` is `#[non_exhaustive]` and all five fields are `String`, so it
+/// is filled in by name rather than positionally — which is the point.
+fn bank_address() -> BankAddress {
+    let mut address = BankAddress::default();
+    address.country = "USA".to_owned();
+    address.state_province = "CA".to_owned();
+    address.postal_code = "94401".to_owned();
+    address.city = "San Mateo".to_owned();
+    address.street_address = "20 N San Mateo Dr".to_owned();
+    address
 }
 
 fn account_id() -> Uuid {
@@ -91,13 +83,12 @@ async fn creating_an_ach_relationship_takes_bank_details_or_a_plaid_token() {
     client(&server)
         .create_ach_relationship_for_account(
             account_id(),
-            &CreateACHRelationshipRequest::Manual(ManualACHRelationship {
-                account_owner_name: "John Doe".to_owned(),
-                bank_account_type: BankAccountType::Savings,
-                bank_account_number: "123456789abc".to_owned(),
-                bank_routing_number: "123456789".to_owned(),
-                nickname: None,
-            }),
+            &CreateACHRelationshipRequest::Manual(ManualACHRelationship::new(
+                "John Doe",
+                BankAccountType::Savings,
+                "123456789abc",
+                "123456789",
+            )),
         )
         .await
         .unwrap();
@@ -119,9 +110,9 @@ async fn creating_an_ach_relationship_takes_bank_details_or_a_plaid_token() {
     client(&server)
         .create_ach_relationship_for_account(
             account_id(),
-            &CreateACHRelationshipRequest::Plaid(PlaidACHRelationship {
-                processor_token: "processor-sandbox-abc".to_owned(),
-            }),
+            &CreateACHRelationshipRequest::Plaid(PlaidACHRelationship::new(
+                "processor-sandbox-abc",
+            )),
         )
         .await
         .unwrap();
@@ -221,18 +212,8 @@ fn a_domestic_bank_may_not_carry_an_address_and_an_international_one_must() {
     domestic.city = Some("San Mateo".to_owned());
     assert!(domestic.validate().is_err());
 
-    let international = CreateBankRequest::international(
-        "My Bank",
-        "BOFAUS3N",
-        "123456789abc",
-        BankAddress {
-            country: "USA".to_owned(),
-            state_province: "CA".to_owned(),
-            postal_code: "94401".to_owned(),
-            city: "San Mateo".to_owned(),
-            street_address: "20 N San Mateo Dr".to_owned(),
-        },
-    );
+    let international =
+        CreateBankRequest::international("My Bank", "BOFAUS3N", "123456789abc", bank_address());
     assert!(international.validate().is_ok());
 
     // The reference marks every one of the five address fields optional, so an
@@ -410,9 +391,23 @@ async fn a_non_positive_transfer_never_reaches_the_network() {
     assert!(server.received_requests().await.unwrap().is_empty());
 }
 
-fn transfer_page(count: usize) -> serde_json::Value {
+/// A page of `count` distinct transfers, numbered from `first`.
+///
+/// The ids have to differ. The walk drops a transfer it has already collected,
+/// because a server that ignores `offset` and repeats a page is otherwise
+/// indistinguishable from one with more to give — so a page of clones would
+/// arrive as a single transfer and test nothing about paging.
+fn transfer_page(first: usize, count: usize) -> serde_json::Value {
     let one = fixture("broker/test_funding_routes__test_create_transfer_for_account__01.json");
-    serde_json::Value::Array(vec![one; count])
+    serde_json::Value::Array(
+        (first..first + count)
+            .map(|n| {
+                let mut transfer = one.clone();
+                transfer["id"] = json!(format!("00000000-0000-4000-8000-{n:012}"));
+                transfer
+            })
+            .collect(),
+    )
 }
 
 #[tokio::test]
@@ -423,14 +418,14 @@ async fn walking_the_transfer_pages_stops_on_the_first_empty_one() {
     Mock::given(method("GET"))
         .and(path(format!("/v1/accounts/{ACCOUNT_ID}/transfers")))
         .and(query_param("offset", "0"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(2)))
+        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(0, 2)))
         .expect(1)
         .mount(&server)
         .await;
     Mock::given(method("GET"))
         .and(path(format!("/v1/accounts/{ACCOUNT_ID}/transfers")))
         .and(query_param("offset", "2"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(1)))
+        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(2, 1)))
         .expect(1)
         .mount(&server)
         .await;
@@ -456,7 +451,7 @@ async fn max_items_truncates_mid_page_and_stops_requesting() {
     Mock::given(method("GET"))
         .and(path(format!("/v1/accounts/{ACCOUNT_ID}/transfers")))
         .and(query_param("offset", "0"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(5)))
+        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(0, 5)))
         .expect(1)
         .mount(&server)
         .await;
@@ -481,7 +476,7 @@ async fn one_page_of_transfers_honours_the_filter_as_given() {
         .and(query_param("direction", "INCOMING"))
         .and(query_param("limit", "10"))
         .and(query_param("offset", "20"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(1)))
+        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(0, 1)))
         .expect(1)
         .mount(&server)
         .await;
@@ -515,4 +510,28 @@ async fn cancelling_a_transfer_tolerates_an_empty_body() {
         .cancel_transfer_for_account(account_id(), Uuid::parse_str(TRANSFER_ID).unwrap())
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn the_transfers_walk_stops_when_the_server_ignores_the_offset() {
+    // This route has no token and no total, so an empty page is the only ending
+    // it can express. A server that ignores `offset` never sends one — the walk
+    // has to notice for itself that it has stopped learning anything.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/accounts/{ACCOUNT_ID}/transfers")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(transfer_page(0, 2)))
+        .mount(&server)
+        .await;
+
+    let transfers = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        client(&server).get_all_transfers_for_account(account_id(), None, None),
+    )
+    .await
+    .expect("the transfers walk never terminated against a server that ignores the offset")
+    .unwrap();
+
+    assert_eq!(transfers.len(), 2);
+    assert_eq!(server.received_requests().await.unwrap().len(), 2);
 }

@@ -112,10 +112,41 @@ pub(crate) async fn get_marketdata<Q: Serialize>(
     rest: &RestClient,
     request: &MarketDataRequest<'_>,
     query: &Q,
-) -> Result<Map<String, Value>> {
+) -> Result<Merged> {
     // Round-trip the caller's request through a map so the loop can override
     // `limit` and `page_token` per page.
     let mut params = to_param_map(query)?;
+
+    // An empty symbol list serializes to `symbols=`, which is a round trip to
+    // ask the API about nothing. `Symbols` cannot refuse this at construction —
+    // it is built through `From`, which is infallible — so it is caught here,
+    // once, for every route rather than per request type.
+    //
+    // Both representations have to be checked. `Symbols` is
+    // `#[serde(transparent)]` over `Vec<String>`, so it arrives here as a
+    // `Value::Array` and is only joined into a string later by `stringify`;
+    // the request types that carry a plain comma-separated field arrive as a
+    // `Value::String`. A guard that tested only the string form would be dead
+    // code that reads as correct.
+    //
+    // And both *keys*: the forex requests rename the same `Symbols` field to
+    // `currency_pairs` and go through this same loop, so checking `symbols`
+    // alone left half the hazard open.
+    for key in ["symbols", "currency_pairs"] {
+        let Some(value) = params.get(key) else {
+            continue;
+        };
+        let empty = match value {
+            Value::Array(items) => items.is_empty(),
+            Value::String(text) => text.is_empty(),
+            _ => false,
+        };
+        if empty {
+            return Err(Error::InvalidRequest(format!(
+                "at least one entry is required in `{key}`"
+            )));
+        }
+    }
 
     let user_limit = params
         .get("limit")
@@ -220,7 +251,23 @@ pub(crate) async fn get_marketdata<Q: Serialize>(
         merged.insert(key, Value::Array(items));
     }
 
-    Ok(merged)
+    Ok(Merged {
+        path: request.path.to_owned(),
+        data: merged,
+    })
+}
+
+/// A merged multi-page payload, together with the endpoint it came from.
+///
+/// The path travels with the data so a decode failure downstream can name the
+/// route rather than the map key it happened to be under.
+/// [`Error::Decode`](crate::Error::Decode) documents `path` as the request path,
+/// and the deserializing helpers had nothing else to hand it.
+pub(crate) struct Merged {
+    /// The endpoint the payload was read from.
+    pub path: String,
+    /// The merged response body, keyed by symbol or by payload key.
+    pub data: Map<String, Value>,
 }
 
 /// Locates the payload within a response.

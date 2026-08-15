@@ -5,35 +5,24 @@
 
 use std::collections::HashMap;
 
+use crate::common::{credentials, fixture};
 use alpaca_sdk::data::{
     CorporateActionsClient, CorporateActionsRequest, CryptoBarsRequest, CryptoFeed,
-    CryptoHistoricalDataClient, CryptoLatestRequest, MarketMoversRequest, MarketType,
-    MostActivesRequest, NewsClient, NewsRequest, OptionChainRequest, OptionHistoricalDataClient,
-    OptionLatestRequest, ScreenerClient, StockBarsRequest, StockHistoricalDataClient,
-    StockLatestRequest, TimeFrame, TimeFrameUnit,
+    CryptoHistoricalDataClient, CryptoLatestRequest, ForexDataClient, ForexRatesRequest,
+    MarketMoversRequest, MarketType, MostActivesRequest, NewsClient, NewsRequest,
+    OptionChainRequest, OptionHistoricalDataClient, OptionLatestRequest, ScreenerClient,
+    SingleSymbolRequest, StockBarsRequest, StockHistoricalDataClient, StockLatestRequest,
+    TimeFrame, TimeFrameUnit,
 };
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
+use alpaca_sdk::{RestConfig, RetryConfig};
 use serde_json::json;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
 
 fn config(server: &MockServer, version: &str) -> RestConfig {
     RestConfig::new(server.uri())
         .api_version(version)
         .retry(RetryConfig::none())
-}
-
-fn credentials() -> Credentials {
-    Credentials::new("key", "secret").unwrap()
 }
 
 fn stock_client(server: &MockServer) -> StockHistoricalDataClient {
@@ -645,4 +634,299 @@ async fn timeframe_serializes_into_the_query() {
         .get_stock_bars(&request)
         .await
         .unwrap();
+}
+
+// ------------------------------------------------------- absent symbols
+//
+// A multi-symbol request returns one key per symbol, and Alpaca answers `null`
+// for a symbol it has nothing for. That used to propagate a decode error and
+// discard the whole response — every good symbol with it.
+
+/// Driven by a captured payload that ships in this crate:
+/// `fixtures/go/marketdata__test_snapshots__01.json` carries `"INVALID": null`
+/// beside a valid AAPL and MSFT. A request takes up to 100 symbols, so one
+/// delisted ticker used to make the entire batch unusable.
+#[tokio::test]
+async fn a_null_symbol_is_skipped_rather_than_failing_the_whole_response() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v2/stocks/snapshots"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixture("go/marketdata__test_snapshots__01.json")),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let request = alpaca_sdk::data::StockSnapshotRequest::new(["AAPL", "INVALID", "MSFT"]);
+    let snapshots = stock_client(&server)
+        .get_stock_snapshot(&request)
+        .await
+        .expect("a null entry must not fail the response");
+
+    assert_eq!(
+        snapshots.len(),
+        2,
+        "expected AAPL and MSFT, got {snapshots:?}"
+    );
+    assert!(snapshots.contains_key("AAPL"));
+    assert!(snapshots.contains_key("MSFT"));
+    assert!(
+        !snapshots.contains_key("INVALID"),
+        "an absent symbol should be omitted, not present as an empty value"
+    );
+}
+
+/// The other half of the contract: a value that is genuinely the wrong *shape*
+/// must still be an error, and must carry enough to diagnose it. `body` used to
+/// be the empty string, so the one field documented as "the raw payload, so the
+/// mismatch can be diagnosed without re-issuing" carried nothing.
+#[tokio::test]
+async fn a_malformed_symbol_entry_still_errors_and_names_the_route() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v2/stocks/snapshots"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"AAPL": 42})))
+        .mount(&server)
+        .await;
+
+    let request = alpaca_sdk::data::StockSnapshotRequest::new(["AAPL"]);
+    let err = stock_client(&server)
+        .get_stock_snapshot(&request)
+        .await
+        .unwrap_err();
+
+    match err {
+        alpaca_sdk::Error::Decode { path, body, .. } => {
+            assert_eq!(path, "/stocks/snapshots", "path should name the route");
+            assert!(
+                body.contains("AAPL"),
+                "body should carry the payload, got {body:?}"
+            );
+        }
+        other => panic!("expected Decode, got {other:?}"),
+    }
+}
+
+/// A minimal cash dividend carrying every field the model requires.
+fn dividend(symbol: &str, ex_date: &str) -> serde_json::Value {
+    json!({
+        "symbol": symbol,
+        "cusip": "037833100",
+        "rate": 0.24,
+        "special": false,
+        "foreign": false,
+        "process_date": ex_date,
+        "ex_date": ex_date
+    })
+}
+
+/// `limit` caps the total across all pages, and the corporate-actions endpoint
+/// serves 1,000 per page — so a default of 1,000 filled the cap with page one
+/// and ended the walk there, discarding a `next_page_token` the request type has
+/// no field to send back.
+///
+/// Page one therefore has to be **full**. A single dividend on page one would
+/// leave 999 of the cap unspent and follow the token whatever the default was,
+/// so the test would pass against the bug it is named for.
+#[tokio::test]
+async fn corporate_actions_walk_past_the_first_full_page_by_default() {
+    // The endpoint's own page size, and the value the default `limit` used to be.
+    const PAGE: usize = 1000;
+
+    let full_page: Vec<serde_json::Value> = (0..PAGE)
+        .map(|i| dividend(&format!("SYM{i}"), "2024-01-02"))
+        .collect();
+
+    let server = MockServer::start().await;
+
+    // Page two, reached only if the walk did not stop at the cap.
+    Mock::given(method("GET"))
+        .and(path("/v1/corporate-actions"))
+        .and(query_param("page_token", "page2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "corporate_actions": {"cash_dividends": [dividend("MSFT", "2024-01-03")]},
+            "next_page_token": null
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/corporate-actions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "corporate_actions": {"cash_dividends": full_page},
+            "next_page_token": "page2"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client =
+        CorporateActionsClient::with_config(&credentials(), config(&server, "v1")).unwrap();
+    let actions = client
+        .get_corporate_actions(&CorporateActionsRequest::new())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        actions.cash_dividends.len(),
+        PAGE + 1,
+        "the second page was not fetched: the walk stopped at the first full page"
+    );
+}
+
+// ------------------------------------------------- locally-refused requests
+
+/// An empty symbol list is a request to ask the API about nothing, and it is
+/// refused before any HTTP happens.
+///
+/// The obvious guard — `params["symbols"].as_str() == ""` — can never fire:
+/// `Symbols` is `#[serde(transparent)]` over `Vec<String>`, so it reaches the
+/// check as a `Value::Array` and is only joined into a string later. Without a
+/// test, that version of the guard looks correct and does nothing.
+#[tokio::test]
+async fn an_empty_symbol_list_never_reaches_the_network() {
+    let server = MockServer::start().await;
+    // No mock is mounted: reaching the server at all is the failure.
+
+    let request = StockBarsRequest::new(Vec::<String>::new(), TimeFrame::day());
+    let err = stock_client(&server)
+        .get_stock_bars(&request)
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, alpaca_sdk::Error::InvalidRequest(_)),
+        "expected InvalidRequest, got {err:?}"
+    );
+    assert!(
+        server.received_requests().await.unwrap().is_empty(),
+        "an empty symbol list must not reach the network"
+    );
+}
+
+/// The same hazard under the other key: the forex requests rename the same
+/// `Symbols` field to `currency_pairs`, so a guard that only checked `symbols`
+/// left half of it open.
+#[tokio::test]
+async fn an_empty_currency_pair_list_never_reaches_the_network() {
+    let server = MockServer::start().await;
+
+    let client = ForexDataClient::with_config(&credentials(), config(&server, "v1beta1")).unwrap();
+    let err = client
+        .get_forex_rates(&ForexRatesRequest::new(Vec::<String>::new()))
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, alpaca_sdk::Error::InvalidRequest(_)),
+        "expected InvalidRequest, got {err:?}"
+    );
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+/// The two path routes whose symbol is interpolated from a request *field*
+/// rather than a bare argument — which is why the first encoding sweep, driven
+/// by a pattern over `format!("…{name}")`, missed both.
+#[tokio::test]
+async fn a_slashed_underlying_symbol_stays_one_path_segment() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1beta1/options/snapshots/BRK%2FA"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"snapshots": {}})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client =
+        OptionHistoricalDataClient::with_config(&credentials(), config(&server, "v1beta1"))
+            .unwrap();
+    client
+        .get_option_chain(&OptionChainRequest::new("BRK/A"))
+        .await
+        .unwrap();
+}
+
+/// `MarketType` is a `wire_enum!`, so `Unknown(String)` is publicly
+/// constructible and its `as_str()` hands back the caller's own text — which
+/// went straight into the screener path.
+#[tokio::test]
+async fn an_unknown_market_type_cannot_escape_its_path_segment() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(404).set_body_json(json!({})))
+        .mount(&server)
+        .await;
+
+    let client = ScreenerClient::with_config(&credentials(), config(&server, "v1beta1")).unwrap();
+    let request = MarketMoversRequest::new(10, MarketType::from("../../v2/account"));
+    let _ = client.get_market_movers(&request).await;
+
+    let received = &server.received_requests().await.unwrap()[0];
+    assert_eq!(
+        received.url.path(),
+        "/v1beta1/screener/..%2F..%2Fv2%2Faccount/movers",
+        "the market type must stay inside its own segment"
+    );
+}
+
+/// The same rule on the *multi-symbol list* path, which is the shape the
+/// shipped fixture actually has.
+///
+/// `into_sets` and `into_latest` are separate helpers with separate call sites,
+/// and only the latter was covered — so half the fix could have been deleted
+/// without a test noticing.
+#[tokio::test]
+async fn a_null_symbol_is_skipped_on_the_multi_symbol_list_path() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v2/stocks/bars"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "bars": {
+                "AAPL": [{
+                    "t": "2024-04-26T13:30:00Z",
+                    "o": 1.0, "h": 2.0, "l": 0.5, "c": 1.5, "v": 100.0
+                }],
+                "INVALID": null
+            },
+            "next_page_token": null
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let request = StockBarsRequest::new(["AAPL", "INVALID"], TimeFrame::day());
+    let bars = stock_client(&server)
+        .get_stock_bars(&request)
+        .await
+        .expect("a null entry must not fail the response");
+
+    assert_eq!(bars.len(), 1, "expected only AAPL, got {bars:?}");
+    assert!(bars.contains_key("AAPL"));
+}
+
+/// And on the single-symbol path, where the payload sits under a key rather than
+/// being keyed by symbol.
+#[tokio::test]
+async fn a_null_payload_is_an_empty_result_on_the_single_symbol_path() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v2/stocks/INVALID/bars"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "symbol": "INVALID",
+            "bars": null,
+            "next_page_token": null
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let bars = stock_client(&server)
+        .get_stock_bars_for_symbol("INVALID", &SingleSymbolRequest::new())
+        .await
+        .expect("a null payload is an empty result, not a decode failure");
+
+    assert!(bars.is_empty(), "expected no bars, got {bars:?}");
 }

@@ -84,6 +84,7 @@ wire_enum! {
 
 /// An options level approval request and its outcome.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OptionsApproval {
     /// Alpaca's identifier for the request.
     #[serde(default)]
@@ -115,6 +116,7 @@ pub struct OptionsApproval {
 
 /// A page of options approval requests.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OptionsApprovalsPage {
     /// The requests.
     #[serde(
@@ -194,6 +196,7 @@ impl GetOptionsApprovalsRequest {
 
 /// A token for Onfido's client-side identity-verification SDK.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OnfidoToken {
     /// The token to hand the SDK.
     #[serde(default)]
@@ -227,6 +230,7 @@ pub struct UpdateOnfidoOutcomeRequest {
 
 impl UpdateOnfidoOutcomeRequest {
     /// Reports `outcome` for the verification run under `token`.
+    #[must_use]
     pub fn new(token: impl Into<String>, outcome: impl Into<String>) -> Self {
         Self {
             token: token.into(),
@@ -245,6 +249,7 @@ impl UpdateOnfidoOutcomeRequest {
 
 /// What Alpaca will serve in one country.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CountryInfo {
     /// The country's name.
     pub full_name: String,
@@ -262,6 +267,7 @@ pub struct CountryInfo {
 
 /// An over-contribution to an IRA, which has to be returned.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct IraExcessContribution {
     /// The account.
     #[serde(default)]
@@ -276,38 +282,40 @@ pub struct IraExcessContribution {
 
 /// The USD leg of an account's trading limits.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TradingLimitsUsd {
     /// The ceiling for the day.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub daily_net_limit: Option<Decimal>,
     /// How much is committed.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub used: Option<Decimal>,
     /// How much is left.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub available: Option<Decimal>,
     /// How much is held against open orders.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub held: Option<Decimal>,
 }
 
 /// What an account may still trade today.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TradingLimits {
     /// The ceiling for the day.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub daily_net_limit: Option<Decimal>,
     /// How much is committed.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub used: Option<Decimal>,
     /// How much is left.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub available: Option<Decimal>,
     /// How much is held against open orders.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub held: Option<Decimal>,
     /// The rate used to convert, on a non-USD account.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub swap_rate: Option<Decimal>,
     /// The same figures in USD, on a non-USD account.
     #[serde(default)]
@@ -322,7 +330,11 @@ pub struct EstimateOrderRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbol: Option<String>,
     /// How much to spend, rather than how many shares.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub notional: Option<Decimal>,
     /// Which side.
     #[serde(default, skip_serializing_if = "Option::is_none")]

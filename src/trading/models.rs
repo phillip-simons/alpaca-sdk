@@ -2,7 +2,7 @@
 //!
 //! Field-for-field with what the API sends, with two systematic changes: money
 //! that arrives as a string is [`Decimal`] rather than `str`, and integers
-//! Alpaca sends inconsistently go through [`serde_util::int`].
+//! Alpaca sends inconsistently go through [`crate::types::int`].
 //!
 //! Unknown fields are ignored rather than rejected. Alpaca adds fields without
 //! warning — `Asset` grew `last_price` and `last_close_pct_change`, orders carry
@@ -22,12 +22,13 @@ use crate::trading::enums::{
     TradeConfirmationEmail, TradeEvent,
 };
 use crate::types::ContractType;
-use crate::types::serde_util::{self, empty_string_as_none};
+use crate::types::serde_util::empty_string_as_none;
 
 /// A tradable security.
 ///
 /// Some assets are not tradable with Alpaca; those carry `tradable = false`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Asset {
     /// Alpaca's unique id for the asset.
     pub id: Uuid,
@@ -74,6 +75,7 @@ pub struct Asset {
 
 /// A position's values expressed in USD, for local currency trading accounts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UsdPositionValues {
     /// The average entry price of the position.
     #[serde(with = "crate::types::decimal")]
@@ -109,6 +111,7 @@ pub struct UsdPositionValues {
 
 /// An open long or short holding in an asset.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Position {
     /// Id of the asset held.
     pub asset_id: Uuid,
@@ -170,17 +173,9 @@ pub struct Position {
     pub qty_available: Option<Decimal>,
 }
 
-/// Every account's positions as of the last market close, keyed by account id.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AllAccountsPositions {
-    /// When the positions were captured.
-    pub as_of: DateTime<Utc>,
-    /// Positions held, keyed by account id.
-    pub positions: HashMap<String, Vec<Position>>,
-}
-
 /// A request to buy or sell an asset.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Order {
     /// Alpaca's id for the order.
     pub id: Uuid,
@@ -244,13 +239,18 @@ pub struct Order {
     /// `simple (or "")`.
     #[serde(default = "order_class_default", deserialize_with = "order_class")]
     pub order_class: OrderClass,
-    /// Deprecated alias for [`Order::order_type`].
+    /// Alpaca's legacy `order_type` key, which duplicates [`Order::order_type`].
+    #[deprecated(
+        since = "0.1.0",
+        note = "Alpaca's legacy duplicate of the `type` key; use `Order::order_type` instead. \
+                Still sent on responses, so the field stays populated"
+    )]
     #[serde(
         rename = "order_type",
         default,
         deserialize_with = "empty_string_as_none"
     )]
-    pub order_type_deprecated: Option<OrderType>,
+    pub legacy_order_type: Option<OrderType>,
     /// The order type. Absent from the legs of a multi-leg order.
     #[serde(rename = "type", default, deserialize_with = "empty_string_as_none")]
     pub order_type: Option<OrderType>,
@@ -304,9 +304,10 @@ fn order_class<'de, D: Deserializer<'de>>(deserializer: D) -> Result<OrderClass,
 
 /// Why a position could not be closed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FailedClosePositionDetails {
     /// The status code for the failure.
-    #[serde(with = "serde_util::int")]
+    #[serde(with = "crate::types::int")]
     pub code: i64,
     /// A description of the failure.
     pub message: String,
@@ -327,6 +328,7 @@ pub struct FailedClosePositionDetails {
 /// The outcome of closing one position, whether or not it succeeded.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
+#[non_exhaustive]
 pub enum ClosePositionBody {
     /// The liquidating order that was created.
     Order(Box<Order>),
@@ -336,12 +338,13 @@ pub enum ClosePositionBody {
 
 /// One entry in the response to closing all positions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ClosePositionResponse {
     /// Id of the order created to liquidate the position.
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub order_id: Option<Uuid>,
     /// Status code for this position's liquidation.
-    #[serde(default, with = "serde_util::int::option")]
+    #[serde(default, with = "crate::types::option_int")]
     pub status: Option<i64>,
     /// Symbol of the position being closed.
     #[serde(default)]
@@ -350,8 +353,23 @@ pub struct ClosePositionResponse {
     pub body: ClosePositionBody,
 }
 
+/// The outcome of cancelling one order in a bulk cancel.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct CancelOrderResponse {
+    /// Id of the order.
+    pub id: Uuid,
+    /// Status code for this order's cancellation.
+    #[serde(with = "crate::types::int")]
+    pub status: i64,
+    /// Any additional detail returned for the cancellation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<serde_json::Value>,
+}
+
 /// The value of a portfolio over time.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PortfolioHistory {
     /// Left-labeled start of each time window, as Unix seconds.
     pub timestamp: Vec<i64>,
@@ -373,6 +391,7 @@ pub struct PortfolioHistory {
 
 /// An ordered list of assets an account is tracking.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Watchlist {
     /// Alpaca's id for the watchlist.
     pub id: Uuid,
@@ -391,6 +410,7 @@ pub struct Watchlist {
 
 /// The market clock for US equity markets.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Clock {
     /// The current time.
     pub timestamp: DateTime<Utc>,
@@ -411,7 +431,13 @@ pub struct Clock {
 /// The two session fields and `settlement_date` appear in real responses and are
 /// optional here, because older responses — and the captured fixtures — do not
 /// carry them.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+///
+/// **Adding a field here means editing the hand-written `Serialize` below.** It
+/// enumerates the fields by name, so a new one is silently dropped on the way
+/// out, and the round-trip test cannot see it — round-tripping an existing value
+/// leaves a new field absent on both sides.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Calendar {
     /// The trading day.
     pub date: NaiveDate,
@@ -425,6 +451,48 @@ pub struct Calendar {
     pub session_close: Option<NaiveDateTime>,
     /// When trades executed on this day settle.
     pub settlement_date: Option<NaiveDate>,
+}
+
+impl Serialize for Calendar {
+    /// The inverse of the [`Deserialize`] below, rather than the derived
+    /// field-by-field form.
+    ///
+    /// Deriving it emitted the combined `NaiveDateTime`s, which the
+    /// deserializer cannot read back: it re-parses `"2024-01-02 09:30"` out of
+    /// `date` plus `open`, and a derived round trip handed it
+    /// `"2024-01-02 2024-01-02T09:30:00"`. So `to_string` → `from_str` failed,
+    /// and caching a calendar — the most obvious thing to do with one — did not
+    /// work. The times go back out in the two shapes Alpaca sends them in:
+    /// `HH:MM` for the regular session, `HHMM` for the extended one.
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct as _;
+
+        // The three optional fields are *omitted* when absent, not written as
+        // `null`: an older response that carries no session times encodes back
+        // to the shape it arrived in, which is what "the wire form" means.
+        let present = 3
+            + usize::from(self.session_open.is_some())
+            + usize::from(self.session_close.is_some())
+            + usize::from(self.settlement_date.is_some());
+
+        let mut state = serializer.serialize_struct("Calendar", present)?;
+        state.serialize_field("date", &self.date)?;
+        state.serialize_field("open", &self.open.format("%H:%M").to_string())?;
+        state.serialize_field("close", &self.close.format("%H:%M").to_string())?;
+        match self.session_open {
+            Some(at) => state.serialize_field("session_open", &at.format("%H%M").to_string())?,
+            None => state.skip_field("session_open")?,
+        }
+        match self.session_close {
+            Some(at) => state.serialize_field("session_close", &at.format("%H%M").to_string())?,
+            None => state.skip_field("session_close")?,
+        }
+        match self.settlement_date {
+            Some(date) => state.serialize_field("settlement_date", &date)?,
+            None => state.skip_field("settlement_date")?,
+        }
+        state.end()
+    }
 }
 
 impl<'de> Deserialize<'de> for Calendar {
@@ -469,6 +537,7 @@ impl<'de> Deserialize<'de> for Calendar {
 
 /// An account activity that is not a trade.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NonTradeActivity {
     /// Unique id, formatted as `<date>::<uuid>`.
     pub id: String,
@@ -502,6 +571,7 @@ pub struct NonTradeActivity {
 
 /// An account activity representing a fill or partial fill.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TradeActivity {
     /// Unique id, formatted as `<date>::<uuid>`.
     pub id: String,
@@ -543,6 +613,7 @@ pub struct TradeActivity {
 /// in the type rather than leaving it to a runtime branch.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
+#[non_exhaustive]
 pub enum Activity {
     /// A fill or partial fill.
     Trade(TradeActivity),
@@ -552,6 +623,7 @@ pub enum Activity {
 
 /// Trading account information.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TradeAccount {
     /// Alpaca's id for the account.
     pub id: Uuid,
@@ -564,7 +636,7 @@ pub struct TradeAccount {
     pub crypto_status: Option<AccountStatus>,
     /// Account currency, currently always `USD`.
     #[serde(default)]
-    pub currency: Option<String>,
+    pub currency: Option<crate::types::SupportedCurrencies>,
     /// Current available cash buying power.
     #[serde(default, with = "crate::types::option_decimal")]
     pub buying_power: Option<Decimal>,
@@ -648,37 +720,63 @@ pub struct TradeAccount {
     /// Day trades made in the last 5 trading days, inclusive of today.
     ///
     /// Removed from Alpaca responses on 2026-07-06.
-    #[serde(default, with = "serde_util::int::option")]
+    #[serde(default, with = "crate::types::option_int")]
     pub daytrade_count: Option<i64>,
     /// Buying power for options trading.
     #[serde(default, with = "crate::types::option_decimal")]
     pub options_buying_power: Option<Decimal>,
     /// Approved options trading level: 0 disabled through 3 spreads.
-    #[serde(default, with = "serde_util::int::option")]
+    #[serde(default, with = "crate::types::option_int")]
     pub options_approved_level: Option<i64>,
     /// Effective options trading level, the lower of approved and configured.
-    #[serde(default, with = "serde_util::int::option")]
+    #[serde(default, with = "crate::types::option_int")]
     pub options_trading_level: Option<i64>,
 }
 
 /// Configuration options for a trading account.
+///
+/// Deliberately has no constructor: this is the one request body a caller is not
+/// meant to build. Every field but three is required, so the route is a
+/// read-modify-write — fetch it with
+/// [`get_account_configurations`](crate::trading::TradingClient::get_account_configurations),
+/// change what you mean to change, and send it back. A constructor would invite
+/// building one from nothing and silently resetting every setting it did not
+/// name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountConfiguration {
     /// Day Trade Buying Power check.
     ///
-    /// Removed from Alpaca responses on 2026-07-06.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    /// Removed from Alpaca responses on 2026-07-06, and absent from the current
+    /// PATCH schema — so `None` is omitted rather than sent as `null`. Every
+    /// other field here is non-`Option`, which forces read-modify-write, and a
+    /// round trip of a current-shape response used to PATCH `"dtbp_check": null`
+    /// at a route that does not document the field at all.
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub dtbp_check: Option<DTBPCheck>,
     /// Whether the account may trade fractional shares.
     pub fractional_trading: bool,
     /// Maximum margin multiplier, between 1 and 4.
-    pub max_margin_multiplier: String,
+    ///
+    /// The same quantity as [`TradeAccount::multiplier`], so it carries the
+    /// same type rather than being left as the `"4"` the wire sends.
+    #[serde(with = "crate::types::decimal")]
+    pub max_margin_multiplier: Decimal,
     /// Whether the account is restricted to long-only.
     pub no_shorting: bool,
     /// Pattern Day Trader check.
     ///
-    /// Removed from Alpaca responses on 2026-07-06.
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    /// Removed from Alpaca responses on 2026-07-06. Omitted when `None`, for
+    /// the same reason as [`AccountConfiguration::dtbp_check`].
+    #[serde(
+        default,
+        deserialize_with = "empty_string_as_none",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub pdt_check: Option<PDTCheck>,
     /// Whether the account is blocked from submitting new orders.
     pub suspend_trade: bool,
@@ -687,12 +785,21 @@ pub struct AccountConfiguration {
     /// Whether to accept orders for PTP symbols with no exception.
     pub ptp_no_exception_entry: bool,
     /// Desired maximum options trading level.
-    #[serde(default, with = "serde_util::int::option")]
+    ///
+    /// Omitted when `None`. The PATCH schema types this as
+    /// `{"enum": [0, 1, 2, 3], "type": "integer"}`, and `null` is not one of
+    /// those four — so sending it is a 422 rather than "leave it alone".
+    #[serde(
+        default,
+        with = "crate::types::option_int",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub max_options_trading_level: Option<i64>,
 }
 
 /// An announced corporate action, such as a dividend, merger, or split.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CorporateActionAnnouncement {
     /// Unique id for this announcement.
     pub id: Uuid,
@@ -737,6 +844,7 @@ pub struct CorporateActionAnnouncement {
 
 /// A trade update pushed over the trading websocket stream.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TradeUpdate {
     /// What happened to the order.
     pub event: TradeEvent,
@@ -760,6 +868,7 @@ pub struct TradeUpdate {
 
 /// An option contract.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OptionContract {
     /// Unique id of the contract.
     pub id: String,
@@ -788,10 +897,17 @@ pub struct OptionContract {
     #[serde(with = "crate::types::decimal")]
     pub strike_price: Decimal,
     /// Contract size, usually 100.
-    pub size: String,
+    ///
+    /// Sent as a string — `"100"` in the captured contract responses — so it
+    /// goes through the integer codec rather than being kept as text.
+    #[serde(with = "crate::types::int")]
+    pub size: i64,
     /// Open interest in the contract.
-    #[serde(default, with = "crate::types::option_decimal")]
-    pub open_interest: Option<Decimal>,
+    ///
+    /// Also a string-integer on the wire (`"0"`), so it shares `size`'s shape
+    /// rather than being modelled as a decimal.
+    #[serde(default, with = "crate::types::option_int")]
+    pub open_interest: Option<i64>,
     /// Date the open interest figure is from.
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub open_interest_date: Option<NaiveDate>,
@@ -805,6 +921,7 @@ pub struct OptionContract {
 
 /// A page of option contracts.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OptionContractsResponse {
     /// The contracts on this page.
     #[serde(default)]
@@ -812,4 +929,85 @@ pub struct OptionContractsResponse {
     /// Token for fetching the next page.
     #[serde(default)]
     pub next_page_token: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `Calendar`'s `Deserialize` is hand-written — it re-parses `"09:30"` out
+    /// of `open` and combines it with `date` — so `Serialize` has to be its
+    /// inverse. The derived one emitted the combined `NaiveDateTime`s, which
+    /// the deserializer then tried to read as `%Y-%m-%d %H:%M`, giving
+    /// `"2024-01-02 2024-01-02T09:30:00"` and an error. That broke caching a
+    /// calendar to disk or Redis, which is the obvious thing to do with one.
+    #[test]
+    fn a_calendar_round_trips_through_json() {
+        let wire = serde_json::json!({
+            "date": "2024-01-02",
+            "open": "09:30",
+            "close": "16:00",
+            "session_open": "0400",
+            "session_close": "2000",
+            "settlement_date": "2024-01-03"
+        });
+
+        let calendar: Calendar = serde_json::from_value(wire).unwrap();
+        let encoded = serde_json::to_string(&calendar).unwrap();
+        let decoded: Calendar = serde_json::from_str(&encoded).unwrap();
+
+        assert_eq!(decoded, calendar);
+    }
+
+    /// And the encoded form is the wire form Alpaca sends, not the combined
+    /// datetimes: `HH:MM` for the regular session, `HHMM` for the extended one.
+    #[test]
+    fn a_calendar_serializes_back_into_alpacas_own_shape() {
+        let wire = serde_json::json!({
+            "date": "2024-01-02",
+            "open": "09:30",
+            "close": "16:00",
+            "session_open": "0400",
+            "session_close": "2000"
+        });
+
+        let calendar: Calendar = serde_json::from_value(wire.clone()).unwrap();
+        let encoded: serde_json::Value = serde_json::to_value(&calendar).unwrap();
+
+        // An absent `settlement_date` stays absent rather than becoming `null`:
+        // Alpaca omits the key, so echoing it back as null is not "its shape".
+        assert_eq!(encoded, wire);
+    }
+
+    /// The optional session fields are absent from older responses, and the
+    /// round trip has to survive that too.
+    /// The shape that was previously unasserted: a calendar decoded from an
+    /// older response re-encodes without inventing `null` keys Alpaca omits.
+    #[test]
+    fn a_calendar_without_session_times_encodes_without_them() {
+        let wire = serde_json::json!({
+            "date": "2024-01-02",
+            "open": "09:30",
+            "close": "16:00"
+        });
+
+        let calendar: Calendar = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&calendar).unwrap(), wire);
+    }
+
+    #[test]
+    fn a_calendar_without_session_times_round_trips() {
+        let wire = serde_json::json!({
+            "date": "2024-01-02",
+            "open": "09:30",
+            "close": "16:00"
+        });
+
+        let calendar: Calendar = serde_json::from_value(wire).unwrap();
+        let encoded = serde_json::to_string(&calendar).unwrap();
+        let decoded: Calendar = serde_json::from_str(&encoded).unwrap();
+
+        assert_eq!(decoded, calendar);
+        assert_eq!(decoded.session_open, None);
+    }
 }

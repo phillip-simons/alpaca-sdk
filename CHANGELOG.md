@@ -13,9 +13,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Nothing yet.
 
-## [0.1.0] — unreleased
+## [0.1.0] — 2026-08-14
 
-The first real release.
+The first real release: an unofficial Rust SDK for the Alpaca trading, market
+data and broker APIs, in one crate with three API surfaces behind cargo
+features.
 
 ### Surfaces
 
@@ -29,9 +31,7 @@ The first real release.
 - **Trade update stream** — the JSON websocket for order lifecycle events.
 - **Broker API** — accounts, onboarding, documents, funding, journals,
   rebalancing, instant funding, JIT, FPSL, funding wallets, IPOs, reporting and
-  OAuth, plus nine server-sent-event streams (account status, trades, journals,
-  transfers, non-trading activity, activities, admin actions, IPOs and system
-  events).
+  OAuth, plus nine server-sent-event streams.
 
 **251 of the 253 routes the vendored specs document.** The two exceptions are
 deliberate skips, each recorded with its reason in
@@ -40,25 +40,28 @@ gap.
 
 ### Behaviour worth knowing before you depend on it
 
-- **Money that crosses the wire as a string is `rust_decimal::Decimal`.**
-  Alpaca sends order quantities and prices as strings and market data as JSON
-  numbers, so the deserializer accepts both and market-data floats stay `f64`.
-  Reading a string price as a float loses precision.
-- **Unknown enum values deserialize into `Unknown` rather than failing.** Alpaca
-  adds values without warning, and a new order status should cost a caller a
-  match arm rather than a decode.
-- **Unknown response fields are ignored.** Alpaca sends fields no model declares.
-- **Paginated endpoints offer two methods** — `get_x` for one page, `get_all_x`
-  to walk every page with an optional cap.
+- **Money that crosses the wire as a string is `rust_decimal::Decimal`.** Alpaca
+  sends order quantities and prices as strings and market data as JSON numbers,
+  so market-data floats stay `f64`. Reading a string price as a float loses
+  precision.
+- **Unknown enum values deserialize into `Unknown` rather than failing**, and
+  **unknown response fields are ignored.** Alpaca adds both without warning, and
+  a new order status should cost a caller a match arm rather than a decode.
+- **Most paginated endpoints offer two methods** — `get_x` for one page,
+  `get_all_x` to walk every page with an optional cap. Not every paginated route
+  has a walker, and `get_all_x` does not always mean "walk": some are
+  single-request routes named for the endpoint. Each method's own documentation
+  says which it is.
 - **Retries follow Alpaca's own rate-limit guidance**: 429 and 504, three
   retries after the first request, waiting about a second and doubling to a
   30-second ceiling, jittered. A response carrying `Retry-After` overrides the
   curve, clamped to that ceiling; only the delta-seconds form is read, and an
   HTTP-date is treated as absent.
-- **Request structs and `RestConfig` are `#[non_exhaustive]`.** Build with `new`
-  or `default` and assign fields. This is what lets a newly documented query
-  parameter arrive as a field rather than as a breaking change — which has
-  already happened five times.
+- **Request structs and `RestConfig` are `#[non_exhaustive]`.** Build with the
+  constructor the type provides — `new`, `default`, or a named one where the
+  shape depends on the choice, as with `OrderRequest::limit` and
+  `CreateJournalRequest::cash` — then assign fields. This is what lets a newly
+  documented query parameter arrive as a field rather than as a breaking change.
 - **`request_raw` is the escape hatch** for routes this crate does not wrap.
 
 ### Features
@@ -88,6 +91,14 @@ These are properties of what could be verified, not of what was implemented.
   published reference.
 - **Locates, tokenization and crypto funding answer 404 on the paper API**,
   which is a different kind of unverified from a 403.
+- **The crypto funding routes are still unverified against a live payload.**
+  Nothing in this repository has ever decoded one — the route smoke tests mount a
+  404, and the live capture is recorded as `refused`. The `OneOrMany` decoder
+  accepts both documented shapes so that no guess can be wrong, but the field
+  models behind them remain spec-derived.
+- **No `Idempotency-Key`.** The crate declining to replay a `POST` does not
+  protect a caller who retries one themselves. Alpaca's reference asks for the
+  header on journals, and there is no way to send one yet.
 
 ### If you pinned `0.1.0-alpha.1`
 
@@ -96,32 +107,20 @@ this crate existed — forty commits and three development phases separate it fr
 `0.1.0`, including the entire broker API expansion. It is not a useful baseline,
 and it will be yanked once `0.1.0` is out. Upgrade rather than diff.
 
-The changes most likely to surprise you, none of which a compiler will point at:
-
-- Retries wait 1 second and double, rather than a flat 3 seconds three times.
-- `Error::InvalidRequest` no longer means a dead stream. A websocket or SSE
-  failure on the wire is `Error::Stream`; a failure the crate determines locally
-  before any network call — an empty subscription set, a non-positive timeout —
-  stays `InvalidRequest`.
-- A malformed market data *response* is now `Error::Decode`, carrying the
-  offending payload, where it used to be `InvalidRequest`. Code matching
-  `InvalidRequest` to catch a response it could not read needs `Decode` now.
-
-And the ones a compiler will:
-
-- `RetryConfig`, `RestConfig` and every request struct are `#[non_exhaustive]`,
-  so struct literals and `..Default::default()` no longer work from outside this
-  crate. Construct with `new` or `default` and assign fields.
-- Two client methods changed signature and five request structs gained fields
-  when twelve documented query parameters that were never being sent were added.
-
 ### Packaging
 
-The published tarball ships `src/`, `tests/` and `fixtures/` — the tests are
-shipped runnable, which is why the 135KB of captured payloads they read ship
-with them. `scripts/`, `RELEASING.md` and `.github/` are excluded: they cannot
-run, or have no meaning, outside a clone. `ROADMAP.md` was a working document
-for building the crate and has been removed; it is in the git history.
+The published tarball ships the crate and everything needed to check it: `src/`
+and `build.rs`, `examples/`, and `tests/` with `fixtures/` — the tests are
+shipped runnable, which is why the 232KiB of captured payloads they read ship
+with them. `Cargo.lock` pins a build that is known to work, `justfile` and
+`deny.toml` are the commands and the licence policy those checks run under, and
+`LICENSE`, `NOTICE`, `README.md`, `CHANGELOG.md` and `COVERAGE.md` are the
+crate's own record.
+
+Excluded are `scripts/`, `RELEASING.md`, `.github/` and `.githooks/`: they
+cannot run, or have no meaning, outside a clone — `scripts/` needs other SDKs'
+checkouts and downloaded specs, and the rest describe publishing this crate or
+developing against it.
 
 [Unreleased]: https://github.com/phillip-simons/alpaca-sdk/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/phillip-simons/alpaca-sdk/releases/tag/v0.1.0

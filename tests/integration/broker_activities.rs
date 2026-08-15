@@ -11,10 +11,10 @@
 
 #![cfg(feature = "broker")]
 
-use alpaca_sdk::broker::{BrokerClient, CIPInfo, GetAccountActivitiesRequest};
+use crate::common::{broker_client as client, fixture};
+use alpaca_sdk::broker::{CIPInfo, GetAccountActivitiesRequest};
 use alpaca_sdk::trading::{Activity, ActivityType};
 use alpaca_sdk::types::Sort;
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use serde_json::json;
 use uuid::Uuid;
 use wiremock::matchers::{method, path, query_param};
@@ -22,29 +22,9 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const ACCOUNT_ID: &str = "3dcb795c-3ccc-402a-abb9-07e26a1b1326";
 
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
-
 fn parse<T: serde::de::DeserializeOwned>(name: &str) -> T {
     let value = fixture(name);
     serde_json::from_value(value.clone()).unwrap_or_else(|e| panic!("{name}: {e}\n{value:#}"))
-}
-
-fn client(server: &MockServer) -> BrokerClient {
-    let credentials = Credentials::new("broker-key", "broker-secret").unwrap();
-    BrokerClient::with_config(
-        &credentials,
-        RestConfig::new(server.uri())
-            .api_version("v1")
-            .retry(RetryConfig::none()),
-    )
-    .unwrap()
 }
 
 const ACTIVITIES: &str = "broker/test_account_activities_routes__test_get_activities_for_account_max_items_and_single_request_date__01.json";
@@ -296,4 +276,33 @@ async fn cip_records_round_trip_through_both_routes() {
         .upload_cip_data_for_account_by_id(account_id, &cip)
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn the_activities_walk_stops_when_the_server_ignores_the_cursor() {
+    // Setting `date` makes this endpoint answer with everything and ignore
+    // paging, which the walk sees as a full page whose cursor has no effect.
+    // Ending only on an empty page would spin here forever, collecting the same
+    // activities on every pass until the process ran out of memory.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/accounts/activities"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!([activity("a::1"), activity("a::2")])),
+        )
+        .mount(&server)
+        .await;
+
+    let activities = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        client(&server).get_all_account_activities(None, None),
+    )
+    .await
+    .expect("the activities walk never terminated against a server that ignores the cursor")
+    .unwrap();
+
+    // The repeated page is recognised as ground already covered, so the second
+    // request ends the walk rather than extending it.
+    assert_eq!(activities.len(), 2);
+    assert_eq!(server.received_requests().await.unwrap().len(), 2);
 }

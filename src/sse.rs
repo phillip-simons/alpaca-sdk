@@ -8,9 +8,15 @@
 //!
 //! None of the [`crate::data::live`] websocket machinery applies. There is no
 //! subscribe message, no authentication handshake, and no reconnect state
-//! machine, because there is nothing to reconnect *to*: a stream that dies has
-//! already delivered its events, and replaying it would repeat them. Resuming is
-//! the caller's job, with the cursor on the last event they handled.
+//! machine. Resuming is the caller's job, with the cursor on the last event
+//! they handled — see [`EventStreamRequest::from_id`].
+//!
+//! Resuming is genuinely the caller's job, and it is not optional: these are
+//! push streams, so a stream that dies has *not* already delivered its events,
+//! and whatever the server emitted while nobody was connected is not replayed
+//! unless it is asked for by id. [`Event`] documents the two things that make
+//! this sharper than it looks — a dropped-message notice the caller never sees,
+//! and an end-of-stream that does not distinguish "finished" from "failed".
 //!
 //! This module was the broker client's private plumbing until the reference
 //! sweep found seven more streams outside the broker API.
@@ -22,12 +28,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::auth::Credentials;
 use crate::error::{ApiError, Error, Result};
-use crate::rest::RestConfig;
 
 /// The window an event stream replays before going live.
 ///
 /// **Not interchangeable with the broker's
-/// [`GetEventsRequest`](crate::broker::GetEventsRequest)**, and the difference
+/// `broker::GetEventsRequest`**, and the difference
 /// is not cosmetic: the five older streams bound their window by *date*, while
 /// every stream found in the reference sweep — admin actions, IPO events, system
 /// events, account activities, corporate actions — bounds it by *timestamp*. Sending a bare date to a route that parses RFC-3339 is how a
@@ -47,10 +52,21 @@ pub struct EventStreamRequest {
     /// Alpaca requires `since` whenever this is set, and rejects a future value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub until: Option<DateTime<Utc>>,
-    /// Replay events from this ULID onwards, inclusive.
+    /// Replay events from this ULID onwards.
     ///
-    /// The event with this id is redelivered, so resuming a dropped stream
-    /// means deduplicating the first one. Mutually exclusive with `since`.
+    /// **Whether the event with this id is itself redelivered depends on the
+    /// stream**, and Alpaca's reference states it both ways: the
+    /// corporate-actions stream documents it as inclusive, while the IPO-events
+    /// stream says "the first event returned will be the one immediately after
+    /// `since_id`". One filter type serves every stream, so this cannot promise
+    /// either.
+    ///
+    /// Treat the first event after a resume as possibly-duplicate and
+    /// deduplicate on `id`: that is correct under both readings, where assuming
+    /// exclusivity drops an event on every reconnect if the stream turns out to
+    /// be inclusive.
+    ///
+    /// Mutually exclusive with `since`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub since_id: Option<String>,
     /// Close the connection once this ULID has been delivered, inclusive.
@@ -69,8 +85,12 @@ impl EventStreamRequest {
     }
 
     /// Events from this ULID onwards, which is how a dropped stream is resumed.
+    ///
+    /// Named `from_id` rather than `after_id` because "after" asserts an
+    /// exclusivity that only some of these streams have — see
+    /// [`EventStreamRequest::since_id`], and deduplicate on `id`.
     #[must_use]
-    pub fn after_id(since_id: impl Into<String>) -> Self {
+    pub fn from_id(since_id: impl Into<String>) -> Self {
         Self {
             since_id: Some(since_id.into()),
             ..Self::default()
@@ -98,7 +118,28 @@ impl EventStreamRequest {
 }
 
 /// One event from an Alpaca event stream.
+///
+/// # What this does not carry
+///
+/// SSE comment lines are not surfaced. Alpaca uses them for two things the
+/// caller would want to know about — `: you are reading too slowly, dropped
+/// 10000 messages`, and `: internal server error` — and the parser underneath
+/// discards them before this crate sees them. Two consequences worth planning
+/// around:
+///
+/// - A slow consumer can lose events silently. The `id` values are ULIDs and a
+///   gap is not detectable from them, so a consumer that must not miss a fill
+///   should reconcile against the REST API rather than trust the stream alone.
+/// - The end of a stream is ambiguous. A server-side error followed by a clean
+///   close is indistinguishable from the stream ending because `until_id` was
+///   reached: both are `Poll::Ready(None)`. **`None` does not mean "you have
+///   everything"** — a supervisor that treats it as completion will stop
+///   resubscribing.
+///
+/// `#[non_exhaustive]` so that a comment carrier can be added without a
+/// breaking change once the parser can surface one.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Event {
     /// The last event id the server sent.
     ///
@@ -171,14 +212,63 @@ pub(crate) fn stream_error(error: &eventsource_stream::EventStreamError<reqwest:
 /// Builds the HTTP client an event stream is read through.
 ///
 /// Separate from [`crate::rest::RestClient`] because that one decodes a whole
-/// body and these are read incrementally. Redirects are followed, since this is
-/// also the client the broker document download uses.
+/// body and these are read incrementally. Redirects are refused, as they are
+/// there.
+///
+/// # No timeout
+///
+/// [`RestConfig::timeout`] is deliberately *not* applied here. reqwest's
+/// `ClientBuilder::timeout` is a total deadline on the whole request, "until
+/// the response body has finished" — and the body of a `text/event-stream`
+/// never finishes. Applying it would give every subscription a fixed lifespan:
+/// events until the deadline, then a timeout error, forever — and a supervisor
+/// that reconnects on error would do so on that same clock, dropping whatever
+/// arrived in the gap each time.
+///
+/// A stall detector belongs on the *reads*, not on the stream, so if one is
+/// wanted later it is `read_timeout`, which resets per chunk.
 ///
 /// # Errors
 /// Returns an error if the credentials cannot be encoded as headers.
-pub(crate) fn streaming_client(
+pub(crate) fn streaming_client(credentials: &Credentials) -> Result<reqwest::Client> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    credentials.apply(&mut headers)?;
+    headers.insert(
+        reqwest::header::USER_AGENT,
+        reqwest::header::HeaderValue::from_static(crate::config::user_agent()),
+    );
+
+    reqwest::Client::builder()
+        .default_headers(headers)
+        // No event stream redirects, so following one has no upside and some
+        // downside: reqwest strips `Authorization` on a cross-host hop but not
+        // the `APCA-API-*` headers the trading and data clients send, and this
+        // is a long-lived credentialed connection. The one route that does
+        // redirect — the broker document download — has its own client below.
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(Error::transport)
+}
+
+/// Builds the HTTP client the broker document download uses.
+///
+/// Separate from [`streaming_client`] for one reason: this one *does* apply
+/// [`RestConfig::timeout`]. A document download is an ordinary request/response
+/// call with a body that ends, so a total deadline is exactly the right shape
+/// for it — the argument for withholding one from an event stream does not
+/// transfer, and folding the two together silently dropped the caller's
+/// deadline from the two download routes.
+///
+/// Redirects are followed: the route answers `301` to a presigned storage URL.
+/// Safe because the broker client converts its credentials to basic auth, which
+/// reqwest strips on a cross-host hop.
+///
+/// # Errors
+/// Returns an error if the credentials cannot be encoded as headers.
+#[cfg(feature = "broker")]
+pub(crate) fn download_client(
     credentials: &Credentials,
-    config: &RestConfig,
+    timeout: Option<std::time::Duration>,
 ) -> Result<reqwest::Client> {
     let mut headers = reqwest::header::HeaderMap::new();
     credentials.apply(&mut headers)?;
@@ -190,10 +280,10 @@ pub(crate) fn streaming_client(
     let mut builder = reqwest::Client::builder()
         .default_headers(headers)
         .redirect(reqwest::redirect::Policy::limited(10));
-    if let Some(timeout) = config.timeout {
+    if let Some(timeout) = timeout {
         builder = builder.timeout(timeout);
     }
-    Ok(builder.build()?)
+    builder.build().map_err(Error::transport)
 }
 
 /// Opens an event stream at `url`.
@@ -228,7 +318,7 @@ pub(crate) async fn subscribe(
         request = request.query(query);
     }
 
-    let response = request.send().await.map_err(Error::Transport)?;
+    let response = request.send().await.map_err(Error::transport)?;
     let status = response.status();
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();

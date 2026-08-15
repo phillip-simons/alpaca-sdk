@@ -24,11 +24,28 @@ for a better source.
 git clone https://github.com/phillip-simons/alpaca-sdk
 cd alpaca-sdk
 just hooks     # installs the pre-commit credential guard, once per clone
-just check     # fmt, clippy, rustdoc, tests, feature combinations
+just check     # fmt, clippy, rustdoc, tests
 ```
 
-`just check` is the gate. Run it before every commit; CI runs it again along
-with the MSRV build and `cargo-deny`.
+`just check` is the gate. Run it before every commit. It holds what fires on an
+ordinary edit; CI holds the rest and runs both.
+
+`just ci` adds what CI checks and `just check` does not: the feature
+combinations, the per-surface rustdoc builds, the nightly `docsrs` build, the
+MSRV build and `cargo-deny`. Run it before opening a pull request, or just let
+CI do it.
+
+That nightly build is `just doc-docsrs`, and it needs a nightly toolchain
+(`rustup toolchain install nightly`) that the other recipes do not. It is worth
+knowing why it exists: CI's `docs` job builds with `--cfg docsrs`, which is what
+turns on `feature(doc_cfg)` in `src/lib.rs`, so a malformed `doc(cfg(...))`
+attribute compiles under a stable toolchain and fails there. It used to have no
+local equivalent at all, which also put it in front of a release — `release.yml`
+gates publishing on `just publish-dry`, and that runs `just ci`.
+
+```sh
+just doc-docsrs   # RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc …
+```
 
 On a change that touches no Rust — documentation, issue templates, this file —
 CI skips those jobs. They still report as skipped, which counts as satisfied, so
@@ -90,7 +107,9 @@ doing when it found it.
 
 ## Adding or changing a route
 
-1. Check `COVERAGE.md` — regenerate it with `just coverage`, never by hand.
+1. Check `COVERAGE.md` — regenerate it with `just coverage`, never by hand. CI
+   regenerates it too and fails if your commit does not match, so a route added
+   without rerunning it will not merge.
 2. Verify the route against the published reference, not only the spec. The
    spec says what exists; the reference says what is still current.
 3. Add a test. If you have a real captured payload, add it under `fixtures/`
@@ -108,9 +127,15 @@ doing when it found it.
   arm rather than a decode.
 - **Unknown response fields are ignored.** Alpaca sends fields no model
   declares.
-- **Request structs are `#[non_exhaustive]`.** Build with `new` or `default`
-  and assign fields. This is what lets a newly documented parameter arrive as a
-  field rather than as a breaking change.
+- **Request structs are `#[non_exhaustive]`.** Build with the constructor the
+  type provides, then assign fields. That is usually `new` or `default`, but a
+  type whose valid fields depend on a choice offers named constructors instead
+  — `OrderRequest::limit`, `CreateJournalRequest::cash`,
+  `CreateBankRequest::domestic` — and `AccountConfiguration` offers neither,
+  because it is a read-modify-write and a constructor would invite resetting
+  every setting the caller did not name. Give a new request struct the
+  constructor its shape justifies. This is what lets a newly documented
+  parameter arrive as a field rather than as a breaking change.
 - **Alpaca's typos are load-bearing.** `face_comparision` and `parnter_fee` are
   spelled that way on the wire. Do not "fix" them.
 
@@ -121,6 +146,20 @@ doing when it found it.
 against a key that is not `PK`-prefixed.
 
 **Use paper keys.** Never put credentials in a file the repository tracks.
+
+## Personal data in fixtures
+
+No credentials, account numbers or personal identifiers belong in a diff,
+fixtures included. One narrow exemption: the payloads `just fixtures` extracts
+from [alpaca-py](https://github.com/alpacahq/alpaca-py)'s test suite carry that
+project's own synthetic values in `account_number`, `email_address`,
+`phone_number`, `street_address` and `date_of_birth`. Those are kept as
+extracted, because editing a captured payload stops it being evidence of what
+the wire sends. The exemption reaches those fields, in fixtures traceable to
+that suite, and nothing further — **data belonging to a real person or a real
+account is forbidden without exception**, in any field, and a credential is
+never exempt in any file. If you are unsure which kind you are holding, it is
+the real kind: redact it.
 
 ## Reporting a bug
 

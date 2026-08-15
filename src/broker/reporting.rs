@@ -22,6 +22,7 @@ use crate::types::serde_util::comma_separated;
 /// Keyed by account id. Each value is the same [`Position`] the trading API
 /// returns, so an end-of-day position and a live one read identically.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct EodPositions {
     /// The close these positions are as of.
     #[serde(default)]
@@ -39,6 +40,7 @@ pub struct EodPositions {
 
 /// One symbol's position summed across every account.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AggregatePosition {
     /// The symbol.
     #[serde(default)]
@@ -53,24 +55,25 @@ pub struct AggregatePosition {
     #[serde(default)]
     pub num_accounts: Option<i64>,
     /// Shares held long.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub long_qty: Option<Decimal>,
     /// What those are worth.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub long_market_value: Option<Decimal>,
     /// Shares held short.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub short_qty: Option<Decimal>,
     /// What those are worth.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub short_market_value: Option<Decimal>,
     /// The closing price used.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub closing_price: Option<Decimal>,
 }
 
 /// One account's interest on idle cash for one day.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CashInterestDetail {
     /// The account.
     #[serde(default)]
@@ -80,18 +83,18 @@ pub struct CashInterestDetail {
     pub date: Option<NaiveDate>,
     /// The currency.
     #[serde(default)]
-    pub currency: Option<String>,
+    pub currency: Option<crate::types::SupportedCurrencies>,
     /// The cash it was earned on.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub cash_balance: Option<Decimal>,
     /// What the account earned.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub account_accrued_interest: Option<Decimal>,
     /// At what rate, in basis points.
     #[serde(default)]
     pub account_rate_bps: Option<i64>,
     /// What the correspondent took.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub correspondent_fee: Option<Decimal>,
     /// At what rate, in basis points.
     #[serde(default)]
@@ -106,6 +109,7 @@ pub struct CashInterestDetail {
 
 /// A page of cash interest details.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CashInterestReport {
     /// The details.
     #[serde(
@@ -120,6 +124,7 @@ pub struct CashInterestReport {
 
 /// How many accounts sit in a tier, and how much they hold.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AprTierDetails {
     /// When the count was taken.
     #[serde(default)]
@@ -128,12 +133,13 @@ pub struct AprTierDetails {
     #[serde(default)]
     pub total_accounts: Option<i64>,
     /// How much cash between them.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub total_balance: Option<Decimal>,
 }
 
 /// A cash interest rate tier.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AprTier {
     /// Alpaca's identifier for the tier.
     #[serde(default)]
@@ -143,7 +149,7 @@ pub struct AprTier {
     pub name: Option<String>,
     /// The currency it applies to.
     #[serde(default)]
-    pub currency: Option<String>,
+    pub currency: Option<crate::types::SupportedCurrencies>,
     /// What the account earns, in basis points.
     #[serde(default)]
     pub account_rate_bps: Option<i64>,
@@ -166,6 +172,7 @@ pub struct AprTier {
 
 /// The tier list, which arrives under a key rather than bare.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AprTiers {
     /// The tiers.
     #[serde(
@@ -227,13 +234,15 @@ pub struct GetAggregatePositionsRequest {
         serialize_with = "comma_separated"
     )]
     pub symbols: Option<Vec<String>>,
-    /// Only these firm accounts.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        serialize_with = "comma_separated"
-    )]
-    pub firm_accounts: Option<Vec<String>>,
+    /// Whether to include firm accounts in the aggregate.
+    ///
+    /// A flag, not a list — despite sitting next to `symbols`, which is one.
+    /// Alpaca's reference: *"Defaults to True which includes firm accounts.
+    /// Passing False will exclude all firm accounts."* Sending a comma-separated
+    /// list of account ids here got parsed as a boolean, and the report came back
+    /// silently missing the firm inventory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub firm_accounts: Option<bool>,
 }
 
 impl GetAggregatePositionsRequest {
@@ -251,6 +260,13 @@ impl GetAggregatePositionsRequest {
     #[must_use]
     pub fn symbols(mut self, symbols: Vec<String>) -> Self {
         self.symbols = Some(symbols);
+        self
+    }
+
+    /// Whether to include firm accounts. Alpaca includes them by default.
+    #[must_use]
+    pub fn firm_accounts(mut self, include: bool) -> Self {
+        self.firm_accounts = Some(include);
         self
     }
 }

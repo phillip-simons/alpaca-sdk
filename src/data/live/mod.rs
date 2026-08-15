@@ -10,12 +10,11 @@
 mod messages;
 mod streams;
 
-pub use self::StreamConfig as LiveStreamConfig;
 pub use messages::{Channel, StreamError, StreamMessage, Subscriptions};
 pub use streams::{CryptoDataStream, NewsDataStream, OptionDataStream, StockDataStream};
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures_util::{SinkExt as _, Stream, StreamExt as _};
 use serde_json::Value;
@@ -38,9 +37,25 @@ use crate::error::{Error, Result};
 const MAX_FRAME_SIZE: usize = 32_768;
 
 /// How long to wait for a frame before re-checking the staleness clock.
+///
+/// Poll granularity only — never the timeout itself. Feeding this straight to
+/// the socket read and treating an elapsed read as staleness is what made
+/// `data_timeout` mean a hardcoded five seconds whatever the caller set.
+///
+/// The cap itself is still needed: the loop has to wake periodically whatever
+/// the configuration says, because the stream is cancelled by dropping it and a
+/// socket parked in an hour-long read would not notice.
 const RECEIVE_POLL: Duration = Duration::from_secs(5);
 
+pub use crate::config::DEFAULT_STABLE_SESSION;
+
 /// Configuration for a market data stream.
+///
+/// Deliberately *not* `#[non_exhaustive]`: every validated field is private and
+/// reached through a builder that checks it, so a struct literal is already
+/// impossible and the attribute would buy nothing on a type the caller has to
+/// construct. Only `endpoint` stays public, because there is nothing to validate
+/// about it.
 #[derive(Debug, Clone)]
 pub struct StreamConfig {
     /// The websocket endpoint.
@@ -51,11 +66,28 @@ pub struct StreamConfig {
     /// `None` by default. A legitimately quiet subscription — news, or
     /// infrequent bars — would otherwise reconnect on a timer. Set it only for
     /// subscriptions expected to be busy.
-    pub data_timeout: Option<Duration>,
+    ///
+    /// Private, and set through [`StreamConfig::data_timeout`], for the same
+    /// reason as the two backoff knobs: a validator that a field assignment can
+    /// step around is not a validator. Zero here makes the staleness deadline
+    /// elapse on the first pass of every session, so each connection reconnects
+    /// immediately.
+    data_timeout: Option<Duration>,
     /// Base delay for the first reconnect attempt.
-    pub min_backoff: Duration,
-    /// Ceiling for the reconnect delay.
-    pub max_backoff: Duration,
+    ///
+    /// Private, and set through [`StreamConfig::backoff`], because zero is a
+    /// reasonable-looking way to say "reconnect immediately" and is in fact a
+    /// hot loop: the curve stays at zero through every doubling, the jitter
+    /// branch is skipped, and the client opens thousands of connections a second
+    /// against an endpoint that allows one. The sibling knob has been validated
+    /// for exactly this since it was added.
+    min_backoff: Duration,
+    /// Ceiling for the reconnect delay. Set through
+    /// [`StreamConfig::backoff`].
+    max_backoff: Duration,
+    /// How long a session must last to count as healthy. Set through
+    /// [`StreamConfig::stable_session`].
+    stable_session: Duration,
 }
 
 impl StreamConfig {
@@ -66,6 +98,7 @@ impl StreamConfig {
             data_timeout: None,
             min_backoff: DEFAULT_MIN_BACKOFF,
             max_backoff: DEFAULT_MAX_BACKOFF,
+            stable_session: DEFAULT_STABLE_SESSION,
         }
     }
 
@@ -83,13 +116,91 @@ impl StreamConfig {
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if the timeout is not positive.
     pub fn set_data_timeout(&mut self, timeout: Duration) -> Result<&mut Self> {
-        if timeout.is_zero() {
-            return Err(Error::InvalidRequest(
-                "data_timeout must be a positive duration".to_owned(),
-            ));
-        }
+        crate::backoff::check_data_timeout(timeout)?;
         self.data_timeout = Some(timeout);
         Ok(self)
+    }
+
+    /// The reconnect backoff window.
+    ///
+    /// The delay starts at `min`, doubles on each consecutive failure, and is
+    /// capped at `max`.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if `min` is zero — which would spin —
+    /// or if `max` is smaller than `min`.
+    pub fn backoff(mut self, min: Duration, max: Duration) -> Result<Self> {
+        self.set_backoff(min, max)?;
+        Ok(self)
+    }
+
+    /// The same, in place.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if `min` is zero, or if `max` is
+    /// smaller than `min`.
+    pub fn set_backoff(&mut self, min: Duration, max: Duration) -> Result<&mut Self> {
+        crate::backoff::check_window(min, max)?;
+        self.min_backoff = min;
+        self.max_backoff = max;
+        Ok(self)
+    }
+
+    /// How long the stream tolerates silence before reconnecting.
+    #[must_use]
+    pub fn data_timeout_after(&self) -> Option<Duration> {
+        self.data_timeout
+    }
+
+    /// The base delay for the first reconnect attempt.
+    #[must_use]
+    pub fn min_backoff(&self) -> Duration {
+        self.min_backoff
+    }
+
+    /// The ceiling for the reconnect delay.
+    #[must_use]
+    pub fn max_backoff(&self) -> Duration {
+        self.max_backoff
+    }
+
+    /// How long a session must stay up before it clears the failure count.
+    ///
+    /// A session that delivered market data always clears it; this covers the
+    /// legitimately quiet one whose server recycles it. Defaults to
+    /// [`DEFAULT_STABLE_SESSION`].
+    ///
+    /// Note the interaction with [`StreamConfig::data_timeout`]: if the timeout
+    /// is the longer of the two, a stream that is up but permanently silent
+    /// reconnects on the staleness clock and each of those sessions counts as
+    /// healthy, so the backoff never escalates. That is deliberate — the
+    /// reconnect cadence is then bounded by `data_timeout` rather than by the
+    /// curve — but set `data_timeout` below this value if you would rather a
+    /// persistently silent feed backed off instead.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if the duration is zero, which would
+    /// treat a connection that dropped instantly as healthy and pin the
+    /// reconnect delay at its minimum.
+    pub fn stable_session(mut self, after: Duration) -> Result<Self> {
+        self.set_stable_session(after)?;
+        Ok(self)
+    }
+
+    /// The same, in place.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if the duration is zero.
+    pub fn set_stable_session(&mut self, after: Duration) -> Result<&mut Self> {
+        crate::backoff::check_stable_session(after)?;
+        self.stable_session = after;
+        Ok(self)
+    }
+
+    /// How long a session must stay up before it clears the failure count.
+    #[must_use]
+    pub fn stable_session_after(&self) -> Duration {
+        self.stable_session
     }
 }
 
@@ -305,31 +416,27 @@ impl DataStream {
                         // A half-open socket from a failed connect or auth keeps
                         // consuming the single connection Alpaca allows, so the
                         // attempt above always drops it before we back off.
-                        retries += 1;
+                        retries = retries.saturating_add(1);
                         sleep_backoff(&self.config, retries).await;
                         continue;
                     }
                 };
 
-                retries = retries.saturating_add(1);
+                // When this session began, for the health check at the bottom
+                // of the loop.
+                let session_start = Instant::now();
 
-                // The clock the `data_timeout` deadline is measured against.
-                // Reset by every frame that carries data, not by every wake-up:
-                // the poll firing means nothing arrived, which is the opposite
-                // of activity.
-                let mut last_data = std::time::Instant::now();
+                // The staleness clock. Starts at connect and is pushed forward
+                // by market data, so `data_timeout` measures what it says:
+                // elapsed time since the last market data message.
+                let mut last_data = Instant::now();
+                let mut delivered_data = false;
 
                 let outcome = 'session: loop {
-                    let poll = receive_timeout(&self.config);
-
-                    let frame = match tokio::time::timeout(poll, socket.next()).await {
-                        // Nothing arrived within the poll. That is only staleness
-                        // if the configured timeout has actually elapsed — the
-                        // poll is how often we look, not how long we wait.
-                        Err(_) => {
-                            if let Some(timeout) = self.config.data_timeout
-                                && last_data.elapsed() >= timeout
-                            {
+                    let poll = match self.config.data_timeout {
+                        Some(timeout) => {
+                            let remaining = timeout.saturating_sub(last_data.elapsed());
+                            if remaining.is_zero() {
                                 tracing::warn!(
                                     endpoint = %self.config.endpoint,
                                     elapsed_ms = last_data.elapsed().as_millis(),
@@ -338,8 +445,18 @@ impl DataStream {
                                 );
                                 break 'session Outcome::Reconnect;
                             }
-                            continue;
+                            // Wake at least every `RECEIVE_POLL` so the check
+                            // above runs, but never later than the deadline.
+                            RECEIVE_POLL.min(remaining)
                         }
+                        None => RECEIVE_POLL,
+                    };
+
+                    let frame = match tokio::time::timeout(poll, socket.next()).await {
+                        // Nothing arrived within the poll window. Whether that
+                        // is staleness is decided at the top of the loop, from
+                        // the clock rather than from this one read.
+                        Err(_) => continue,
                         Ok(None) => break 'session Outcome::Reconnect,
                         Ok(Some(Err(error))) => {
                             tracing::warn!(%error, "websocket error, reconnecting");
@@ -366,11 +483,11 @@ impl DataStream {
                                     break 'session Outcome::Fatal;
                                 }
                                 if message.is_market_data() {
-                                    // Data arrived: the staleness clock restarts
-                                    // and the connection has proved itself, so
-                                    // the backoff starts from scratch too.
-                                    last_data = std::time::Instant::now();
-                                    retries = 0;
+                                    // Data arrived: the staleness clock restarts,
+                                    // and the connection has proved itself, so the
+                                    // backoff is cleared when the session ends.
+                                    last_data = Instant::now();
+                                    delivered_data = true;
                                 }
                                 yield Ok(message);
                             }
@@ -384,35 +501,19 @@ impl DataStream {
                 match outcome {
                     Outcome::Fatal => return,
                     Outcome::Reconnect => {
-                        retries = retries.max(1);
+                        // A session that did its job clears the failure count;
+                        // one that came up and fell straight over does not.
+                        if delivered_data
+                            || session_start.elapsed() >= self.config.stable_session
+                        {
+                            retries = 0;
+                        }
+                        retries = retries.saturating_add(1);
                         sleep_backoff(&self.config, retries).await;
                     }
                 }
             }
         }
-    }
-}
-
-/// How long to wait for the next frame.
-///
-/// Without a staleness timeout this is just a poll interval. With one, it never
-/// exceeds the remaining budget, so the check fires on time.
-/// How long to wait on the socket before looking around.
-///
-/// This is a *poll* interval, not the staleness deadline. The loop has to wake
-/// periodically whatever the configuration says — the stream is cancelled by
-/// dropping it, and a socket parked in an hour-long `timeout` would not notice —
-/// so the wait is capped at [`RECEIVE_POLL`] and the deadline is measured
-/// separately, against the clock.
-///
-/// Capping it *was* the whole staleness check, which made any `data_timeout`
-/// above five seconds behave as five: the first expiry of the poll was read as
-/// the timeout expiring. The two are now distinct, which is why this no longer
-/// needs to know whether data has been seen.
-fn receive_timeout(config: &StreamConfig) -> Duration {
-    match config.data_timeout {
-        Some(timeout) => RECEIVE_POLL.min(timeout),
-        None => RECEIVE_POLL,
     }
 }
 

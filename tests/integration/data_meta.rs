@@ -9,33 +9,22 @@
 
 #![cfg(feature = "data")]
 
+use crate::common::{credentials, fixture};
+use alpaca_sdk::data::Exchange;
 use alpaca_sdk::data::{
     Codes, DataFeed, ForexDataClient, ForexLatestRatesRequest, ForexRatesRequest, LogoClient,
     LogoRequest, OptionHistoricalDataClient, SingleSymbolRequest, StockAuctionsRequest,
     StockHistoricalDataClient, Tape, TickType,
 };
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
+use alpaca_sdk::{RestConfig, RetryConfig};
 use serde_json::json;
 use wiremock::matchers::{method, path, query_param, query_param_is_missing};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
 
 fn config(server: &MockServer, version: &str) -> RestConfig {
     RestConfig::new(server.uri())
         .api_version(version)
         .retry(RetryConfig::none())
-}
-
-fn credentials() -> Credentials {
-    Credentials::new("key", "secret").unwrap()
 }
 
 fn stock_client(server: &MockServer) -> StockHistoricalDataClient {
@@ -76,7 +65,7 @@ async fn auctions_deserialize_from_the_go_sdk_payload() {
     // condition code rather than the list a trade carries.
     let close = &apple[0].closing[0];
     assert_eq!(close.condition, "M");
-    assert_eq!(close.exchange, "P");
+    assert_eq!(close.exchange, Exchange::P);
     assert_eq!(close.price, 142.4);
     assert_eq!(close.size, Some(100.0));
     assert!(!apple[0].opening.is_empty());
@@ -129,9 +118,18 @@ async fn the_single_symbol_route_returns_a_bare_list_with_the_symbol_beside_it()
         .await
         .unwrap();
 
-    assert_eq!(bars.len(), 2);
+    // Expectations are read back out of the fixture rather than pinned to the
+    // prices that happened to be live when it was captured: `just capture`
+    // refreshes these files, and a hard-coded price turns every refresh into a
+    // spurious test failure. What is under test is the *decode* -- that the
+    // list came out of `bars` and the symbol was filled in from the path -- so
+    // the fixture stays the source of truth for the values themselves.
+    let raw = fixture("live/stocks_bars_single.json");
+    let expected = raw["bars"].as_array().unwrap();
+
+    assert_eq!(bars.len(), expected.len());
     assert_eq!(bars[0].symbol, "AAPL");
-    assert_eq!(bars[0].close, 308.26);
+    assert_eq!(bars[0].close, expected[0]["c"].as_f64().unwrap());
 }
 
 #[tokio::test]
@@ -153,10 +151,17 @@ async fn the_single_symbol_latest_route_returns_one_record_under_a_singular_key(
         .unwrap();
 
     // The record is under a *singular* key with the symbol beside it, so the
-    // symbol comes from the path rather than from a map key.
+    // symbol comes from the path rather than from a map key. The price and
+    // condition count come back out of the fixture for the same reason as in
+    // the bars test above -- `just capture` rewrites them.
+    let raw = fixture("live/stocks_latest_trade_single.json");
+
     assert_eq!(trade.symbol, "AAPL");
-    assert_eq!(trade.price, 301.3);
-    assert_eq!(trade.conditions.as_deref().map(<[_]>::len), Some(3));
+    assert_eq!(trade.price, raw["trade"]["p"].as_f64().unwrap());
+    assert_eq!(
+        trade.conditions.as_deref().map(<[_]>::len),
+        Some(raw["trade"]["c"].as_array().unwrap().len()),
+    );
 }
 
 #[tokio::test]

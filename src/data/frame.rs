@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 use polars::prelude::*;
 
+use crate::data::enums::Exchange;
 use crate::data::models::{Bar, DailyAuctions, ForexRate, Quote, Trade};
 
 /// Converts a market data collection into a [`DataFrame`].
@@ -207,13 +208,17 @@ impl FrameRows for Quote {
             floats("bid_size", records.iter().map(|quote| quote.bid_size)),
             strings(
                 "bid_exchange",
-                records.iter().map(|quote| quote.bid_exchange.as_deref()),
+                records
+                    .iter()
+                    .map(|quote| quote.bid_exchange.as_ref().map(Exchange::as_str)),
             ),
             floats("ask_price", records.iter().map(|quote| quote.ask_price)),
             floats("ask_size", records.iter().map(|quote| quote.ask_size)),
             strings(
                 "ask_exchange",
-                records.iter().map(|quote| quote.ask_exchange.as_deref()),
+                records
+                    .iter()
+                    .map(|quote| quote.ask_exchange.as_ref().map(Exchange::as_str)),
             ),
             string_lists(
                 "conditions",
@@ -236,7 +241,9 @@ impl FrameRows for Trade {
             timestamps("timestamp", records.iter().map(|trade| trade.timestamp)),
             strings(
                 "exchange",
-                records.iter().map(|trade| trade.exchange.as_deref()),
+                records
+                    .iter()
+                    .map(|trade| trade.exchange.as_ref().map(Exchange::as_str)),
             ),
             floats("price", records.iter().map(|trade| trade.price)),
             floats("size", records.iter().map(|trade| trade.size)),

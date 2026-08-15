@@ -14,7 +14,8 @@ Bodies are copied verbatim, including their mistakes. Eleven payloads carry
 files at the pinned commit, not something Alpaca sends. Reproducing it is
 correct: a captured payload earns its place by being a faithful copy of its
 source, and one tidied up by hand is a weaker record. `UPSTREAM_SYMBOL_TYPO` in
-`tests/trading_routes.rs` names it so it does not read as a live symbol.
+`tests/integration/trading_routes.rs` names it so it does not read as a live
+symbol.
 
 Usage:
     python3 scripts/extract_fixtures.py /path/to/alpaca-py

@@ -71,6 +71,7 @@ wire_enum! {
 
 /// A fee charged on an instant funding request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct InstantFundingFee {
     /// Alpaca's identifier for the fee.
     pub id: Uuid,
@@ -78,17 +79,20 @@ pub struct InstantFundingFee {
     #[serde(rename = "type")]
     pub fee_type: InstantFundingFeeType,
     /// How much.
+    #[serde(with = "crate::types::decimal")]
     pub amount: Decimal,
 }
 
 /// A day's interest on an unsettled advance.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct InstantFundingInterest {
     /// Alpaca's identifier for the charge.
     pub id: Uuid,
     /// The day it accrued for.
     pub date: NaiveDate,
     /// How much.
+    #[serde(with = "crate::types::decimal")]
     pub amount: Decimal,
     /// Where the charge stands.
     pub status: InstantFundingStatus,
@@ -101,6 +105,7 @@ pub struct InstantFundingInterest {
 
 /// An advance of cash against a deposit that has not cleared.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct InstantFunding {
     /// Alpaca's identifier for the advance.
     pub id: Uuid,
@@ -109,10 +114,13 @@ pub struct InstantFunding {
     /// The account the money is owed from.
     pub source_account_no: String,
     /// How much was advanced.
+    #[serde(with = "crate::types::decimal")]
     pub amount: Decimal,
     /// How much is still owed.
+    #[serde(with = "crate::types::decimal")]
     pub remaining_payable: Decimal,
     /// Interest accrued so far.
+    #[serde(with = "crate::types::decimal")]
     pub total_interest: Decimal,
     /// Where the advance stands.
     pub status: InstantFundingStatus,
@@ -138,33 +146,39 @@ pub struct InstantFunding {
 
 /// How much instant funding a correspondent may have outstanding.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct InstantFundingLimits {
     /// The ceiling.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub amount_limit: Option<Decimal>,
     /// How much of it is committed.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub amount_in_use: Option<Decimal>,
     /// How much is left.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub amount_available: Option<Decimal>,
 }
 
 /// One account's share of the correspondent's limit.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccountInstantFundingLimits {
     /// The account.
     pub account_no: String,
     /// Its ceiling.
+    #[serde(with = "crate::types::decimal")]
     pub amount_limit: Decimal,
     /// How much of it is committed.
+    #[serde(with = "crate::types::decimal")]
     pub amount_in_use: Decimal,
     /// How much is left.
+    #[serde(with = "crate::types::decimal")]
     pub amount_available: Decimal,
 }
 
 /// A day's instant funding position for one account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct InstantFundingReport {
     /// The account.
     pub account_no: String,
@@ -173,8 +187,10 @@ pub struct InstantFundingReport {
     /// The settlement deadline.
     pub deadline: NaiveDate,
     /// Everything owed on that day.
+    #[serde(with = "crate::types::decimal")]
     pub total_amount_owed: Decimal,
     /// Interest charged for missing the deadline.
+    #[serde(with = "crate::types::decimal")]
     pub total_interest_penalty: Decimal,
     /// The advances behind the total.
     #[serde(
@@ -246,6 +262,7 @@ pub struct CreateInstantFundingRequest {
     /// The account the money is owed from.
     pub source_account_no: String,
     /// How much to advance.
+    #[serde(with = "crate::types::decimal")]
     pub amount: Decimal,
 }
 
@@ -283,11 +300,23 @@ impl CreateInstantFundingRequest {
 
 /// One advance to settle, and who sent the money.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SettlementTransfer {
     /// The advance being settled.
     pub instant_transfer_id: Uuid,
     /// Who sent the money, for travel-rule reporting.
     pub transmitter_info: TransmitterInfo,
+}
+
+impl SettlementTransfer {
+    /// Settles the advance `instant_transfer_id`, sent by `transmitter_info`.
+    #[must_use]
+    pub fn new(instant_transfer_id: Uuid, transmitter_info: TransmitterInfo) -> Self {
+        Self {
+            instant_transfer_id,
+            transmitter_info,
+        }
+    }
 }
 
 /// A request to settle one or more advances.
@@ -355,6 +384,7 @@ pub struct GetAccountLimitsRequest {
 
 impl GetAccountLimitsRequest {
     /// Limits for `account_numbers`.
+    #[must_use]
     pub fn new(account_numbers: Vec<String>) -> Self {
         Self { account_numbers }
     }

@@ -32,7 +32,7 @@ const MAX_ERROR_BODY: usize = 2048;
 /// and a date honored badly waits either far too long or not at all. Anything
 /// that is not a plain count of seconds is treated as absent, which falls back
 /// to the curve — the behaviour before this header was read at all.
-fn retry_after(headers: &HeaderMap) -> Option<Duration> {
+pub(crate) fn retry_after(headers: &HeaderMap) -> Option<Duration> {
     headers
         .get(reqwest::header::RETRY_AFTER)?
         .to_str()
@@ -41,6 +41,54 @@ fn retry_after(headers: &HeaderMap) -> Option<Duration> {
         .parse::<u64>()
         .ok()
         .map(Duration::from_secs)
+}
+
+/// Whether replaying this request could do its work a second time.
+///
+/// The retry policy is a set of status codes, and a status code alone cannot
+/// answer this. A 504 means the gateway gave up waiting for the *answer*, not
+/// that nothing happened: Alpaca may well have accepted the order. Replaying it
+/// three times on the default policy is four orders, and the caller is handed
+/// [`Error::RetriesExhausted`] — so they believe zero were placed.
+///
+/// A 429 is the exception, and the reason this takes the status as well as the
+/// method. It is refused by the rate limiter before it reaches anything that
+/// acts on it, so nothing was done and replaying is safe whatever the method.
+///
+/// Everything else defers to HTTP's own idempotency definition: `GET`, `HEAD`,
+/// `PUT`, `DELETE`, `OPTIONS` and `TRACE` may be replayed; `POST` and `PATCH`
+/// may not. Alpaca's money-moving routes — `POST /v2/orders`,
+/// `POST /v1/journals`, every transfer — are all `POST`.
+///
+/// Alpaca's reference names the mechanism that would make a `POST` replayable:
+/// *"Always supply `Idempotency-Key` when creating journals"*. Until this crate
+/// sends one, not replaying is the only safe answer.
+fn replay_is_safe(method: &Method, replay: Replay, status: u16) -> bool {
+    if status == 429 {
+        return true;
+    }
+    replay == Replay::ByMethod && method.is_idempotent()
+}
+
+/// Whether a route may be replayed on the strength of its HTTP method.
+///
+/// Almost all of them may: the method is what HTTP defines idempotency by, and
+/// for `GET`, `PUT` and `DELETE` that definition holds here too.
+///
+/// The exception is a `DELETE` that is not idempotent in *effect*.
+/// `DELETE /v2/positions/{asset}` and `DELETE /v2/positions` do not delete a
+/// record — they submit liquidating market orders. If Alpaca accepts the order
+/// and the gateway then drops the response, the position is still open when the
+/// replay arrives, so the replay submits a second full-size liquidation and
+/// sells the caller into a short. That is the same failure `POST` is excluded
+/// for, wearing a different verb.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Replay {
+    /// HTTP's answer is the right one for this route.
+    ByMethod,
+    /// This route acts, whatever its verb says. Never replay it.
+    Never,
 }
 
 /// A request with no query parameters or body.
@@ -61,12 +109,17 @@ pub struct RestConfig {
     pub api_version: String,
     /// How retryable failures are handled.
     pub retry: RetryConfig,
-    /// Per-request timeout.
+    /// Per-request timeout, for REST requests only.
     ///
     /// `None` by default, and deliberately: Alpaca publishes no latency
     /// guarantee to pick a number from, and a timeout short enough to be useful
     /// on a quiet endpoint will fire on a slow one. Set it per client if the
     /// caller has a deadline of their own.
+    ///
+    /// It does **not** reach the event streams. This is a total deadline on a
+    /// whole request, and an event stream's response body is never finished, so
+    /// applying it there would cap the life of every subscription rather than
+    /// bound a slow call.
     pub timeout: Option<Duration>,
 }
 
@@ -160,7 +213,7 @@ impl RestClient {
         }
 
         Ok(Self {
-            http: builder.build()?,
+            http: builder.build().map_err(Error::transport)?,
             config,
         })
     }
@@ -207,8 +260,14 @@ impl RestClient {
     {
         self.decode(
             path,
-            self.send(Method::GET, path, Some(query), None::<&Empty>)
-                .await?,
+            self.send(
+                Method::GET,
+                Replay::ByMethod,
+                path,
+                Some(query),
+                None::<&Empty>,
+            )
+            .await?,
         )
     }
 
@@ -226,8 +285,43 @@ impl RestClient {
     {
         self.decode(
             path,
-            self.send(Method::DELETE, path, Some(query), None::<&Empty>)
-                .await?,
+            self.send(
+                Method::DELETE,
+                Replay::ByMethod,
+                path,
+                Some(query),
+                None::<&Empty>,
+            )
+            .await?,
+        )
+    }
+
+    /// Issues a `DELETE` that must never be replayed.
+    ///
+    /// For the routes whose verb says "remove a record" and whose effect is
+    /// "submit an order": `DELETE /v2/positions/{asset}` and
+    /// `DELETE /v2/positions`, plus their broker twins. HTTP calls a `DELETE`
+    /// idempotent and for those four it is not — a replayed liquidation sells
+    /// the same quantity twice. A timeout on one is reported, not retried; a 429
+    /// still is, because the rate limiter refused it before anything acted.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn delete_effectful<T, Q>(&self, path: &str, query: &Q) -> Result<T>
+    where
+        T: DeserializeOwned,
+        Q: Serialize + ?Sized,
+    {
+        self.decode(
+            path,
+            self.send(
+                Method::DELETE,
+                Replay::Never,
+                path,
+                Some(query),
+                None::<&Empty>,
+            )
+            .await?,
         )
     }
 
@@ -242,8 +336,14 @@ impl RestClient {
     {
         self.decode(
             path,
-            self.send(Method::POST, path, None::<&Empty>, Some(body))
-                .await?,
+            self.send(
+                Method::POST,
+                Replay::ByMethod,
+                path,
+                None::<&Empty>,
+                Some(body),
+            )
+            .await?,
         )
     }
 
@@ -258,8 +358,14 @@ impl RestClient {
     {
         self.decode(
             path,
-            self.send(Method::PUT, path, None::<&Empty>, Some(body))
-                .await?,
+            self.send(
+                Method::PUT,
+                Replay::ByMethod,
+                path,
+                None::<&Empty>,
+                Some(body),
+            )
+            .await?,
         )
     }
 
@@ -274,12 +380,23 @@ impl RestClient {
     {
         self.decode(
             path,
-            self.send(Method::PATCH, path, None::<&Empty>, Some(body))
-                .await?,
+            self.send(
+                Method::PATCH,
+                Replay::ByMethod,
+                path,
+                None::<&Empty>,
+                Some(body),
+            )
+            .await?,
         )
     }
 
     /// Issues a request with both a query string and a body.
+    ///
+    /// `replay` decides what happens on a retryable status. [`Replay::ByMethod`]
+    /// is right for almost everything; pass [`Replay::Never`] for a route whose
+    /// effect contradicts its verb — one that submits an order or moves money
+    /// behind a `PUT` or a `DELETE`.
     ///
     /// The six methods above cover routes that take one or the other, which is
     /// nearly all of them. A handful take both — `PUT /v2/watchlists:by_name`
@@ -291,6 +408,7 @@ impl RestClient {
     pub async fn request<T, Q, B>(
         &self,
         method: Method,
+        replay: Replay,
         path: &str,
         query: Option<&Q>,
         body: Option<&B>,
@@ -300,7 +418,7 @@ impl RestClient {
         Q: Serialize + ?Sized,
         B: Serialize + ?Sized,
     {
-        self.decode(path, self.send(method, path, query, body).await?)
+        self.decode(path, self.send(method, replay, path, query, body).await?)
     }
 
     /// Issues a `GET` and returns the response body as bytes.
@@ -316,16 +434,23 @@ impl RestClient {
         Q: Serialize + ?Sized,
     {
         let request = self.http.get(self.url(path)).query(query);
-        self.execute_bytes(request, path).await
+        self.execute_bytes(&Method::GET, Replay::ByMethod, request, path)
+            .await
     }
 
     /// Issues a request and returns the raw response body without deserializing.
+    ///
+    /// This is the escape hatch for a route this crate does not wrap, which
+    /// makes `replay` load-bearing: the wrapped routes have their answer chosen
+    /// for them, and here it is yours. [`Replay::Never`] for anything that acts
+    /// — a replayed liquidation sells twice.
     ///
     /// # Errors
     /// Propagates transport and API failures.
     pub async fn request_raw<Q, B>(
         &self,
         method: Method,
+        replay: Replay,
         path: &str,
         query: Option<&Q>,
         body: Option<&B>,
@@ -334,7 +459,7 @@ impl RestClient {
         Q: Serialize + ?Sized,
         B: Serialize + ?Sized,
     {
-        self.send(method, path, query, body).await
+        self.send(method, replay, path, query, body).await
     }
 
     /// Builds the absolute URL for `path`.
@@ -353,6 +478,7 @@ impl RestClient {
     async fn send<Q, B>(
         &self,
         method: Method,
+        replay: Replay,
         path: &str,
         query: Option<&Q>,
         body: Option<&B>,
@@ -361,33 +487,45 @@ impl RestClient {
         Q: Serialize + ?Sized,
         B: Serialize + ?Sized,
     {
-        let mut request = self.http.request(method, self.url(path));
+        let mut request = self.http.request(method.clone(), self.url(path));
         if let Some(query) = query {
             request = request.query(query);
         }
         if let Some(body) = body {
             request = request.json(body);
         }
-        self.execute(request, path).await
+        self.execute(&method, replay, request, path).await
     }
 
     /// Runs the retry loop and reads the successful body as text.
-    async fn execute(&self, request: RequestBuilder, path: &str) -> Result<String> {
-        self.execute_response(request, path)
+    async fn execute(
+        &self,
+        method: &Method,
+        replay: Replay,
+        request: RequestBuilder,
+        path: &str,
+    ) -> Result<String> {
+        self.execute_response(method, replay, request, path)
             .await?
             .text()
             .await
-            .map_err(Error::Transport)
+            .map_err(Error::transport)
     }
 
     /// Runs the retry loop and reads the successful body as bytes.
-    async fn execute_bytes(&self, request: RequestBuilder, path: &str) -> Result<Vec<u8>> {
+    async fn execute_bytes(
+        &self,
+        method: &Method,
+        replay: Replay,
+        request: RequestBuilder,
+        path: &str,
+    ) -> Result<Vec<u8>> {
         Ok(self
-            .execute_response(request, path)
+            .execute_response(method, replay, request, path)
             .await?
             .bytes()
             .await
-            .map_err(Error::Transport)?
+            .map_err(Error::transport)?
             .to_vec())
     }
 
@@ -395,13 +533,17 @@ impl RestClient {
     /// than per request type.
     async fn execute_response(
         &self,
+        method: &Method,
+        replay: Replay,
         request: RequestBuilder,
         path: &str,
     ) -> Result<reqwest::Response> {
         let retry = &self.config.retry;
         // `attempts` counts retries *after* the first request, so a value of 3
-        // means up to 4 requests in total.
-        let total_attempts = retry.attempts + 1;
+        // means up to 4 requests in total. Saturating because `attempts` is a
+        // caller-supplied `u32`: `u32::MAX` would overflow, panicking in debug
+        // and wrapping to a zero-iteration loop in release.
+        let total_attempts = retry.attempts.saturating_add(1);
 
         // The original builder is sent first and a copy is kept for the next
         // attempt. Cloning up front instead would swallow a builder-level error
@@ -416,7 +558,7 @@ impl RestClient {
                 None
             };
 
-            let response = current.send().await.map_err(Error::Transport)?;
+            let response = current.send().await.map_err(Error::transport)?;
             let status = response.status().as_u16();
 
             if response.status().is_success() {
@@ -431,7 +573,7 @@ impl RestClient {
             let api_error = ApiError::from_body(status, path, body);
 
             let last_attempt = attempt == total_attempts;
-            if !retry.should_retry(status) {
+            if !retry.should_retry(status) || !replay_is_safe(method, replay, status) {
                 return Err(Error::Api(api_error));
             }
             if last_attempt {
@@ -639,5 +781,40 @@ mod tests {
         let truncated = truncate(&body);
         assert!(truncated.ends_with("bytes total)"));
         assert!(truncated.len() < body.len());
+    }
+
+    /// `RetryConfig::attempts` is public and takes a `u32`, so a caller can pass
+    /// `u32::MAX`. The loop bound used to be `attempts + 1`, which overflowed:
+    /// a panic in debug, and in release a `total_attempts` of 0, which skips the
+    /// loop entirely and falls through to the `unreachable!` below it. Both
+    /// failures are on the caller's side of an ordinary builder call, so the
+    /// bound saturates instead.
+    ///
+    /// The request has to actually be issued for this to prove anything —
+    /// computing the bound in the test would only re-test the arithmetic.
+    #[tokio::test]
+    async fn a_saturating_attempt_count_still_sends_one_request() {
+        use wiremock::matchers::{method as m, path as p};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(m("GET"))
+            .and(p("/v2/account"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("7"))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let creds = Credentials::new("key", "secret").unwrap();
+        let client = RestClient::new(
+            &creds,
+            RestConfig::new(server.uri()).retry(RetryConfig::default().attempts(u32::MAX)),
+        )
+        .unwrap();
+
+        // Succeeds on the first attempt, so the retry budget is never spent; the
+        // point is that establishing that budget no longer overflows.
+        let got: u8 = client.get("/account", &Empty).await.unwrap();
+        assert_eq!(got, 7);
     }
 }

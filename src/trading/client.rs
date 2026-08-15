@@ -15,15 +15,15 @@ use crate::trading::locates::{
 };
 use crate::trading::markets::{GetMarketCalendarRequest, Market, MarketCalendar};
 use crate::trading::models::{
-    AccountConfiguration, Activity, Asset, Calendar, Clock, ClosePositionResponse,
-    CorporateActionAnnouncement, OptionContract, OptionContractsResponse, Order, PortfolioHistory,
-    Position, TradeAccount, Watchlist,
+    AccountConfiguration, Activity, Asset, Calendar, CancelOrderResponse, Clock,
+    ClosePositionResponse, CorporateActionAnnouncement, OptionContract, OptionContractsResponse,
+    Order, PortfolioHistory, Position, TradeAccount, Watchlist,
 };
 use crate::trading::requests::{
-    CancelOrderResponse, ClosePositionRequest, CreateWatchlistRequest, GetAccountActivitiesRequest,
-    GetCorporateAnnouncementsRequest, GetOptionContractsRequest, GetOrderByIdRequest,
-    GetOrdersRequest, GetPortfolioHistoryRequest, OrderRequest, ReplaceOrderRequest,
-    UpdateWatchlistRequest,
+    ClosePositionRequest, CreateWatchlistRequest, GetAccountActivitiesRequest, GetAssetsRequest,
+    GetCalendarRequest, GetCorporateAnnouncementsRequest, GetOptionContractsRequest,
+    GetOrderByIdRequest, GetOrdersRequest, GetPortfolioHistoryRequest, OrderRequest,
+    ReplaceOrderRequest, UpdateWatchlistRequest,
 };
 use crate::trading::tokenization::{
     ByClientRequestId, GetTokenizationRequestsRequest, MintTokenRequest, TokenizationRequest,
@@ -33,6 +33,9 @@ use crate::trading::wallets::{
     TransferFeeEstimate, TransferFeeEstimateRequest, WhitelistedAddress,
 };
 use crate::types::AssetIdent;
+use crate::types::Sort;
+use crate::types::path::segment;
+use crate::types::serde_util::OneOrMany;
 
 /// A client for Alpaca's trading API.
 ///
@@ -72,7 +75,7 @@ impl TradingClient {
     /// underlying HTTP client fails to build.
     pub fn with_config(credentials: &Credentials, config: RestConfig) -> Result<Self> {
         Ok(Self {
-            raw: crate::sse::streaming_client(credentials, &config)?,
+            raw: crate::sse::streaming_client(credentials)?,
             rest: RestClient::new(credentials, config)?,
         })
     }
@@ -92,7 +95,13 @@ impl TradingClient {
     /// answers with a bare string that is not JSON.
     async fn send_void(&self, method: Method, path: &str) -> Result<()> {
         self.rest
-            .request_raw(method, path, None::<&Empty>, None::<&Empty>)
+            .request_raw(
+                method,
+                crate::rest::Replay::ByMethod,
+                path,
+                None::<&Empty>,
+                None::<&Empty>,
+            )
             .await?;
         Ok(())
     }
@@ -111,6 +120,11 @@ impl TradingClient {
 
     /// Lists orders, optionally filtered.
     ///
+    /// **One page.** Alpaca returns 50 orders by default and at most 500, and
+    /// this sends exactly what it is given — so an account with more history
+    /// than that gets a silently truncated list rather than an error. Use
+    /// [`get_all_orders`](Self::get_all_orders) to walk the whole history.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_orders(&self, filter: Option<&GetOrdersRequest>) -> Result<Vec<Order>> {
@@ -118,6 +132,37 @@ impl TradingClient {
             Some(filter) => self.rest.get("/orders", filter).await,
             None => self.rest.get("/orders", &Empty).await,
         }
+    }
+
+    /// Every order matching `filter`, following the cursor across pages.
+    ///
+    /// `/v2/orders` has no `next_page_token`; it is walked with
+    /// [`before_order_id`](GetOrdersRequest::before_order_id), which needs the
+    /// response sorted newest-first. This therefore fixes `direction` to
+    /// [`Sort::Desc`] and `limit` to the API maximum of 500, overriding whatever
+    /// the filter carried for those two — every other filter is passed through.
+    ///
+    /// `max_items` bounds the total returned; `None` means every order there is.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_all_orders(
+        &self,
+        filter: Option<&GetOrdersRequest>,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Order>> {
+        let mut request = filter.cloned().unwrap_or_default();
+        request.limit = Some(crate::config::ORDERS_MAX_LIMIT);
+        request.direction = Some(Sort::Desc);
+
+        walk_orders(
+            &self.rest,
+            "/orders",
+            request,
+            max_items,
+            |order: &Order| order.id,
+        )
+        .await
     }
 
     /// Fetches one order by its Alpaca id.
@@ -201,7 +246,9 @@ impl TradingClient {
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_open_position(&self, asset: &AssetIdent) -> Result<Position> {
-        self.rest.get(&format!("/positions/{asset}"), &Empty).await
+        self.rest
+            .get(&format!("/positions/{}", asset.as_path_segment()?), &Empty)
+            .await
     }
 
     /// Liquidates every open position, reporting the outcome for each.
@@ -215,10 +262,10 @@ impl TradingClient {
         match cancel_orders {
             Some(cancel) => {
                 self.rest
-                    .delete("/positions", &[("cancel_orders", cancel)])
+                    .delete_effectful("/positions", &[("cancel_orders", cancel)])
                     .await
             }
-            None => self.rest.delete("/positions", &Empty).await,
+            None => self.rest.delete_effectful("/positions", &Empty).await,
         }
     }
 
@@ -229,12 +276,12 @@ impl TradingClient {
     pub async fn close_position(
         &self,
         asset: &AssetIdent,
-        close: Option<ClosePositionRequest>,
+        close: Option<&ClosePositionRequest>,
     ) -> Result<Order> {
-        let path = format!("/positions/{asset}");
+        let path = format!("/positions/{}", asset.as_path_segment()?);
         match close {
-            Some(close) => self.rest.delete(&path, &close.to_query()).await,
-            None => self.rest.delete(&path, &Empty).await,
+            Some(close) => self.rest.delete_effectful(&path, &close.to_query()).await,
+            None => self.rest.delete_effectful(&path, &Empty).await,
         }
     }
 
@@ -243,8 +290,11 @@ impl TradingClient {
     /// # Errors
     /// Propagates transport and API failures.
     pub async fn exercise_options_position(&self, contract: &AssetIdent) -> Result<()> {
-        self.send_void(Method::POST, &format!("/positions/{contract}/exercise"))
-            .await
+        self.send_void(
+            Method::POST,
+            &format!("/positions/{}/exercise", contract.as_path_segment()?),
+        )
+        .await
     }
 
     // ------------------------------------------------------------ account
@@ -320,10 +370,7 @@ impl TradingClient {
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
-    pub async fn get_all_assets(
-        &self,
-        filter: Option<&crate::trading::requests::GetAssetsRequest>,
-    ) -> Result<Vec<Asset>> {
+    pub async fn get_all_assets(&self, filter: Option<&GetAssetsRequest>) -> Result<Vec<Asset>> {
         match filter {
             Some(filter) => self.rest.get("/assets", filter).await,
             None => self.rest.get("/assets", &Empty).await,
@@ -335,7 +382,9 @@ impl TradingClient {
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_asset(&self, asset: &AssetIdent) -> Result<Asset> {
-        self.rest.get(&format!("/assets/{asset}"), &Empty).await
+        self.rest
+            .get(&format!("/assets/{}", asset.as_path_segment()?), &Empty)
+            .await
     }
 
     // ------------------------------------------------------ market status
@@ -352,10 +401,7 @@ impl TradingClient {
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
-    pub async fn get_calendar(
-        &self,
-        filter: Option<&crate::trading::requests::GetCalendarRequest>,
-    ) -> Result<Vec<Calendar>> {
+    pub async fn get_calendar(&self, filter: Option<&GetCalendarRequest>) -> Result<Vec<Calendar>> {
         match filter {
             Some(filter) => self.rest.get("/calendar", filter).await,
             None => self.rest.get("/calendar", &Empty).await,
@@ -432,7 +478,10 @@ impl TradingClient {
         symbol: &str,
     ) -> Result<Watchlist> {
         self.rest
-            .delete(&format!("/watchlists/{watchlist_id}/{symbol}"), &Empty)
+            .delete(
+                &format!("/watchlists/{watchlist_id}/{}", segment(symbol)?),
+                &Empty,
+            )
             .await
     }
 
@@ -507,7 +556,10 @@ impl TradingClient {
     /// Propagates transport, API, and decoding failures.
     pub async fn get_option_contract(&self, contract: &AssetIdent) -> Result<OptionContract> {
         self.rest
-            .get(&format!("/options/contracts/{contract}"), &Empty)
+            .get(
+                &format!("/options/contracts/{}", contract.as_path_segment()?),
+                &Empty,
+            )
             .await
     }
 
@@ -518,8 +570,11 @@ impl TradingClient {
     /// # Errors
     /// Propagates transport and API failures.
     pub async fn exercise_do_not_exercise(&self, contract: &AssetIdent) -> Result<()> {
-        let path = format!("/positions/{contract}/do-not-exercise");
-        self.rest.post(&path, &Empty).await
+        self.send_void(
+            Method::POST,
+            &format!("/positions/{}/do-not-exercise", contract.as_path_segment()?),
+        )
+        .await
     }
 
     // ------------------------------------------------ activities by type
@@ -545,7 +600,7 @@ impl TradingClient {
         activity_type: &ActivityType,
         filter: Option<&GetAccountActivitiesRequest>,
     ) -> Result<Vec<Activity>> {
-        let path = format!("/account/activities/{activity_type}");
+        let path = format!("/account/activities/{}", segment(activity_type)?);
         match filter {
             Some(filter) => {
                 filter.validate()?;
@@ -583,6 +638,7 @@ impl TradingClient {
         self.rest
             .request(
                 Method::PUT,
+                crate::rest::Replay::ByMethod,
                 "/watchlists:by_name",
                 Some(&[("name", name)]),
                 Some(update),
@@ -602,6 +658,7 @@ impl TradingClient {
         self.rest
             .request(
                 Method::POST,
+                crate::rest::Replay::ByMethod,
                 "/watchlists:by_name",
                 Some(&[("name", name)]),
                 Some(&serde_json::json!({ "symbol": symbol })),
@@ -635,7 +692,7 @@ impl TradingClient {
         market: &Market,
         filter: Option<&GetMarketCalendarRequest>,
     ) -> Result<MarketCalendar> {
-        let path = format!("/calendar/{market}");
+        let path = format!("/calendar/{}", segment(market)?);
         match filter {
             Some(filter) => self.rest.at_version("v3").get(&path, filter).await,
             None => self.rest.at_version("v3").get(&path, &Empty).await,
@@ -756,24 +813,27 @@ impl TradingClient {
     pub async fn get_crypto_wallets(
         &self,
         filter: Option<&GetCryptoWalletsRequest>,
-    ) -> Result<CryptoWallet> {
-        match filter {
-            Some(filter) => self.rest.get("/wallets", filter).await,
-            None => self.rest.get("/wallets", &Empty).await,
-        }
+    ) -> Result<Vec<CryptoWallet>> {
+        let wallets: OneOrMany<CryptoWallet> = match filter {
+            Some(filter) => self.rest.get("/wallets", filter).await?,
+            None => self.rest.get("/wallets", &Empty).await?,
+        };
+        Ok(wallets.into_vec())
     }
 
     /// The account's on-chain transfers.
     ///
     /// The withdrawal route that would create one is deliberately absent: it is
     /// deprecated with a sunset of 2026-10-09 and the reference's replacement
-    /// is the Alpaca web application, not another endpoint. See
-    /// [`crate::trading::wallets`].
+    /// is the Alpaca web application, not another endpoint. The broker API's
+    /// equivalent withdrawal is neither deprecated nor absent.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
-    pub async fn get_crypto_transfers(&self) -> Result<CryptoTransfer> {
-        self.rest.get("/wallets/transfers", &Empty).await
+    pub async fn get_crypto_transfers(&self) -> Result<Vec<CryptoTransfer>> {
+        let transfers: OneOrMany<CryptoTransfer> =
+            self.rest.get("/wallets/transfers", &Empty).await?;
+        Ok(transfers.into_vec())
     }
 
     /// Fetches one on-chain transfer.
@@ -782,7 +842,10 @@ impl TradingClient {
     /// Propagates transport, API, and decoding failures.
     pub async fn get_crypto_transfer(&self, transfer_id: &str) -> Result<CryptoTransfer> {
         self.rest
-            .get(&format!("/wallets/transfers/{transfer_id}"), &Empty)
+            .get(
+                &format!("/wallets/transfers/{}", segment(transfer_id)?),
+                &Empty,
+            )
             .await
     }
 
@@ -790,8 +853,10 @@ impl TradingClient {
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
-    pub async fn get_whitelisted_addresses(&self) -> Result<WhitelistedAddress> {
-        self.rest.get("/wallets/whitelists", &Empty).await
+    pub async fn get_whitelisted_addresses(&self) -> Result<Vec<WhitelistedAddress>> {
+        let addresses: OneOrMany<WhitelistedAddress> =
+            self.rest.get("/wallets/whitelists", &Empty).await?;
+        Ok(addresses.into_vec())
     }
 
     /// Allowlists a withdrawal address.
@@ -814,7 +879,10 @@ impl TradingClient {
     /// Propagates transport and API failures.
     pub async fn delete_whitelisted_address(&self, address_id: &str) -> Result<()> {
         self.rest
-            .delete(&format!("/wallets/whitelists/{address_id}"), &Empty)
+            .delete(
+                &format!("/wallets/whitelists/{}", segment(address_id)?),
+                &Empty,
+            )
             .await
     }
 
@@ -852,4 +920,99 @@ impl TradingClient {
         let query = filter.map(EventStreamRequest::query).unwrap_or_default();
         crate::sse::subscribe(&self.raw, &url, path, &query).await
     }
+}
+
+/// Walks `/orders` (or its broker twin) with the `before_order_id` cursor.
+///
+/// Shared by [`TradingClient::get_all_orders`] and
+/// [`BrokerClient::get_all_orders_for_account`](crate::broker::BrokerClient::get_all_orders_for_account):
+/// the two routes take the same request type and the same page cap, so a second
+/// copy of this loop would be a second place for the cursor logic to drift.
+///
+/// `request` is expected to arrive with `limit` and `direction` already set —
+/// the walk needs newest-first ordering to page backwards.
+pub(crate) async fn walk_orders<T, F>(
+    rest: &RestClient,
+    path: &str,
+    mut request: GetOrdersRequest,
+    max_items: Option<usize>,
+    id_of: F,
+) -> Result<Vec<T>>
+where
+    T: serde::de::DeserializeOwned,
+    F: Fn(&T) -> Uuid,
+{
+    /// Narrows the page size to what is still outstanding.
+    ///
+    /// Per page, not once: capping only the first request still pulled 1,000
+    /// orders to satisfy `max_items: Some(600)`.
+    fn narrow(request: &mut GetOrdersRequest, max_items: Option<usize>, so_far: usize) {
+        let Some(max) = max_items else { return };
+        let Ok(remaining) = u32::try_from(max.saturating_sub(so_far)) else {
+            return;
+        };
+        request.limit = Some(request.limit.unwrap_or(u32::MAX).min(remaining));
+    }
+
+    // Alpaca's cursors are inclusive on some routes and exclusive on others,
+    // and the reference does not say which this one is — so a page boundary is
+    // deduplicated rather than trusted. If it turns out inclusive, without this
+    // every page would silently repeat one order.
+    let mut seen: std::collections::HashSet<Uuid> = std::collections::HashSet::new();
+    let mut all: Vec<T> = Vec::new();
+
+    loop {
+        if max_items == Some(0) {
+            break;
+        }
+        narrow(&mut request, max_items, all.len());
+
+        let page = rest.get::<Vec<T>, _>(path, &request).await?;
+
+        // An *empty* page ends the walk, not a short one. A short page looks
+        // like the end, and usually is — but it is also what a server that
+        // silently caps `limit` below what was asked returns, and this route's
+        // documented default page size is 50 against the 500 we ask for. Ending
+        // on short would then reproduce the truncation this walk exists to fix,
+        // with no error. Ending on empty costs one extra request, which is the
+        // price of an endpoint that does not say whether more remain.
+        if page.is_empty() {
+            break;
+        }
+
+        // The cursor is the oldest id on this page, and it has to be read
+        // before the page is moved into the accumulator.
+        let oldest = page.last().map(&id_of);
+        let before = all.len();
+        for order in page {
+            if seen.insert(id_of(&order)) {
+                all.push(order);
+            }
+        }
+
+        if let Some(max) = max_items
+            && all.len() >= max
+        {
+            all.truncate(max);
+            break;
+        }
+
+        // Progress is measured in *new* orders, not in cursor movement. A guard
+        // that only compared consecutive cursors would miss a server cycling
+        // between two pages — the walk would never terminate even though it had
+        // stopped learning anything. `seen` already knows the answer.
+        if all.len() == before {
+            tracing::warn!(
+                path,
+                "order walk stopped making progress; every order on the last \
+                 page had already been seen"
+            );
+            break;
+        }
+
+        let Some(oldest) = oldest else { break };
+        request.before_order_id = Some(oldest);
+    }
+
+    Ok(all)
 }

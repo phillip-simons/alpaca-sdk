@@ -14,7 +14,7 @@
 //! Subscribing is `{"action":"listen","data":{"streams":["trade_updates"]}}`, and
 //! every update arrives as `{"stream":"trade_updates","data":{…}}`.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures_util::{SinkExt as _, Stream, StreamExt as _};
 use serde_json::Value;
@@ -31,6 +31,8 @@ const TRADE_UPDATES: &str = "trade_updates";
 
 /// How long to wait for a frame before re-checking the staleness clock.
 const RECEIVE_POLL: Duration = Duration::from_secs(5);
+
+pub use crate::config::DEFAULT_STABLE_SESSION;
 
 /// A frame from the trade update stream.
 #[derive(Debug, Clone, PartialEq)]
@@ -81,6 +83,7 @@ pub struct TradingStream {
     min_backoff: Duration,
     max_backoff: Duration,
     data_timeout: Option<Duration>,
+    stable_session: Duration,
 }
 
 impl TradingStream {
@@ -99,6 +102,7 @@ impl TradingStream {
             min_backoff: DEFAULT_MIN_BACKOFF,
             max_backoff: DEFAULT_MAX_BACKOFF,
             data_timeout: None,
+            stable_session: DEFAULT_STABLE_SESSION,
         }
     }
 
@@ -111,12 +115,41 @@ impl TradingStream {
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if the timeout is not positive.
     pub fn data_timeout(mut self, timeout: Duration) -> Result<Self> {
-        if timeout.is_zero() {
-            return Err(Error::InvalidRequest(
-                "data_timeout must be a positive duration".to_owned(),
-            ));
-        }
+        crate::backoff::check_data_timeout(timeout)?;
         self.data_timeout = Some(timeout);
+        Ok(self)
+    }
+
+    /// The reconnect backoff window.
+    ///
+    /// The delay starts at `min`, doubles on each consecutive failure, and is
+    /// capped at `max`. Mirrors
+    /// `data::StreamConfig::backoff`, so the two
+    /// streams are configured the same way.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if `min` is zero — which would spin —
+    /// or if `max` is smaller than `min`.
+    pub fn backoff(mut self, min: Duration, max: Duration) -> Result<Self> {
+        crate::backoff::check_window(min, max)?;
+        self.min_backoff = min;
+        self.max_backoff = max;
+        Ok(self)
+    }
+
+    /// How long a session must stay up before it clears the reconnect failure
+    /// count.
+    ///
+    /// A session that delivered a trade update always clears it; this covers the
+    /// silent account, which this stream's own documentation calls normal.
+    /// Defaults to [`DEFAULT_STABLE_SESSION`].
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if the duration is zero, which would
+    /// treat a connection that dropped instantly as healthy.
+    pub fn stable_session(mut self, after: Duration) -> Result<Self> {
+        crate::backoff::check_stable_session(after)?;
+        self.stable_session = after;
         Ok(self)
     }
 
@@ -148,25 +181,42 @@ impl TradingStream {
                     }
                 };
 
-                retries = retries.saturating_add(1);
+                // When this session began, for the health check at the bottom
+                // of the loop. The old reset fired only on a trade update, and a
+                // silent account is this stream's documented normal state — so
+                // it never ran, and a few server-side recycles left every
+                // reconnect waiting the maximum. There is no replay on this
+                // socket, so a fill in that window is gone. Resetting on
+                // connect alone would swing too far the other way — see
+                // `DEFAULT_STABLE_SESSION`.
+                let session_start = Instant::now();
+
+                // Reset by trade updates, so `data_timeout` measures elapsed
+                // time since the last one rather than the length of one read.
+                let mut last_update = Instant::now();
+                let mut delivered_update = false;
 
                 loop {
                     let poll = match self.data_timeout {
-                        Some(timeout) => RECEIVE_POLL.min(timeout),
-                        None => RECEIVE_POLL,
-                    };
-
-                    let frame = match tokio::time::timeout(poll, socket.next()).await {
-                        Err(_) => {
-                            if self.data_timeout.is_some() {
+                        Some(timeout) => {
+                            let remaining = timeout.saturating_sub(last_update.elapsed());
+                            if remaining.is_zero() {
                                 tracing::warn!(
                                     endpoint = %self.endpoint,
+                                    ?timeout,
                                     "no trade updates within the timeout, reconnecting"
                                 );
                                 break;
                             }
-                            continue;
+                            RECEIVE_POLL.min(remaining)
                         }
+                        None => RECEIVE_POLL,
+                    };
+
+                    let frame = match tokio::time::timeout(poll, socket.next()).await {
+                        // Staleness is decided at the top of the loop, from the
+                        // clock rather than from this one read.
+                        Err(_) => continue,
                         Ok(None) => break,
                         Ok(Some(Err(error))) => {
                             tracing::warn!(%error, "trade update stream error, reconnecting");
@@ -185,7 +235,8 @@ impl TradingStream {
                     match decode(&payload) {
                         Ok(Some(message)) => {
                             if message.is_trade_update() {
-                                retries = 0;
+                                last_update = Instant::now();
+                                delivered_update = true;
                             }
                             yield Ok(message);
                         }
@@ -197,7 +248,12 @@ impl TradingStream {
                 }
 
                 let _ = socket.close(None).await;
-                retries = retries.max(1);
+                // A session that did its job clears the failure count; one that
+                // came up and fell straight over does not.
+                if delivered_update || session_start.elapsed() >= self.stable_session {
+                    retries = 0;
+                }
+                retries = retries.saturating_add(1);
                 let delay = reconnect_delay(retries, self.min_backoff, self.max_backoff);
                 tracing::debug!(?delay, retries, "backing off before reconnect");
                 tokio::time::sleep(delay).await;

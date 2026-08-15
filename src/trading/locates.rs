@@ -16,6 +16,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::error::{Error, Result};
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -47,7 +48,17 @@ wire_enum! {
 }
 
 /// A locate request and its current status.
+///
+/// Borrowing shares to sell short: ask what a symbol costs to borrow
+/// ([`LocateQuote`]), then request a locate ([`CreateLocateRequest`]) and hold
+/// it for the trading day.
+///
+/// **These routes are `v1`, not the trading client's `v2`**, and the client
+/// sends them through
+/// [`RestClient::at_version`](crate::rest::RestClient::at_version) for that
+/// reason.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Locate {
     /// Alpaca's identifier for the locate.
     pub id: Uuid,
@@ -61,13 +72,13 @@ pub struct Locate {
     #[serde(default)]
     pub located_qty: Option<i64>,
     /// The fee per share paid. Absent when rejected.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub located_price: Option<Decimal>,
     /// The highest fee per share the request would accept.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub limit_price: Option<Decimal>,
     /// The total fee for the locate.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub total_fee: Option<Decimal>,
     /// Whether the request required the full quantity or nothing.
     #[serde(default)]
@@ -84,6 +95,7 @@ pub struct Locate {
 
 /// A page of locates.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LocatesPage {
     /// The locates on this page.
     #[serde(
@@ -98,13 +110,14 @@ pub struct LocatesPage {
 
 /// What one symbol currently costs to borrow.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LocateQuote {
     /// The symbol quoted.
     pub symbol: String,
     /// Shares available to borrow.
     pub available_qty: i64,
     /// The fee per share.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub price: Option<Decimal>,
     /// When the quote was taken.
     pub quoted_at: DateTime<Utc>,
@@ -112,6 +125,7 @@ pub struct LocateQuote {
 
 /// Why a requested symbol has no quote.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LocateQuoteFailure {
     /// The symbol that could not be quoted.
     pub symbol: String,
@@ -127,6 +141,7 @@ pub struct LocateQuoteFailure {
 /// symbols where one is easy to borrow returns four quotes and one entry in
 /// [`errors`](Self::errors).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LocateQuotes {
     /// The symbols that were quoted.
     #[serde(
@@ -192,11 +207,19 @@ impl GetLocatesRequest {
     }
 
     /// Restricts the trading-date window.
-    #[must_use]
-    pub fn between(mut self, start: NaiveDate, end: NaiveDate) -> Self {
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if `end`
+    /// is before `start`.
+    pub fn between(mut self, start: NaiveDate, end: NaiveDate) -> crate::Result<Self> {
+        if end < start {
+            return Err(crate::Error::InvalidRequest(format!(
+                "end ({end}) is before start ({start})"
+            )));
+        }
         self.start = Some(start);
         self.end = Some(end);
-        self
+        Ok(self)
     }
 }
 
@@ -205,12 +228,13 @@ impl GetLocatesRequest {
 #[non_exhaustive]
 pub struct GetLocateQuotesRequest {
     /// The symbols to quote, sent as one comma-separated parameter.
-    #[serde(serialize_with = "crate::types::serde_util::comma_separated_required")]
+    #[serde(serialize_with = "crate::types::comma_separated_required")]
     pub symbols: Vec<String>,
 }
 
 impl GetLocateQuotesRequest {
     /// Quotes for `symbols`.
+    #[must_use]
     pub fn new(symbols: Vec<String>) -> Self {
         Self { symbols }
     }
@@ -225,7 +249,11 @@ pub struct CreateLocateRequest {
     /// How many shares.
     pub qty: i64,
     /// The highest fee per share to accept.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub limit_price: Option<Decimal>,
     /// Whether to reject a partial fill.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -234,6 +262,7 @@ pub struct CreateLocateRequest {
 
 impl CreateLocateRequest {
     /// Locate `qty` shares of `symbol`.
+    #[must_use]
     pub fn new(symbol: impl Into<String>, qty: i64) -> Self {
         Self {
             symbol: symbol.into(),
@@ -266,9 +295,9 @@ impl CreateLocateRequest {
     /// # Errors
     /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if `qty`
     /// is not positive, or `limit_price` is negative.
-    pub fn validate(&self) -> crate::Result<()> {
+    pub fn validate(&self) -> Result<()> {
         if self.qty <= 0 {
-            return Err(crate::Error::InvalidRequest(
+            return Err(Error::InvalidRequest(
                 "qty must be greater than zero".to_owned(),
             ));
         }
@@ -276,7 +305,7 @@ impl CreateLocateRequest {
             .limit_price
             .is_some_and(|price| price.is_sign_negative())
         {
-            return Err(crate::Error::InvalidRequest(
+            return Err(Error::InvalidRequest(
                 "limit_price cannot be negative".to_owned(),
             ));
         }
@@ -293,6 +322,17 @@ mod tests {
         let request = GetLocateQuotesRequest::new(vec!["TSLA".to_owned(), "GME".to_owned()]);
         let json = serde_json::to_value(&request).unwrap();
         assert_eq!(json["symbols"], "TSLA,GME");
+    }
+
+    #[test]
+    fn a_backwards_window_is_refused() {
+        // The same check its twin `GetMarketCalendarRequest::between` makes.
+        // A backwards window used to be accepted here and answered with an
+        // empty list, which reads as "no locates" rather than "bad request".
+        let start: NaiveDate = "2026-01-10".parse().unwrap();
+        let end: NaiveDate = "2026-01-01".parse().unwrap();
+        assert!(GetLocatesRequest::new().between(start, end).is_err());
+        assert!(GetLocatesRequest::new().between(end, start).is_ok());
     }
 
     #[test]

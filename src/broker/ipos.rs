@@ -26,6 +26,7 @@ wire_enum! {
 
 /// An initial public offering.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct IpoOffering {
     /// Alpaca's reference for the offering, which is how it is fetched.
     pub ipo_reference: String,
@@ -42,8 +43,10 @@ pub struct IpoOffering {
     /// `Available` and refuse new orders while it prices.
     pub no_new_orders: bool,
     /// The bottom of the price band.
+    #[serde(with = "crate::types::decimal")]
     pub min_price: Decimal,
     /// The top of it.
+    #[serde(with = "crate::types::decimal")]
     pub max_price: Decimal,
     /// The ticker it will trade under.
     #[serde(default)]
@@ -91,6 +94,7 @@ pub struct IpoOffering {
 /// The list nests under `data`, and so does the single-offering response — an
 /// envelope this API uses nowhere else.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct IpoOfferingsPage {
     /// The offerings.
     #[serde(
@@ -106,6 +110,7 @@ pub struct IpoOfferingsPage {
 
 /// One offering, in the same `data` envelope the list uses.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct IpoOfferingResponse {
     /// The offering.
     #[serde(rename = "data")]

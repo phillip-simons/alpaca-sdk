@@ -37,6 +37,7 @@ use crate::types::{ContractType, Sort};
 /// Alpaca accepts a share quantity or a dollar amount, never both, so this is
 /// an enum rather than two optional fields and a runtime check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum OrderAmount {
     /// A number of shares. Fractional quantities are supported for stocks with
     /// market orders and for crypto.
@@ -45,8 +46,46 @@ pub enum OrderAmount {
     Notional(Decimal),
 }
 
+/// The two prices a stop-limit order carries.
+///
+/// A struct rather than two positional `Decimal` parameters, for the reason
+/// [`OrderAmount`] and [`Trail`] are their own types: the constructor took them
+/// adjacent and same-typed, in the reverse of the field order used everywhere
+/// else in this file and in Alpaca's own schema. Transposing them compiled, and
+/// produced a *legal* order that Alpaca accepted — so nothing errored anywhere.
+/// A protective sell stop-limit built the wrong way round arms a dollar late and
+/// rests above its trigger, which is unlikely to fill in the decline it was
+/// written for.
+///
+/// ```
+/// # use alpaca_sdk::trading::StopLimit;
+/// # use alpaca_sdk::Decimal;
+/// let prices = StopLimit::new(
+///     Decimal::new(9500, 2), // triggers at 95.00
+///     Decimal::new(9450, 2), // fills no worse than 94.50
+/// );
+/// # let _ = prices;
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct StopLimit {
+    /// The price that turns the order live.
+    pub stop: Decimal,
+    /// The worst price it may then fill at.
+    pub limit: Decimal,
+}
+
+impl StopLimit {
+    /// The pair that triggers at `stop` and fills no worse than `limit`.
+    #[must_use]
+    pub fn new(stop: Decimal, limit: Decimal) -> Self {
+        Self { stop, limit }
+    }
+}
+
 /// How far a trailing stop trails the high water mark.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Trail {
     /// A dollar amount away from the high water mark.
     Price(Decimal),
@@ -347,13 +386,12 @@ impl OrderRequest {
         side: OrderSide,
         amount: OrderAmount,
         time_in_force: TimeInForce,
-        stop_price: Decimal,
-        limit_price: Decimal,
+        prices: StopLimit,
     ) -> Self {
         let mut request =
             Self::single_leg(OrderType::StopLimit, symbol, side, amount, time_in_force);
-        request.stop_price = Some(stop_price);
-        request.limit_price = Some(limit_price);
+        request.stop_price = Some(prices.stop);
+        request.limit_price = Some(prices.limit);
         request
     }
 
@@ -418,18 +456,27 @@ impl OrderRequest {
     }
 
     /// Makes this a one-triggers-other order with a take-profit exit.
+    ///
+    /// An OTO order carries exactly one exit, so this *replaces* any stop-loss
+    /// leg rather than adding to it — chaining both builders leaves the last one
+    /// called, not both. For two exits use [`bracket`](Self::bracket).
     #[must_use]
     pub fn oto_take_profit(mut self, take_profit: TakeProfitRequest) -> Self {
         self.order_class = Some(OrderClass::Oto);
         self.take_profit = Some(take_profit);
+        self.stop_loss = None;
         self
     }
 
     /// Makes this a one-triggers-other order with a stop-loss exit.
+    ///
+    /// Replaces any take-profit leg, for the same reason as
+    /// [`oto_take_profit`](Self::oto_take_profit).
     #[must_use]
     pub fn oto_stop_loss(mut self, stop_loss: StopLossRequest) -> Self {
         self.order_class = Some(OrderClass::Oto);
         self.stop_loss = Some(stop_loss);
+        self.take_profit = None;
         self
     }
 
@@ -475,6 +522,16 @@ impl OrderRequest {
             }
             Some(OrderClass::Oto) if self.take_profit.is_none() && self.stop_loss.is_none() => {
                 return invalid("oto orders require either take_profit or stop_loss".to_owned());
+            }
+            // Belt and braces: the builders clear the sibling leg, but the
+            // fields are public and can be set directly. Two legs on an `oto`
+            // is a bracket written the wrong way, and the API would take it as
+            // something the caller did not mean.
+            Some(OrderClass::Oto) if self.take_profit.is_some() && self.stop_loss.is_some() => {
+                return invalid(
+                    "oto orders take exactly one exit; use the bracket order class for both"
+                        .to_owned(),
+                );
             }
             _ => {}
         }
@@ -640,6 +697,7 @@ impl ReplaceOrderRequest {
 /// A quantity or a percentage, never both and never neither — an enum rather
 /// than two optional fields and a runtime check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ClosePositionRequest {
     /// Close this number of shares.
     Qty(Decimal),
@@ -741,7 +799,7 @@ pub struct GetOrdersRequest {
 /// Filters for listing account activities.
 ///
 /// The broker API documents the same filters plus an `account_id`, and carries
-/// [its own copy](crate::broker::GetAccountActivitiesRequest) for that reason.
+/// its own copy, `broker::GetAccountActivitiesRequest`, for that reason.
 /// The two cannot share a struct the way `broker::Order` shares
 /// `trading::Order`: that works by `#[serde(flatten)]`, and a flattened struct
 /// cannot be serialized into a query string — `serde_urlencoded` rejects it at
@@ -823,12 +881,16 @@ impl GetAccountActivitiesRequest {
 
 /// Filters for fetching one order.
 ///
-/// `Default` leaves `nested` off, which is the API's own default.
+/// `Default` sends no `nested` parameter at all, leaving the API to apply its
+/// own default. It is an `Option` for that reason: a plain `bool` would have
+/// serialized `?nested=false` from a default request, which is a different
+/// thing to ask for than not asking.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct GetOrderByIdRequest {
     /// Whether to roll multi-leg orders up under their parent's `legs`.
-    pub nested: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nested: Option<bool>,
 }
 
 /// Filters for listing assets.
@@ -1147,19 +1209,6 @@ impl GetOptionContractsRequest {
             ..Self::default()
         }
     }
-}
-
-/// The outcome of cancelling one order in a bulk cancel.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct CancelOrderResponse {
-    /// Id of the order.
-    pub id: Uuid,
-    /// Status code for this order's cancellation.
-    #[serde(with = "crate::types::serde_util::int")]
-    pub status: i64,
-    /// Any additional detail returned for the cancellation.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub body: Option<serde_json::Value>,
 }
 
 #[cfg(test)]

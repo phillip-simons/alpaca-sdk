@@ -46,6 +46,7 @@ wire_enum! {
 /// Alpaca's business, and refusing a request it would have accepted is the
 /// worse failure.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TransmitterInfo {
     /// The sender's full name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -78,22 +79,24 @@ pub struct TransmitterInfo {
 
 /// A settlement of money owed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Settlement {
     /// Alpaca's identifier for the settlement.
     pub id: Uuid,
     /// Where it stands.
     pub status: SettlementStatus,
     /// The amount settled.
+    #[serde(with = "crate::types::decimal")]
     pub total_amount: Decimal,
     /// Interest included in that amount.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub interest_amount: Option<Decimal>,
     /// Which book it belongs to.
     #[serde(default)]
     pub asset_class: Option<SettlementAssetClass>,
     /// The currency.
     #[serde(default)]
-    pub currency: Option<String>,
+    pub currency: Option<crate::types::SupportedCurrencies>,
     /// The account the money came from.
     #[serde(default)]
     pub source_account_number: Option<String>,
@@ -114,6 +117,7 @@ pub struct Settlement {
 
 /// A list of settlements, which arrives under a key rather than bare.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Settlements {
     /// The settlements.
     #[serde(

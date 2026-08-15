@@ -8,26 +8,30 @@
 
 use std::collections::HashMap;
 
+use crate::common::fixture;
 use alpaca_sdk::data::{
-    Auction, Bar, DailyAuctions, ForexRate, Quote, StockBarsRequest, StockHistoricalDataClient,
-    TimeFrame, ToFrame, Trade,
+    Bar, DailyAuctions, ForexRate, Quote, StockBarsRequest, StockHistoricalDataClient, TimeFrame,
+    ToFrame, Trade,
 };
 use alpaca_sdk::polars::prelude::*;
 use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
+use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
-
 fn timestamp(text: &str) -> chrono::DateTime<chrono::Utc> {
     text.parse().unwrap()
+}
+
+/// Builds a market data model from the wire shape Alpaca sends.
+///
+/// The models are `#[non_exhaustive]` — Alpaca adds fields to them without a
+/// version bump, and the crate should be able to follow that without a major
+/// release — so they are not constructible as struct literals from outside the
+/// crate. Going through the deserializer is the honest route anyway: it is the
+/// path a real response takes.
+fn from_wire<T: serde::de::DeserializeOwned>(value: serde_json::Value) -> T {
+    serde_json::from_value(value).unwrap()
 }
 
 /// Serves one captured payload and returns what the client made of it.
@@ -165,18 +169,13 @@ fn the_map_key_wins_over_the_records_own_field() {
 /// none. Crypto quotes routinely carry no conditions.
 #[test]
 fn a_conditions_column_is_a_string_list_even_when_every_row_is_null() {
-    let bare = Quote {
-        symbol: "BTC/USD".to_owned(),
-        timestamp: timestamp("2022-03-09T09:00:00Z"),
-        bid_price: 1.0,
-        bid_size: 1.0,
-        bid_exchange: None,
-        ask_price: 2.0,
-        ask_size: 1.0,
-        ask_exchange: None,
-        conditions: None,
-        tape: None,
-    };
+    // Built from the wire form rather than as a struct literal: the models are
+    // `#[non_exhaustive]`, because Alpaca adds fields to them without warning.
+    let bare: Quote = from_wire(json!({
+        "t": "2022-03-09T09:00:00Z",
+        "bp": 1.0, "bs": 1.0,
+        "ap": 2.0, "as": 1.0
+    }));
 
     let frame = [bare].as_slice().df().unwrap();
     assert_eq!(
@@ -192,20 +191,13 @@ fn a_conditions_column_is_a_string_list_even_when_every_row_is_null() {
 /// of list columns makes every question start with an explode.
 #[test]
 fn a_day_of_auctions_flattens_to_one_row_per_print() {
-    let print = |exchange: &str, price: f64| Auction {
-        timestamp: timestamp("2024-04-26T13:30:00Z"),
-        exchange: exchange.to_owned(),
-        price,
-        size: None,
-        condition: "Q".to_owned(),
-    };
+    let print = |exchange: &str, price: f64| json!({"t": "2024-04-26T13:30:00Z", "x": exchange, "p": price, "c": "Q"});
 
-    let day = DailyAuctions {
-        symbol: String::new(),
-        date: "2024-04-26".parse().unwrap(),
-        opening: vec![print("P", 100.0)],
-        closing: vec![print("Q", 101.0), print("V", 102.0)],
-    };
+    let day: DailyAuctions = from_wire(json!({
+        "d": "2024-04-26",
+        "o": [print("P", 100.0)],
+        "c": [print("Q", 101.0), print("V", 102.0)]
+    }));
 
     let auctions: HashMap<String, Vec<DailyAuctions>> =
         HashMap::from([("AAPL".to_owned(), vec![day])]);
@@ -233,13 +225,10 @@ fn a_day_of_auctions_flattens_to_one_row_per_print() {
 /// frame of bars on "symbol" would be a mistake the column name prevents.
 #[test]
 fn forex_rates_are_keyed_by_currency_pair() {
-    let rate = ForexRate {
-        currency_pair: String::new(),
-        timestamp: timestamp("2024-04-26T13:30:00Z"),
-        bid_price: 1.07,
-        mid_price: 1.075,
-        ask_price: 1.08,
-    };
+    let rate: ForexRate = from_wire(json!({
+        "t": "2024-04-26T13:30:00Z",
+        "bp": 1.07, "mp": 1.075, "ap": 1.08
+    }));
 
     let rates: HashMap<String, Vec<ForexRate>> = HashMap::from([("EURUSD".to_owned(), vec![rate])]);
     let frame = rates.df().unwrap();
@@ -268,4 +257,43 @@ fn an_empty_collection_still_has_its_columns() {
         frame.column("conditions").unwrap().dtype(),
         &DataType::List(Box::new(DataType::String))
     );
+}
+
+/// A caller can build a market data record without going through the wire form.
+///
+/// These types are `#[non_exhaustive]`, which is right — Alpaca adds fields to
+/// them — but it also removes the struct literal, and building a synthetic bar
+/// is a real need: a backtest harness, a fixture, a frame over rows that did not
+/// come from the API. `Default` plus public fields is the replacement, and this
+/// pins that it exists. Without it the only route is `serde_json`, which is a
+/// workaround every downstream user would have to reinvent.
+#[test]
+fn market_data_records_can_be_built_without_json() {
+    let mut bar = Bar::default();
+    bar.symbol = "AAPL".to_owned();
+    bar.timestamp = timestamp("2024-04-26T13:30:00Z");
+    bar.open = 100.0;
+    bar.high = 105.0;
+    bar.low = 99.0;
+    bar.close = 104.0;
+    bar.volume = 1_000.0;
+
+    let frame = [bar].as_slice().df().unwrap();
+    assert_eq!(frame.height(), 1);
+    assert_eq!(
+        frame.column("close").unwrap().f64().unwrap().get(0),
+        Some(104.0)
+    );
+
+    // And the other four the frame conversion accepts.
+    let mut quote = Quote::default();
+    quote.ask_price = 1.5;
+    let mut rate = ForexRate::default();
+    rate.currency_pair = "EURUSD".to_owned();
+    let mut day = DailyAuctions::default();
+    day.symbol = "AAPL".to_owned();
+
+    assert_eq!(quote.ask_price, 1.5);
+    assert_eq!(rate.currency_pair, "EURUSD");
+    assert!(day.opening.is_empty());
 }

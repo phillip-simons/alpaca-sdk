@@ -230,8 +230,13 @@ async fn the_delay_between_retries_grows() {
 
 /// A 429 carrying `Retry-After` is stating the answer the curve is guessing at,
 /// so it wins. The assertion is on the wall clock rather than on a delay value:
-/// with the header ignored, a 10-second base doubling three times could not
-/// finish in under a second, so the two outcomes cannot be confused.
+/// with the header ignored, a 10-second base doubling three times takes over a
+/// minute, so the two outcomes cannot be confused.
+///
+/// The bound is 5s rather than the 1s it was, because 1s was measuring the
+/// runner as much as the client — four round trips against a loaded CI box can
+/// take that long with the header honoured perfectly. 5s is still nowhere near
+/// the 70s the curve would cost, so the discrimination is untouched.
 #[tokio::test]
 async fn retry_after_overrides_the_backoff_curve() {
     let server = MockServer::start().await;
@@ -254,7 +259,7 @@ async fn retry_after_overrides_the_backoff_curve() {
 
     assert!(matches!(err, Error::RetriesExhausted { .. }), "{err:?}");
     assert!(
-        elapsed < Duration::from_secs(1),
+        elapsed < Duration::from_secs(5),
         "waited {elapsed:?}; the curve was used and the header ignored"
     );
 }
@@ -451,4 +456,170 @@ async fn decode_error_reports_the_path_and_body() {
         }
         other => panic!("expected Decode, got {other:?}"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Which requests may be replayed
+//
+// The retry policy is a set of status codes, and a status code alone cannot say
+// whether replaying is safe. Every test above this line mounts a `GET`, which is
+// why a 504 replaying a `POST` went unnoticed: on the default policy one
+// `submit_order` against a gateway timeout placed four orders, and the caller
+// was handed `RetriesExhausted` — so they believed none had been placed.
+// ---------------------------------------------------------------------------
+
+/// The regression test for that. A `POST` that 504s is reported, not replayed.
+#[tokio::test]
+async fn a_post_is_not_replayed_on_a_gateway_timeout() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v2/orders"))
+        .respond_with(ResponseTemplate::new(504).set_body_string("gateway timeout"))
+        // The whole point: exactly one request reaches the server.
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let err = client(&server, instant_retry())
+        .post::<Account, _>("/orders", &json!({"symbol": "AAPL"}))
+        .await
+        .unwrap_err();
+
+    // And it surfaces as the API error it is, rather than as `RetriesExhausted`
+    // — which would have claimed four attempts were made.
+    match err {
+        Error::Api(api) => assert_eq!(api.status, 504),
+        other => panic!("expected Api(504), got {other:?}"),
+    }
+}
+
+/// `PATCH` is not idempotent either, and Alpaca patches account configuration.
+#[tokio::test]
+async fn a_patch_is_not_replayed_on_a_gateway_timeout() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("PATCH"))
+        .and(path("/v2/account/configurations"))
+        .respond_with(ResponseTemplate::new(504))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let err = client(&server, instant_retry())
+        .patch::<Account, _>("/account/configurations", &json!({}))
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, Error::Api(api) if api.status == 504));
+}
+
+/// A 429 is the exception, and the reason the rule reads the status as well as
+/// the method: the rate limiter refuses the request before anything acts on it,
+/// so nothing was done and replaying a `POST` is safe.
+#[tokio::test]
+async fn a_post_is_replayed_on_a_rate_limit() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v2/orders"))
+        .respond_with(ResponseTemplate::new(429))
+        .up_to_n_times(2)
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/v2/orders"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "abc"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let account: Account = client(&server, instant_retry())
+        .post("/orders", &json!({"symbol": "AAPL"}))
+        .await
+        .unwrap();
+
+    assert_eq!(account.id, "abc");
+    assert_eq!(server.received_requests().await.unwrap().len(), 3);
+}
+
+/// `DELETE` is idempotent in HTTP's sense, so a 504 on one may be replayed —
+/// cancelling an order twice cancels it once.
+#[tokio::test]
+async fn an_idempotent_method_is_still_replayed_on_a_gateway_timeout() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/v2/orders/abc"))
+        .respond_with(ResponseTemplate::new(504))
+        .expect(4)
+        .mount(&server)
+        .await;
+
+    let err = client(&server, instant_retry())
+        .delete::<Account, _>("/orders/abc", &())
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, Error::RetriesExhausted { attempts: 4, .. }));
+}
+
+/// But HTTP's sense is not the only one. `DELETE /v2/positions/{asset}` does not
+/// remove a record — it submits a liquidating market order. If Alpaca accepts
+/// that order and the gateway drops the response, the position is still open
+/// when the replay arrives, so the replay sells the same quantity again and puts
+/// the caller short. That is the `POST` failure wearing a different verb, and
+/// deferring to `Method::is_idempotent` alone would replay it.
+#[tokio::test]
+async fn a_delete_that_submits_an_order_is_not_replayed() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/v2/positions/AAPL"))
+        .respond_with(ResponseTemplate::new(504).set_body_string("gateway timeout"))
+        // Exactly one liquidation reaches the server.
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let err = client(&server, instant_retry())
+        .delete_effectful::<Account, _>("/positions/AAPL", &())
+        .await
+        .unwrap_err();
+
+    match err {
+        Error::Api(api) => assert_eq!(api.status, 504),
+        other => panic!("expected Api(504), got {other:?}"),
+    }
+}
+
+/// And a 429 still replays it, for the same reason it replays a `POST`: the rate
+/// limiter refused the request before anything acted on it.
+#[tokio::test]
+async fn a_rate_limited_effectful_delete_is_still_replayed() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/v2/positions/AAPL"))
+        .respond_with(ResponseTemplate::new(429))
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/v2/positions/AAPL"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "abc"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let account: Account = client(&server, instant_retry())
+        .delete_effectful("/positions/AAPL", &())
+        .await
+        .unwrap();
+
+    assert_eq!(account.id, "abc");
 }

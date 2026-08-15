@@ -34,7 +34,8 @@ struct TimestampVisitor;
 /// # Errors
 /// Returns an error string if the tag is not the timestamp extension or the
 /// payload is not 4, 8, or 12 bytes.
-pub fn from_extension(tag: i8, bytes: &[u8]) -> Result<DateTime<Utc>, String> {
+#[cfg(feature = "data")]
+pub(crate) fn from_extension(tag: i8, bytes: &[u8]) -> Result<DateTime<Utc>, String> {
     TimestampVisitor::from_ext::<serde::de::value::Error>(tag, bytes).map_err(|e| e.to_string())
 }
 
@@ -308,5 +309,60 @@ mod tests {
         let json = serde_json::to_string(&Out { timestamp: value }).unwrap();
 
         assert_eq!(json, r#"{"timestamp":"2022-03-09T05:00:00Z"}"#);
+    }
+
+    // The three tests below exercise `from_extension` directly rather than
+    // through serde, which is how the live stream reaches it. They lived in the
+    // integration suite until the function stopped being public.
+
+    /// The three msgpack timestamp encodings, which is what the live market
+    /// data stream actually sends.
+    #[cfg(feature = "data")]
+    #[test]
+    fn all_three_msgpack_timestamp_widths_decode() {
+        // timestamp32: 4 bytes of seconds.
+        let seconds = 1_646_816_400u32;
+        let decoded = from_extension(-1, &seconds.to_be_bytes()).unwrap();
+        assert_eq!(decoded.timestamp(), 1_646_816_400);
+        assert_eq!(decoded.timestamp_subsec_nanos(), 0);
+
+        // timestamp64: 30 bits of nanoseconds, then 34 bits of seconds.
+        let packed = (59_000u64 << 34) | 1_646_816_400u64;
+        let decoded = from_extension(-1, &packed.to_be_bytes()).unwrap();
+        assert_eq!(decoded.timestamp(), 1_646_816_400);
+        assert_eq!(decoded.timestamp_subsec_nanos(), 59_000);
+
+        // timestamp96: 32 bits of nanoseconds, then 64 signed bits of seconds.
+        let mut wide = Vec::new();
+        wide.extend_from_slice(&59_000u32.to_be_bytes());
+        wide.extend_from_slice(&1_646_816_400i64.to_be_bytes());
+        let decoded = from_extension(-1, &wide).unwrap();
+        assert_eq!(decoded.timestamp(), 1_646_816_400);
+        assert_eq!(decoded.timestamp_subsec_nanos(), 59_000);
+    }
+
+    #[cfg(feature = "data")]
+    #[test]
+    fn a_msgpack_extension_that_is_not_a_timestamp_is_rejected() {
+        // Right width, wrong extension type.
+        let wrong_tag = from_extension(5, &1_646_816_400u32.to_be_bytes()).unwrap_err();
+        assert!(wrong_tag.contains("extension type 5"), "{wrong_tag}");
+
+        // Right extension type, a width the msgpack specification does not
+        // define.
+        let wrong_width = from_extension(-1, &[0, 1, 2]).unwrap_err();
+        assert!(!wrong_width.is_empty());
+    }
+
+    /// A timestamp before the epoch is a negative seconds value, which only the
+    /// 96-bit encoding can carry. Corporate actions reach back decades.
+    #[cfg(feature = "data")]
+    #[test]
+    fn a_pre_epoch_timestamp_decodes() {
+        let mut wide = Vec::new();
+        wide.extend_from_slice(&0u32.to_be_bytes());
+        wide.extend_from_slice(&(-86_400i64).to_be_bytes());
+
+        assert_eq!(from_extension(-1, &wide).unwrap().timestamp(), -86_400);
     }
 }

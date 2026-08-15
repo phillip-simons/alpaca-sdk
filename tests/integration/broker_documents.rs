@@ -6,6 +6,7 @@
 
 #![cfg(feature = "broker")]
 
+use crate::common::{broker_client as client, fixture};
 use alpaca_sdk::broker::{
     BrokerClient, DocumentType, GetTradeDocumentsRequest, TradeDocument, TradeDocumentType,
     UploadDocument, UploadDocumentMimeType, UploadDocumentRequest, UploadDocumentSubType,
@@ -20,29 +21,9 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 const ACCOUNT_ID: &str = "2a87c088-ffb6-472b-a4a3-cd9305c8605c";
 const DOCUMENT_ID: &str = "1b560b0f-9efd-44b4-8004-dfd520c7cdc0";
 
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
-
 fn parse<T: serde::de::DeserializeOwned>(name: &str) -> T {
     let value = fixture(name);
     serde_json::from_value(value.clone()).unwrap_or_else(|e| panic!("{name}: {e}\n{value:#}"))
-}
-
-fn client(server: &MockServer) -> BrokerClient {
-    let credentials = Credentials::new("broker-key", "broker-secret").unwrap();
-    BrokerClient::with_config(
-        &credentials,
-        RestConfig::new(server.uri())
-            .api_version("v1")
-            .retry(RetryConfig::none()),
-    )
-    .unwrap()
 }
 
 fn account_id() -> Uuid {
@@ -307,7 +288,10 @@ fn a_w8ben_may_not_be_uploaded_as_a_general_document() {
     // document through the W-8BEN one.
     let by_type =
         UploadDocumentRequest::new(DocumentType::W8ben, "QQ==", UploadDocumentMimeType::Pdf);
-    assert!(by_type.validate().is_err());
+    assert!(matches!(
+        by_type.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 
     let mut by_sub_type = UploadDocumentRequest::new(
         DocumentType::IdentityVerification,
@@ -315,7 +299,10 @@ fn a_w8ben_may_not_be_uploaded_as_a_general_document() {
         UploadDocumentMimeType::Pdf,
     );
     by_sub_type.document_sub_type = Some(UploadDocumentSubType::FormW8Ben);
-    assert!(by_sub_type.validate().is_err());
+    assert!(matches!(
+        by_sub_type.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 }
 
 fn w8ben() -> W8BenDocument {
@@ -358,15 +345,24 @@ fn a_w8ben_upload_takes_content_or_fields_but_not_both() {
 
     let mut both = as_fields.clone();
     both.content = Some("QQ==".to_owned());
-    assert!(both.validate().is_err());
+    assert!(matches!(
+        both.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 
     let mut neither = as_fields.clone();
     neither.content_data = None;
-    assert!(neither.validate().is_err());
+    assert!(matches!(
+        neither.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 
     let mut wrong_mime = as_fields;
     wrong_mime.mime_type = UploadDocumentMimeType::Pdf;
-    assert!(wrong_mime.validate().is_err());
+    assert!(matches!(
+        wrong_mime.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 }
 
 #[test]
@@ -374,7 +370,10 @@ fn a_w8ben_must_identify_the_applicant_for_tax() {
     // If neither tax id is given, the form has to say one is not required.
     let mut anonymous = w8ben();
     anonymous.foreign_tax_id = None;
-    assert!(anonymous.validate().is_err());
+    assert!(matches!(
+        anonymous.validate().unwrap_err(),
+        alpaca_sdk::Error::InvalidRequest(_)
+    ));
 
     anonymous.ftin_not_required = Some(true);
     assert!(anonymous.validate().is_ok());
@@ -383,4 +382,118 @@ fn a_w8ben_must_identify_the_applicant_for_tax() {
     with_ssn.foreign_tax_id = None;
     with_ssn.tax_id_ssn = Some("123-45-6789".to_owned());
     assert!(with_ssn.validate().is_ok());
+}
+
+/// The download shares a retry policy with every other route.
+///
+/// It runs its own loop — the response body is bytes, not JSON — and that loop
+/// used to sleep a flat `retry.wait` on every attempt, ignoring both the backoff
+/// curve and the server's own `Retry-After`. Every other route honours both.
+///
+/// The two are separated by making them disagree: `wait` is set to 10s and the
+/// server asks for 1s. A loop that ignores `Retry-After` sleeps its own 10s; one
+/// that honours it sleeps 1s. Leaving `wait` at its 1s default against a
+/// `Retry-After: 1` would make the test pass either way — the values have to
+/// disagree for the assertion to mean anything.
+///
+/// The gap is deliberately far wider than the ~1s the test actually costs. The
+/// upper bound is a real-time measurement on a shared runner, and at the old 3s
+/// it had to sit at 2.5s — close enough to the honoured 1s wait that a loaded
+/// runner could cross it without any defect. Widening the disagreement rather
+/// than the tolerance keeps the discrimination absolute while leaving 7s of
+/// slack: the two outcomes are 1s and 10s, and nothing in between is ambiguous.
+#[tokio::test]
+async fn a_rate_limited_download_honours_retry_after_over_its_own_wait() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/v1/accounts/{ACCOUNT_ID}/documents/{DOCUMENT_ID}/download"
+        )))
+        .respond_with(ResponseTemplate::new(429).insert_header("retry-after", "1"))
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/v1/accounts/{ACCOUNT_ID}/documents/{DOCUMENT_ID}/download"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(b"%PDF-1.4".to_vec()))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let retrying = BrokerClient::with_config(
+        &Credentials::new("broker-key", "broker-secret").unwrap(),
+        RestConfig::new(server.uri())
+            .api_version("v1")
+            .retry(RetryConfig::default().wait(std::time::Duration::from_secs(10))),
+    )
+    .unwrap();
+
+    let started = std::time::Instant::now();
+    let bytes = retrying
+        .download_trade_document_for_account_by_id(
+            Uuid::parse_str(ACCOUNT_ID).unwrap(),
+            Uuid::parse_str(DOCUMENT_ID).unwrap(),
+        )
+        .await
+        .unwrap();
+    let elapsed = started.elapsed();
+
+    assert_eq!(bytes, b"%PDF-1.4");
+    assert!(
+        elapsed >= std::time::Duration::from_millis(800),
+        "the retry did not wait at all: {elapsed:?}"
+    );
+    assert!(
+        elapsed < std::time::Duration::from_secs(8),
+        "`Retry-After: 1` was ignored in favour of the client's own 10s wait: {elapsed:?}"
+    );
+}
+
+/// The download's own loop bounds itself without overflowing.
+///
+/// `RetryConfig::attempts` is public and takes a `u32`, so `u32::MAX` is a value
+/// a caller can pass. The bound used to be `attempts + 1`, which overflows: a
+/// panic in debug, and in release a `total_attempts` of 0, which skips the loop
+/// and falls through to the `unreachable!` under it. Saturating leaves the bound
+/// at `u32::MAX`, so the loop still runs.
+///
+/// The request has to actually be issued for this to prove anything — asserting
+/// on the arithmetic alone would not touch the loop.
+#[tokio::test]
+async fn a_saturating_attempt_count_still_sends_one_download() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/v1/accounts/{ACCOUNT_ID}/documents/{DOCUMENT_ID}/download"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(b"%PDF-1.4".to_vec()))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = BrokerClient::with_config(
+        &Credentials::new("broker-key", "broker-secret").unwrap(),
+        RestConfig::new(server.uri())
+            .api_version("v1")
+            .retry(RetryConfig::default().attempts(u32::MAX)),
+    )
+    .unwrap();
+
+    // Succeeds on the first attempt, so the retry budget is never spent; the
+    // point is that establishing that budget no longer overflows.
+    let bytes = client
+        .download_trade_document_for_account_by_id(
+            Uuid::parse_str(ACCOUNT_ID).unwrap(),
+            Uuid::parse_str(DOCUMENT_ID).unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(bytes, b"%PDF-1.4");
 }

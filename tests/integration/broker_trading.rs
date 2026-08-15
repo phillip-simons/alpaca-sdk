@@ -7,12 +7,13 @@
 
 #![cfg(feature = "broker")]
 
-use alpaca_sdk::broker::{BrokerClient, CreateOptionExerciseRequest, Order, OrderRequest};
+use crate::common::{broker_client as client, fixture};
+use alpaca_sdk::broker::{CreateOptionExerciseRequest, Order, OrderRequest};
 use alpaca_sdk::trading::{
-    GetOrderByIdRequest, GetOrdersRequest, OrderAmount, OrderSide, QueryOrderStatus, TimeInForce,
+    ClosePositionRequest, GetOrderByIdRequest, GetOrdersRequest, OrderAmount, OrderSide,
+    QueryOrderStatus, TimeInForce,
 };
 use alpaca_sdk::types::{AssetIdent, SupportedCurrencies};
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
 use rust_decimal::Decimal;
 use serde_json::json;
 use uuid::Uuid;
@@ -22,29 +23,9 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 const ACCOUNT_ID: &str = "2a87c088-ffb6-472b-a4a3-cd9305c8605c";
 const ORDER_ID: &str = "61e69015-8549-4bfd-b9c3-01e75843f47d";
 
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
-
 fn parse<T: serde::de::DeserializeOwned>(name: &str) -> T {
     let value = fixture(name);
     serde_json::from_value(value.clone()).unwrap_or_else(|e| panic!("{name}: {e}\n{value:#}"))
-}
-
-fn client(server: &MockServer) -> BrokerClient {
-    let credentials = Credentials::new("broker-key", "broker-secret").unwrap();
-    BrokerClient::with_config(
-        &credentials,
-        RestConfig::new(server.uri())
-            .api_version("v1")
-            .retry(RetryConfig::none()),
-    )
-    .unwrap()
 }
 
 fn account_id() -> Uuid {
@@ -55,7 +36,7 @@ fn account_id() -> Uuid {
 /// and adjusted rather than written as a literal.
 fn nested_order_request() -> GetOrderByIdRequest {
     let mut request = GetOrderByIdRequest::default();
-    request.nested = true;
+    request.nested = Some(true);
     request
 }
 
@@ -77,7 +58,8 @@ fn a_broker_order_carries_the_commission_the_trading_model_has_no_field_for() {
     // verbatim because the fixture is a faithful copy of its source and editing
     // it by hand would make it a worse record of one; what is being proved here
     // is that `#[serde(flatten)]` reaches the trading fields at all, and any
-    // string does that. See `UPSTREAM_SYMBOL_TYPO` in tests/trading_routes.rs.
+    // string does that. See `UPSTREAM_SYMBOL_TYPO` in
+    // tests/integration/trading_routes.rs.
     assert_eq!(order.order.symbol.as_deref(), Some("AAPL`"));
     assert_eq!(order.order.id.to_string(), ORDER_ID);
 }
@@ -319,6 +301,36 @@ async fn get_open_position_for_account_takes_a_symbol_or_an_id() {
         .unwrap();
 
     assert_eq!(held.symbol, "AAPL");
+}
+
+#[tokio::test]
+async fn close_position_for_account_puts_the_close_request_in_the_query() {
+    // The captured payload is named for this call and nothing was making it,
+    // so the qty never reached a query string in a test. It also pins the
+    // borrow: this takes `Option<&ClosePositionRequest>`, the same way
+    // `TradingClient::close_position` does, and the two clients disagreeing
+    // about how one type is passed is the kind of thing a release freezes.
+    let server = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path(format!(
+            "/v1/trading/accounts/{ACCOUNT_ID}/positions/AAPL"
+        )))
+        .and(query_param("qty", "1.5"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture(
+            "broker/test_trading_routes__test_close_position_for_account_with_qty__01.json",
+        )))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let close = ClosePositionRequest::Qty(Decimal::new(15, 1));
+    client(&server)
+        .close_position_for_account(account_id(), &AssetIdent::from("AAPL"), Some(&close))
+        .await
+        .unwrap();
+
+    // Borrowed, not consumed — reusable for the next account.
+    assert_eq!(close, ClosePositionRequest::Qty(Decimal::new(15, 1)));
 }
 
 #[tokio::test]

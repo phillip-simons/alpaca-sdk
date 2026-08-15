@@ -23,6 +23,67 @@ pub const DEFAULT_MIN_BACKOFF: Duration = Duration::from_secs(1);
 /// Ceiling the exponential growth is capped at.
 pub const DEFAULT_MAX_BACKOFF: Duration = Duration::from_secs(30);
 
+/// Checks a reconnect backoff window before it is stored.
+///
+/// Shared by [`StreamConfig`](crate::data::StreamConfig) and
+/// [`TradingStream`](crate::trading::TradingStream), which offer the same knob
+/// behind different receivers — three copies of these two rules, with three
+/// copies of the messages, is three places for them to drift.
+///
+/// Gated on `_ws`: without a stream feature there is no stream to configure,
+/// and an ungated helper is dead code in a `--features rustls-tls` build — which
+/// is exactly what `just features` exists to catch.
+///
+/// # Errors
+/// Returns [`Error::InvalidRequest`] if `min` is zero, which reconnects
+/// continuously rather than immediately, or if `max` is below `min`.
+#[cfg(feature = "_ws")]
+pub(crate) fn check_window(min: Duration, max: Duration) -> crate::error::Result<()> {
+    if min.is_zero() {
+        return Err(crate::Error::InvalidRequest(
+            "min_backoff must be a positive duration; zero reconnects \
+             continuously rather than immediately"
+                .to_owned(),
+        ));
+    }
+    if max < min {
+        return Err(crate::Error::InvalidRequest(
+            "max_backoff must be at least min_backoff".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+/// Checks a staleness timeout before it is stored.
+///
+/// # Errors
+/// Returns [`Error::InvalidRequest`] if the duration is zero, which would treat
+/// every connection as stale on its first pass.
+#[cfg(feature = "_ws")]
+pub(crate) fn check_data_timeout(timeout: Duration) -> crate::error::Result<()> {
+    if timeout.is_zero() {
+        return Err(crate::Error::InvalidRequest(
+            "data_timeout must be a positive duration".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+/// Checks a session-health threshold before it is stored.
+///
+/// # Errors
+/// Returns [`Error::InvalidRequest`] if the duration is zero, which would treat
+/// a connection that dropped instantly as healthy.
+#[cfg(feature = "_ws")]
+pub(crate) fn check_stable_session(after: Duration) -> crate::error::Result<()> {
+    if after.is_zero() {
+        return Err(crate::Error::InvalidRequest(
+            "stable_session must be a positive duration".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 /// Computes how long to wait before reconnect attempt number `retries`.
 ///
 /// `retries` counts consecutive failures and is 1-based; the first failure waits
@@ -38,7 +99,29 @@ pub fn reconnect_delay(retries: u32, min_backoff: Duration, max_backoff: Duratio
     } else {
         0.0
     };
-    Duration::from_secs_f64(half + jitter)
+    seconds_to_duration(half + jitter, max_backoff)
+}
+
+/// Converts a delay in seconds back to a [`Duration`], falling back to `ceiling`
+/// rather than panicking.
+///
+/// `Duration::from_secs_f64` panics on a value that will not fit, and this
+/// arithmetic can produce one from a perfectly legal configuration:
+/// `RetryBackoff::Exponential { max: Duration::MAX }` is public, and
+/// `Duration::MAX.as_secs_f64()` rounds up to just past `u64::MAX` seconds. A
+/// panic here fires inside an async task, in a crate that forbids unsafe code
+/// and never otherwise panics on caller input.
+///
+/// The saturated value is still whatever ceiling the caller asked for, so
+/// `RetryBackoff::Exponential { max: Duration::MAX }` now waits effectively
+/// forever between retries where it used to panic. That is the caller's own
+/// instruction rather than a defect — but it is quieter than a panic, so it is
+/// worth saying out loud: a retry ceiling is a ceiling, and `Duration::MAX`
+/// means "never give up".
+fn seconds_to_duration(seconds: f64, ceiling: Duration) -> Duration {
+    Duration::try_from_secs_f64(seconds)
+        .unwrap_or(ceiling)
+        .min(ceiling)
 }
 
 /// The deterministic, pre-jitter delay. Exposed for tests and for callers that
@@ -56,12 +139,37 @@ pub fn capped_delay(retries: u32, min_backoff: Duration, max_backoff: Duration) 
         capped *= 2.0;
     }
 
-    Duration::from_secs_f64(capped.min(max))
+    seconds_to_duration(capped.min(max), max_backoff)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `Duration::MAX` is reachable through the public
+    /// `RetryBackoff::Exponential { max }`, and `as_secs_f64` rounds it to just
+    /// past what `Duration::from_secs_f64` will accept — so the arithmetic used
+    /// to panic inside an async task rather than return a delay.
+    #[test]
+    fn an_unbounded_ceiling_saturates_instead_of_panicking() {
+        assert_eq!(
+            capped_delay(65, Duration::from_secs(1), Duration::MAX),
+            Duration::MAX
+        );
+        // And with jitter applied, which does its own conversion. The value is
+        // drawn from [capped/2, capped], so with an unbounded ceiling it lands
+        // in the top half of the range rather than anywhere at all.
+        let delay = reconnect_delay(65, Duration::from_secs(1), Duration::MAX);
+        assert!(delay >= Duration::MAX / 2);
+    }
+
+    /// The same, at the boundary rather than far past it.
+    #[test]
+    fn a_ceiling_near_the_representable_limit_is_still_a_duration() {
+        let huge = Duration::from_secs(u64::MAX / 2);
+        assert_eq!(capped_delay(100, Duration::from_secs(1), huge), huge);
+        assert!(reconnect_delay(100, Duration::from_secs(1), huge) >= huge / 2);
+    }
 
     const MIN: Duration = DEFAULT_MIN_BACKOFF;
     const MAX: Duration = DEFAULT_MAX_BACKOFF;

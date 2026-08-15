@@ -14,7 +14,8 @@
 
 use alpaca_sdk::trading::{
     GetCorporateAnnouncementsRequest, OptionLegRequest, OrderAmount, OrderClass, OrderRequest,
-    OrderSide, OrderType, PositionIntent, StopLossRequest, TakeProfitRequest, TimeInForce, Trail,
+    OrderSide, OrderType, PositionIntent, StopLimit, StopLossRequest, TakeProfitRequest,
+    TimeInForce, Trail,
 };
 use rust_decimal::Decimal;
 use serde_json::{Value, json};
@@ -112,13 +113,14 @@ fn a_stop_order_carries_a_stop_price_and_no_limit_price() {
 
 #[test]
 fn a_stop_limit_order_carries_both_prices_under_their_own_names() {
+    // Named fields rather than two adjacent `Decimal` arguments: transposing
+    // positional ones compiled and produced a legal-but-different order.
     let order = OrderRequest::stop_limit(
         "AAPL",
         OrderSide::Sell,
         qty(1),
         TimeInForce::Day,
-        price(140),
-        price(139),
+        StopLimit::new(price(140), price(139)),
     );
 
     let body = body(&order);
@@ -641,4 +643,65 @@ fn an_empty_order_class_decodes_as_simple() {
     .unwrap();
 
     assert_eq!(order.order_class, OrderClass::Simple);
+}
+
+// ------------------------------------------------------------- OTO exits
+//
+// An OTO order carries exactly one exit. The builders used to *accumulate*, so
+// chaining both — or building one conditionally — produced an `oto` order with
+// two legs that `validate` accepted, and the position exited at a take-profit
+// the caller thought they had replaced.
+
+/// Chaining both builders leaves the last one called, not both.
+#[test]
+fn chaining_both_oto_exits_keeps_only_the_last() {
+    let take_profit_last = OrderRequest::market("AAPL", OrderSide::Buy, qty(1), TimeInForce::Day)
+        .oto_stop_loss(StopLossRequest::new(price(90)))
+        .oto_take_profit(TakeProfitRequest::new(price(110)));
+
+    let json = body(&take_profit_last);
+    assert_eq!(json["order_class"], "oto");
+    assert_eq!(json["take_profit"]["limit_price"], "110");
+    assert!(
+        json.get("stop_loss").is_none(),
+        "the earlier stop-loss leg should have been replaced: {json}"
+    );
+    assert!(take_profit_last.validate().is_ok());
+
+    // And the other order of the two.
+    let stop_loss_last = OrderRequest::market("AAPL", OrderSide::Buy, qty(1), TimeInForce::Day)
+        .oto_take_profit(TakeProfitRequest::new(price(110)))
+        .oto_stop_loss(StopLossRequest::new(price(90)));
+
+    let json = body(&stop_loss_last);
+    assert_eq!(json["stop_loss"]["stop_price"], "90");
+    assert!(json.get("take_profit").is_none(), "{json}");
+}
+
+/// The fields are public, so the builders are not the only way in. Two legs on
+/// an `oto` is a bracket written the wrong way round, and `validate` says so
+/// rather than letting the API take it as something else.
+#[test]
+fn an_oto_order_carrying_both_exits_is_refused() {
+    let mut order = OrderRequest::market("AAPL", OrderSide::Buy, qty(1), TimeInForce::Day)
+        .oto_take_profit(TakeProfitRequest::new(price(110)));
+    order.stop_loss = Some(StopLossRequest::new(price(90)));
+
+    let error = order.validate().unwrap_err();
+    assert!(
+        matches!(error, alpaca_sdk::Error::InvalidRequest(ref m) if m.contains("bracket")),
+        "expected the error to point at the bracket class, got {error:?}"
+    );
+}
+
+/// The rule it must not over-reach: one exit is still valid, either side.
+#[test]
+fn an_oto_order_with_exactly_one_exit_is_accepted() {
+    let with_take_profit = OrderRequest::market("AAPL", OrderSide::Buy, qty(1), TimeInForce::Day)
+        .oto_take_profit(TakeProfitRequest::new(price(110)));
+    assert!(with_take_profit.validate().is_ok());
+
+    let with_stop_loss = OrderRequest::market("AAPL", OrderSide::Buy, qty(1), TimeInForce::Day)
+        .oto_stop_loss(StopLossRequest::new(price(90)));
+    assert!(with_stop_loss.validate().is_ok());
 }

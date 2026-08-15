@@ -16,38 +16,20 @@
 
 #![cfg(feature = "broker")]
 
+use crate::common::{broker_client as client, fixture};
 use alpaca_sdk::broker::{
-    BrokerClient, CreateInstantFundingRequest, CreateJitSettlementRequest,
-    CreateRecipientBankRequest, CreateWithdrawalRequest, GetEntryRequirementsRequest,
-    GetJitReportRequest, GetUsCorporatesRequest, GetUsTreasuriesRequest, InstantFundingStatus,
-    IpoAvailability, JitReport, JitReportType, OAuthRequest, OptionsLevel,
-    RequestOptionsApprovalRequest, RiskRating, SettlementAssetClass, TreasurySubtype,
+    CreateInstantFundingRequest, CreateJitSettlementRequest, CreateRecipientBankRequest,
+    CreateWithdrawalRequest, GetEntryRequirementsRequest, GetJitReportRequest,
+    GetUsCorporatesRequest, GetUsTreasuriesRequest, InstantFundingStatus, IpoAvailability,
+    JitReport, JitReportType, OAuthRequest, OptionsLevel, RequestOptionsApprovalRequest,
+    RiskRating, SettlementAssetClass, TreasurySubtype,
 };
-use alpaca_sdk::{Credentials, RestConfig, RetryConfig};
+use alpaca_sdk::types::SupportedCurrencies;
 use rust_decimal::Decimal;
 use serde_json::json;
 use uuid::Uuid;
 use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
-    let body = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-    serde_json::from_str(&body).unwrap()
-}
-
-fn client(server: &MockServer) -> BrokerClient {
-    BrokerClient::with_config(
-        &Credentials::new("key", "secret").unwrap(),
-        RestConfig::new(server.uri())
-            .api_version("v1")
-            .retry(RetryConfig::none()),
-    )
-    .unwrap()
-}
 
 const ACCOUNT: Uuid = Uuid::nil();
 
@@ -215,14 +197,19 @@ async fn a_jit_report_decodes_as_a_download_link() {
     match report {
         JitReport::Download(download) => assert_eq!(download.filename, "report.csv"),
         JitReport::Inline(_) => panic!("expected the download shape"),
+        // The enum is `#[non_exhaustive]`: the route may grow a third shape.
+        other => panic!("unexpected JIT report shape: {other:?}"),
     }
 }
 
 #[tokio::test]
 async fn a_jit_settlement_with_no_accounts_is_refused() {
     let server = MockServer::start().await;
-    let request =
-        CreateJitSettlementRequest::new(Vec::new(), SettlementAssetClass::UsEquity, "USD");
+    let request = CreateJitSettlementRequest::new(
+        Vec::new(),
+        SettlementAssetClass::UsEquity,
+        SupportedCurrencies::Usd,
+    );
     let error = client(&server)
         .create_jit_settlement(&request)
         .await
@@ -402,7 +389,7 @@ async fn a_recipient_bank_sends_only_what_was_set() {
         "12345678",
         "Example Bank",
         "GB",
-        "GBP",
+        SupportedCurrencies::Gbp,
         "1 Example Street",
         "London",
     )
@@ -420,7 +407,7 @@ async fn a_recipient_bank_sends_only_what_was_set() {
 #[tokio::test]
 async fn a_zero_withdrawal_never_reaches_the_server() {
     let server = MockServer::start().await;
-    let request = CreateWithdrawalRequest::new(Decimal::ZERO, "GBP");
+    let request = CreateWithdrawalRequest::new(Decimal::ZERO, SupportedCurrencies::Gbp);
     let error = client(&server)
         .create_funding_wallet_withdrawal(ACCOUNT, &request)
         .await
@@ -520,4 +507,269 @@ async fn category_and_activity_types_cannot_both_be_set() {
         dated.validate().is_ok(),
         "an undocumented rule has not crept back in"
     );
+}
+
+// ------------------------------------------------- tokenization callbacks
+
+/// Both callbacks document a 200 body. The mint one is the shared
+/// [`TokenizationRequest`], so this asserts the crate decodes it off the
+/// callback route rather than only off the mint and lookup routes.
+#[tokio::test]
+async fn the_mint_callback_decodes_the_shared_tokenization_request() {
+    use alpaca_sdk::trading::{TokenizationMintCallback, TokenizationStatus, TokenizationType};
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/accounts/{ACCOUNT}/tokenization/callback/mint"
+        )))
+        .and(body_json(json!({
+            "tokenization_request_id": "00000000-0000-0000-0000-000000000000",
+            "tx_hash": "0xdead",
+            "client_account_id": "00000000-0000-0000-0000-000000000000",
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "tokenization_request_id": "5b1d6a3e-7f0a-4d2c-b8e1-9e6f1c0d2c4a",
+            "type": "mint",
+            "status": "completed",
+            "underlying_symbol": "AAPL",
+            "token_symbol": "AAPLx",
+            "qty": "1.5",
+            "issuer": "xstocks",
+            "network": "solana",
+            "wallet_address": "9xQeWvG816bUx9EPa2",
+            "tx_hash": "0xdead",
+            "created_at": "2026-01-02T15:04:05Z",
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // The callback has to name an account, and the client refuses to send it
+    // otherwise; `client_account_id` is the identifier this suite uses.
+    let mut body = TokenizationMintCallback::new(Uuid::nil(), "0xdead");
+    body.client_account_id = Some(ACCOUNT);
+
+    let confirmed = client(&server)
+        .tokenization_mint_callback(ACCOUNT, &body)
+        .await
+        .unwrap();
+
+    assert_eq!(confirmed.status, TokenizationStatus::Completed);
+    assert_eq!(confirmed.request_type, Some(TokenizationType::Mint));
+    assert_eq!(confirmed.tx_hash.as_deref(), Some("0xdead"));
+}
+
+/// The redeem callback answers with its own schema, and this crate declines to
+/// require the four fields the spec calls required that [`TokenizationRequest`]
+/// already treats as optional. The response here omits all four: a spec that is
+/// wrong about them costs a `None`, not an `Error::Decode`.
+#[tokio::test]
+async fn the_redeem_callback_decodes_without_the_fields_the_spec_over_requires() {
+    use alpaca_sdk::trading::{TokenizationNetwork, TokenizationRedeemRequest, TokenizationStatus};
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/accounts/{ACCOUNT}/tokenization/callback/redeem"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "tokenization_request_id": "5b1d6a3e-7f0a-4d2c-b8e1-9e6f1c0d2c4a",
+            "status": "pending",
+            "underlying_symbol": "AAPL",
+            "token_symbol": "AAPLx",
+            "qty": "1.5",
+            "issuer": "xstocks",
+            "network": "solana",
+            "created_at": "2026-01-02T15:04:05Z",
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let mut body = TokenizationRedeemRequest::new(
+        "iss-1",
+        "AAPL",
+        "AAPLx",
+        Decimal::ONE,
+        TokenizationNetwork::Solana,
+        "9xQeWvG816bUx9EPa2",
+        "0xdead",
+    );
+    body.client_account_id = Some(ACCOUNT);
+
+    let redeemed = client(&server)
+        .tokenization_redeem_callback(ACCOUNT, &body)
+        .await
+        .unwrap();
+
+    assert_eq!(redeemed.status, TokenizationStatus::Pending);
+    assert_eq!(redeemed.qty, Decimal::new(15, 1));
+    assert_eq!(redeemed.request_type, None);
+    assert_eq!(redeemed.issuer_request_id, None);
+    assert_eq!(redeemed.wallet_address, None);
+    assert_eq!(redeemed.tx_hash, None);
+}
+
+// ------------------------------------------ routes nothing else exercised
+
+/// The withdrawal — money leaving the account — had only a negative test, which
+/// returned from `validate()` before any HTTP. Neither the `v1beta` version
+/// segment, nor the path, nor the body was asserted anywhere, so a dropped
+/// `.at_version("v1beta")` would have 404'd with the whole suite still green.
+#[tokio::test]
+async fn a_funding_wallet_withdrawal_posts_to_the_v1beta_route_with_the_amount_as_a_string() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1beta/accounts/{ACCOUNT}/funding_wallet/withdrawal"
+        )))
+        // Money goes out as a string, like every other amount this crate sends.
+        .and(body_json(json!({
+            "usd_amount": "250.75",
+            "desired_currency": "GBP"
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "b0b6dd9d-8b9b-48a9-ba46-b9d54906e415",
+            "status": "PENDING"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let request = CreateWithdrawalRequest::new(Decimal::new(25_075, 2), SupportedCurrencies::Gbp);
+    client(&server)
+        .create_funding_wallet_withdrawal(ACCOUNT, &request)
+        .await
+        .unwrap();
+}
+
+/// The only route method on either client with no test at all — not even in the
+/// route smoke test that exists for exactly this. It is also a PATCH of account
+/// configuration, so it inherits the omit-rather-than-null fix.
+#[tokio::test]
+async fn updating_an_accounts_trade_configuration_patches_the_right_route() {
+    let configuration = json!({
+        "no_shorting": false,
+        "suspend_trade": false,
+        "fractional_trading": true,
+        "max_margin_multiplier": "4",
+        "trade_confirm_email": "all",
+        "ptp_no_exception_entry": false,
+        "max_options_trading_level": 1
+    });
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/v1/trading/accounts/{ACCOUNT}/account/configurations"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(configuration.clone()))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let fetched = client(&server)
+        .get_trade_configuration_for_account(ACCOUNT)
+        .await
+        .unwrap();
+
+    let server = MockServer::start().await;
+    Mock::given(method("PATCH"))
+        .and(path(format!(
+            "/v1/trading/accounts/{ACCOUNT}/account/configurations"
+        )))
+        // Round-tripped unchanged, with no `null`s invented for the three
+        // fields the current response shape omits.
+        .and(body_json(configuration.clone()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(configuration))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    client(&server)
+        .update_trade_configuration_for_account(ACCOUNT, &fetched)
+        .await
+        .unwrap();
+}
+
+/// The broker order walk had no test at all, where its trading twin has two.
+/// The path, the `limit`/`direction` overrides and the `before_order_id` cursor
+/// are all things a wrong edit ships green without this.
+#[tokio::test]
+async fn get_all_orders_for_account_follows_the_id_cursor() {
+    fn order(id: &str) -> serde_json::Value {
+        let mut value = fixture(
+            "broker/test_trading_routes__test_close_position_for_account_with_qty__01.json",
+        );
+        value["id"] = json!(id);
+        value
+    }
+
+    // A full page is what signals "there may be more".
+    let first_page: Vec<serde_json::Value> = (0..500)
+        .map(|i| order(&Uuid::from_u128(i).to_string()))
+        .collect();
+    let last_id = Uuid::from_u128(499).to_string();
+
+    let server = MockServer::start().await;
+
+    const SECOND: &str = "aaaaaaaa-0000-0000-0000-000000000001";
+
+    // The walk ends on an *empty* page, not a short one — see the trading twin.
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/trading/accounts/{ACCOUNT}/orders")))
+        .and(query_param("before_order_id", SECOND))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/trading/accounts/{ACCOUNT}/orders")))
+        .and(query_param("before_order_id", last_id.as_str()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([order(SECOND)])))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/trading/accounts/{ACCOUNT}/orders")))
+        .and(query_param("limit", "500"))
+        .and(query_param("direction", "desc"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(first_page))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let orders = client(&server)
+        .get_all_orders_for_account(ACCOUNT, None, None)
+        .await
+        .unwrap();
+
+    assert_eq!(orders.len(), 501, "the second page was not fetched");
+}
+
+/// `firm_accounts` is a boolean on the wire, not the comma-separated id list it
+/// was modelled as — Alpaca parses a list as a boolean and the report comes back
+/// silently missing the firm inventory.
+#[tokio::test]
+async fn aggregate_positions_send_firm_accounts_as_a_boolean() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/reporting/eod/aggregate_positions"))
+        .and(query_param("firm_accounts", "false"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let request =
+        alpaca_sdk::broker::GetAggregatePositionsRequest::new("2026-01-02".parse().unwrap())
+            .firm_accounts(false);
+
+    client(&server)
+        .get_aggregate_positions(&request)
+        .await
+        .unwrap();
 }

@@ -24,8 +24,9 @@ pub use historical::{
     OptionHistoricalDataClient, ScreenerClient, StockHistoricalDataClient,
 };
 pub use live::{
-    Channel, CryptoDataStream, DataStream, NewsDataStream, OptionDataStream, StockDataStream,
-    StreamConfig, StreamError, StreamMessage, SubscriptionSet, Subscriptions,
+    Channel, CryptoDataStream, DEFAULT_STABLE_SESSION, DataStream, NewsDataStream,
+    OptionDataStream, StockDataStream, StreamConfig, StreamError, StreamMessage, SubscriptionSet,
+    Subscriptions,
 };
 pub use meta::{Codes, Tape, TickType};
 // Shared with the broker API, which documents the same route, so it lives in

@@ -6,6 +6,7 @@
 
 use futures_util::Stream;
 use reqwest::Method;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 use crate::auth::Credentials;
@@ -65,6 +66,8 @@ use crate::error::Result;
 use crate::rest::{Empty, RestClient, RestConfig};
 use crate::sse::EventStreamRequest;
 use crate::trading::{Activity, Position, Watchlist};
+use crate::types::path::segment;
+use crate::types::serde_util::OneOrMany;
 
 /// A conventional ceiling on documents per upload.
 ///
@@ -87,6 +90,38 @@ fn activity_id(activity: &Activity) -> &str {
 /// The page size assumed for the token-paginated broker routes when the caller
 /// sets none. Alpaca's own default for these is 100.
 const DEFAULT_PAGE_SIZE: u32 = 100;
+
+/// Moves a page into `collected`, skipping anything already seen, and reports
+/// whether the page taught the walk anything.
+///
+/// Every walker on this client derives its next cursor from data the server
+/// controls — a last-id, a running offset, an echoed page token — and ends on an
+/// empty page. A server that does not advance therefore spins the walk forever
+/// with `collected` growing on every pass. That is not hypothetical: the
+/// activities route is documented to ignore paging entirely when `date` is set,
+/// which is exactly a non-empty page that never advances.
+///
+/// Progress is measured in *new* items rather than in cursor movement, because a
+/// cursor comparison would miss a server cycling between two pages. `seen`
+/// already knows the answer. This mirrors `walk_orders` in the trading client,
+/// where the same reasoning is spelled out at length.
+fn extend_with_new<T, K>(
+    collected: &mut Vec<T>,
+    seen: &mut HashSet<K>,
+    page: Vec<T>,
+    id_of: impl Fn(&T) -> K,
+) -> bool
+where
+    K: Eq + std::hash::Hash,
+{
+    let before = collected.len();
+    for item in page {
+        if seen.insert(id_of(&item)) {
+            collected.push(item);
+        }
+    }
+    collected.len() != before
+}
 
 /// The page size to ask for, given a cap on the total.
 ///
@@ -118,14 +153,24 @@ fn page_limit(configured: &Option<u32>, max_items: Option<usize>, collected: usi
 #[derive(Debug, Clone)]
 pub struct BrokerClient {
     rest: RestClient,
-    /// A second HTTP client, for the routes that do not fit [`RestClient`].
+    /// The client the event streams are read through.
     ///
-    /// Two need it. The document download answers `301` to a presigned storage
-    /// URL, and `RestClient` refuses redirects deliberately; this client follows
-    /// them and drops the credentials when one crosses to another host, which is
-    /// what keeps broker credentials off a storage provider. The event streams need a response body that is read
-    /// incrementally rather than decoded whole.
-    raw: reqwest::Client,
+    /// They need a response body read incrementally rather than decoded whole,
+    /// and they carry **no timeout**: a total deadline on a `text/event-stream`
+    /// caps the life of the subscription rather than bounding a slow call.
+    events: reqwest::Client,
+    /// The client the two document downloads use.
+    ///
+    /// Separate from `events` because a download is an ordinary call with a body
+    /// that ends, so a total deadline is the right shape for it — where an event
+    /// stream's body never finishes and a deadline would cap the life of the
+    /// subscription. One client cannot be both, which is why there are two.
+    ///
+    /// It follows redirects — the download answers `301` to a presigned storage
+    /// URL — and what keeps broker credentials off that storage provider is not
+    /// this client but the credential *form*: `with_config` converts to basic
+    /// auth, and reqwest strips `Authorization` when a redirect crosses hosts.
+    plain: reqwest::Client,
 }
 
 impl BrokerClient {
@@ -152,14 +197,10 @@ impl BrokerClient {
         // where the trading and data APIs take the pair as two headers.
         let credentials = credentials.clone().into_basic();
         Ok(Self {
-            raw: Self::raw_client(&credentials, &config)?,
+            events: crate::sse::streaming_client(&credentials)?,
+            plain: crate::sse::download_client(&credentials, config.timeout)?,
             rest: RestClient::new(&credentials, config)?,
         })
-    }
-
-    /// Builds the client used by the document download and the event streams.
-    fn raw_client(credentials: &Credentials, config: &RestConfig) -> Result<reqwest::Client> {
-        crate::sse::streaming_client(credentials, config)
     }
 
     /// The underlying transport, for routes this client does not wrap.
@@ -179,7 +220,13 @@ impl BrokerClient {
         body: Option<&B>,
     ) -> Result<()> {
         self.rest
-            .request_raw(method, path, None::<&Empty>, body)
+            .request_raw(
+                method,
+                crate::rest::Replay::ByMethod,
+                path,
+                None::<&Empty>,
+                body,
+            )
             .await?;
         Ok(())
     }
@@ -435,13 +482,18 @@ impl BrokerClient {
     ) -> Result<Vec<Transfer>> {
         let mut filter = filter.cloned().unwrap_or_default();
         let mut collected: Vec<Transfer> = Vec::new();
+        let mut seen: HashSet<Uuid> = HashSet::new();
+        // Counts rows the server has handed over, not rows kept. The two differ
+        // only when a page repeats something already collected, and the offset
+        // has to keep describing the server's own position rather than ours.
+        let mut fetched: usize = 0;
 
         loop {
             // The offset is the running count on every pass, including the
             // first, so a caller-supplied offset is overwritten once the walk
             // starts. Honouring it would make the cap mean something different
             // on the first page than on the rest.
-            filter.offset = Some(u32::try_from(collected.len()).map_err(|_| {
+            filter.offset = Some(u32::try_from(fetched).map_err(|_| {
                 crate::Error::InvalidRequest("too many transfers to page through".to_owned())
             })?);
 
@@ -456,12 +508,25 @@ impl BrokerClient {
                 break;
             }
 
-            collected.extend(page);
+            fetched += page.len();
+            let progressed =
+                extend_with_new(&mut collected, &mut seen, page, |transfer| transfer.id);
 
             if let Some(max_items) = max_items
                 && collected.len() >= max_items
             {
                 collected.truncate(max_items);
+                break;
+            }
+
+            // A server that ignores `offset` answers every request with the same
+            // non-empty page, which is not an ending this endpoint can express.
+            if !progressed {
+                tracing::warn!(
+                    account_id = %account_id,
+                    "the transfers walk stopped making progress; every transfer \
+                     on the last page had already been seen"
+                );
                 break;
             }
         }
@@ -649,29 +714,15 @@ impl BrokerClient {
         // Untyped for the same reason the streams are: no captured payload
         // exists for this route in any SDK, and inventing a struct from the
         // spec alone would claim more than is known.
-        let path = format!("/accounts/{account_id}/events/activities/{event_id}");
-        // Its own version segment, like the stream it pairs with, so it cannot
-        // go through the client's `v1`-configured transport.
-        let url = format!(
-            "{}/v2beta1{path}",
-            self.rest.config().base_url.trim_end_matches('/'),
+        let path = format!(
+            "/accounts/{account_id}/events/activities/{}",
+            segment(event_id)?
         );
-        let response = self
-            .raw
-            .get(&url)
-            .send()
-            .await
-            .map_err(crate::Error::Transport)?;
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        if !status.is_success() {
-            return Err(crate::Error::Api(crate::error::ApiError::from_body(
-                status.as_u16(),
-                &path,
-                body,
-            )));
-        }
-        serde_json::from_str(&body).map_err(|source| crate::Error::Decode { path, body, source })
+        // Its own version segment, like the stream it pairs with — which is what
+        // `at_version` is for. It went through the raw client once, and that cost
+        // it the retry loop, the caller's timeout and the redirect refusal that
+        // every other route here gets.
+        self.rest.at_version("v2beta1").get(&path, &Empty).await
     }
 
     /// Opens one of the broker's event streams.
@@ -695,7 +746,7 @@ impl BrokerClient {
         let query = filter
             .map(|filter| version.query(filter))
             .unwrap_or_default();
-        crate::sse::subscribe(&self.raw, &url, path, &query).await
+        crate::sse::subscribe(&self.events, &url, path, &query).await
     }
 
     /// Opens one of the timestamp-bounded event streams.
@@ -715,7 +766,7 @@ impl BrokerClient {
             version.segment()
         );
         let query = filter.map(EventStreamRequest::query).unwrap_or_default();
-        crate::sse::subscribe(&self.raw, &url, path, &query).await
+        crate::sse::subscribe(&self.events, &url, path, &query).await
     }
 
     // ------------------------------------------------- account activities
@@ -750,8 +801,11 @@ impl BrokerClient {
     /// seen. An empty array ends the walk.
     ///
     /// Setting `date` on the filter changes the endpoint's behaviour — Alpaca
-    /// may then return everything in one response and ignore paging — so this
-    /// walk can finish in a single request. `max_items` still holds.
+    /// may then return everything in one response and ignore paging. The walk
+    /// stops on the second request in that case: the cursor has no effect, the
+    /// same activities come back, and a page that repeats what is already
+    /// collected ends the walk rather than restarting it. `max_items` still
+    /// holds.
     ///
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if the filter combines `category`
@@ -765,6 +819,7 @@ impl BrokerClient {
         filter.validate()?;
 
         let mut collected: Vec<Activity> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
 
         loop {
             if let Some(page_size) = page_limit(&filter.page_size, max_items, collected.len()) {
@@ -779,12 +834,22 @@ impl BrokerClient {
             // The cursor is the last activity's id, so it is taken before the
             // page is moved into the accumulator.
             let cursor = activity_id(last).to_owned();
-            collected.extend(page);
+            let progressed = extend_with_new(&mut collected, &mut seen, page, |activity| {
+                activity_id(activity).to_owned()
+            });
 
             if let Some(max_items) = max_items
                 && collected.len() >= max_items
             {
                 collected.truncate(max_items);
+                break;
+            }
+
+            if !progressed {
+                tracing::warn!(
+                    "the account activities walk stopped making progress; every \
+                     activity on the last page had already been seen"
+                );
                 break;
             }
 
@@ -908,10 +973,13 @@ impl BrokerClient {
     ///
     /// Two routes do: the trade document download and the W-8BEN download.
     /// Neither can go through [`RestClient`], which refuses redirects on
-    /// purpose, so both use the second client — which follows them and sheds
-    /// the broker credentials when one crosses to another host.
+    /// purpose, so both use the `plain` client, which follows them. What keeps
+    /// the credentials off the storage provider is not that client but their
+    /// *form*: `with_config` converts them to basic auth, and reqwest strips
+    /// `Authorization` on a cross-host hop.
     ///
-    /// The retry policy is the client's own, so these behave like every other
+    /// The retry policy is the client's own — same status set, same backoff
+    /// curve, same `Retry-After` handling — so these behave like every other
     /// route under a 429 or a 5xx.
     async fn download(&self, path: &str) -> Result<Vec<u8>> {
         let config = self.rest.config();
@@ -922,24 +990,31 @@ impl BrokerClient {
         );
 
         let retry = &config.retry;
-        let total_attempts = retry.attempts + 1;
+        // Saturating because `attempts` is a caller-supplied `u32`: `u32::MAX`
+        // would overflow, panicking in debug and wrapping to a zero-iteration
+        // loop in release.
+        let total_attempts = retry.attempts.saturating_add(1);
 
         for attempt in 1..=total_attempts {
             let response = self
-                .raw
+                .plain
                 .get(&url)
                 .send()
                 .await
-                .map_err(crate::Error::Transport)?;
+                .map_err(crate::Error::transport)?;
             let status = response.status().as_u16();
 
             if response.status().is_success() {
                 return Ok(response
                     .bytes()
                     .await
-                    .map_err(crate::Error::Transport)?
+                    .map_err(crate::Error::transport)?
                     .to_vec());
             }
+
+            // Read before the body: `text()` consumes the response, headers
+            // and all.
+            let retry_after = crate::rest::retry_after(response.headers());
 
             let body = response.text().await.unwrap_or_default();
             let api_error = crate::error::ApiError::from_body(status, path, body);
@@ -953,7 +1028,16 @@ impl BrokerClient {
                     last: api_error,
                 });
             }
-            tokio::time::sleep(retry.wait).await;
+
+            // The same delay policy `RestClient` uses, rather than a flat wait
+            // that ignores both the backoff curve and the server's own answer.
+            // This loop is hand-rolled only because the response body is bytes;
+            // there is no reason for it to retry differently.
+            let delay = retry_after.map_or_else(
+                || retry.delay(attempt),
+                |after| after.min(retry.retry_after_cap()),
+            );
+            tokio::time::sleep(delay).await;
         }
 
         unreachable!("retry loop exited without returning")
@@ -1105,6 +1189,7 @@ impl BrokerClient {
     ) -> Result<Vec<Subscription>> {
         let mut filter = filter.cloned().unwrap_or_default();
         let mut collected: Vec<Subscription> = Vec::new();
+        let mut seen: HashSet<Uuid> = HashSet::new();
 
         loop {
             if let Some(limit) = page_limit(&filter.limit, max_items, collected.len()) {
@@ -1117,12 +1202,27 @@ impl BrokerClient {
             if page.subscriptions.is_empty() {
                 break;
             }
-            collected.extend(page.subscriptions);
+            let progressed = extend_with_new(
+                &mut collected,
+                &mut seen,
+                page.subscriptions,
+                |subscription| subscription.id,
+            );
 
             if let Some(max_items) = max_items
                 && collected.len() >= max_items
             {
                 collected.truncate(max_items);
+                break;
+            }
+
+            // A server echoing a token it has already sent would otherwise page
+            // in a circle; the token itself cannot be trusted to advance.
+            if !progressed {
+                tracing::warn!(
+                    "the subscriptions walk stopped making progress; every \
+                     subscription on the last page had already been seen"
+                );
                 break;
             }
 
@@ -1194,6 +1294,7 @@ impl BrokerClient {
     ) -> Result<Vec<RebalancingRun>> {
         let mut filter = filter.cloned().unwrap_or_default();
         let mut collected: Vec<RebalancingRun> = Vec::new();
+        let mut seen: HashSet<Uuid> = HashSet::new();
 
         loop {
             if let Some(limit) = page_limit(&filter.limit, max_items, collected.len()) {
@@ -1205,12 +1306,22 @@ impl BrokerClient {
             if page.runs.is_empty() {
                 break;
             }
-            collected.extend(page.runs);
+            let progressed = extend_with_new(&mut collected, &mut seen, page.runs, |run| run.id);
 
             if let Some(max_items) = max_items
                 && collected.len() >= max_items
             {
                 collected.truncate(max_items);
+                break;
+            }
+
+            // As with subscriptions: an echoed token cannot end the walk on its
+            // own, so progress is measured in new runs.
+            if !progressed {
+                tracing::warn!(
+                    "the rebalancing runs walk stopped making progress; every \
+                     run on the last page had already been seen"
+                );
                 break;
             }
 
@@ -1385,7 +1496,10 @@ impl BrokerClient {
     ) -> Result<Position> {
         self.rest
             .get(
-                &format!("/trading/accounts/{account_id}/positions/{asset}"),
+                &format!(
+                    "/trading/accounts/{account_id}/positions/{}",
+                    asset.as_path_segment()?
+                ),
                 &Empty,
             )
             .await
@@ -1402,8 +1516,12 @@ impl BrokerClient {
     ) -> Result<Vec<crate::trading::ClosePositionResponse>> {
         let path = format!("/trading/accounts/{account_id}/positions");
         match cancel_orders {
-            Some(cancel) => self.rest.delete(&path, &[("cancel_orders", cancel)]).await,
-            None => self.rest.delete(&path, &Empty).await,
+            Some(cancel) => {
+                self.rest
+                    .delete_effectful(&path, &[("cancel_orders", cancel)])
+                    .await
+            }
+            None => self.rest.delete_effectful(&path, &Empty).await,
         }
     }
 
@@ -1415,12 +1533,15 @@ impl BrokerClient {
         &self,
         account_id: Uuid,
         asset: &crate::types::AssetIdent,
-        close: Option<crate::trading::ClosePositionRequest>,
+        close: Option<&crate::trading::ClosePositionRequest>,
     ) -> Result<Order> {
-        let path = format!("/trading/accounts/{account_id}/positions/{asset}");
+        let path = format!(
+            "/trading/accounts/{account_id}/positions/{}",
+            asset.as_path_segment()?
+        );
         match close {
-            Some(close) => self.rest.delete(&path, &close.to_query()).await,
-            None => self.rest.delete(&path, &Empty).await,
+            Some(close) => self.rest.delete_effectful(&path, &close.to_query()).await,
+            None => self.rest.delete_effectful(&path, &Empty).await,
         }
     }
 
@@ -1439,7 +1560,10 @@ impl BrokerClient {
     ) -> Result<()> {
         self.send_void(
             Method::POST,
-            &format!("/trading/accounts/{account_id}/positions/{contract}/exercise"),
+            &format!(
+                "/trading/accounts/{account_id}/positions/{}/exercise",
+                contract.as_path_segment()?
+            ),
             Some(exercise),
         )
         .await
@@ -1466,6 +1590,12 @@ impl BrokerClient {
 
     /// Lists an account's orders, optionally filtered.
     ///
+    /// **One page.** Alpaca returns 50 orders by default and at most 500, and
+    /// this sends exactly what it is given — so an account with more history
+    /// than that gets a silently truncated list rather than an error. Use
+    /// [`get_all_orders_for_account`](Self::get_all_orders_for_account) to walk
+    /// the whole history.
+    ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
     pub async fn get_orders_for_account(
@@ -1478,6 +1608,39 @@ impl BrokerClient {
             Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
         }
+    }
+
+    /// Every order on an account matching `filter`, following the cursor across
+    /// pages.
+    ///
+    /// The broker route takes the same request type and the same 500-order page
+    /// cap as the trading one, so it needs the same walk — a correspondent
+    /// reconciling an account's history hits the identical silent truncation
+    /// otherwise. See
+    /// [`TradingClient::get_all_orders`](crate::trading::TradingClient::get_all_orders)
+    /// for how the cursor works and which two filter fields it overrides.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_all_orders_for_account(
+        &self,
+        account_id: Uuid,
+        filter: Option<&crate::trading::GetOrdersRequest>,
+        max_items: Option<usize>,
+    ) -> Result<Vec<Order>> {
+        let path = format!("/trading/accounts/{account_id}/orders");
+        let mut request = filter.cloned().unwrap_or_default();
+        request.limit = Some(crate::config::ORDERS_MAX_LIMIT);
+        request.direction = Some(crate::types::Sort::Desc);
+
+        crate::trading::client::walk_orders(
+            &self.rest,
+            &path,
+            request,
+            max_items,
+            |order: &Order| order.order.id,
+        )
+        .await
     }
 
     /// Fetches one of an account's orders by its Alpaca id.
@@ -1698,7 +1861,10 @@ impl BrokerClient {
     ) -> Result<Watchlist> {
         self.rest
             .delete(
-                &format!("/trading/accounts/{account_id}/watchlists/{watchlist_id}/{symbol}"),
+                &format!(
+                    "/trading/accounts/{account_id}/watchlists/{watchlist_id}/{}",
+                    segment(symbol)?
+                ),
                 &Empty,
             )
             .await
@@ -1748,7 +1914,9 @@ impl BrokerClient {
         &self,
         asset: &crate::types::AssetIdent,
     ) -> Result<crate::trading::Asset> {
-        self.rest.get(&format!("/assets/{asset}"), &Empty).await
+        self.rest
+            .get(&format!("/assets/{}", asset.as_path_segment()?), &Empty)
+            .await
     }
 
     // ---------------------------------------------- corporate announcements
@@ -1821,7 +1989,9 @@ impl BrokerClient {
     /// A named market's calendar.
     ///
     /// **A `v2` route**, where the trading API's equivalent is `v3`. The models
-    /// are shared with [`crate::trading::markets`]; the version is not.
+    /// are shared with
+    /// [`TradingClient::get_market_calendar`](crate::trading::TradingClient::get_market_calendar);
+    /// the version is not.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -1830,7 +2000,7 @@ impl BrokerClient {
         market: &crate::trading::Market,
         filter: Option<&crate::trading::GetMarketCalendarRequest>,
     ) -> Result<crate::trading::MarketCalendar> {
-        let path = format!("/calendar/{market}");
+        let path = format!("/calendar/{}", segment(market)?);
         match filter {
             Some(filter) => self.rest.at_version("v2").get(&path, filter).await,
             None => self.rest.at_version("v2").get(&path, &Empty).await,
@@ -1849,7 +2019,7 @@ impl BrokerClient {
         symbol: &str,
         request: &crate::types::LogoRequest,
     ) -> Result<Vec<u8>> {
-        let path = format!("/logos/{symbol}");
+        let path = format!("/logos/{}", segment(symbol)?);
         self.rest
             .at_version("v1beta1")
             .get_bytes(&path, request)
@@ -1874,7 +2044,7 @@ impl BrokerClient {
         activity_type: &crate::trading::ActivityType,
         filter: Option<&GetAccountActivitiesRequest>,
     ) -> Result<Vec<Activity>> {
-        let path = format!("/accounts/activities/{activity_type}");
+        let path = format!("/accounts/activities/{}", segment(activity_type)?);
         match filter {
             Some(filter) => {
                 filter.validate()?;
@@ -1980,7 +2150,10 @@ impl BrokerClient {
     /// Propagates transport, API, and decoding failures.
     pub async fn get_instant_funding_by_id(&self, funding_id: &str) -> Result<InstantFunding> {
         self.rest
-            .get(&format!("/instant_funding/{funding_id}"), &Empty)
+            .get(
+                &format!("/instant_funding/{}", segment(funding_id)?),
+                &Empty,
+            )
             .await
     }
 
@@ -1991,7 +2164,7 @@ impl BrokerClient {
     pub async fn cancel_instant_funding(&self, funding_id: &str) -> Result<()> {
         self.send_void(
             Method::DELETE,
-            &format!("/instant_funding/{funding_id}"),
+            &format!("/instant_funding/{}", segment(funding_id)?),
             None::<&Empty>,
         )
         .await
@@ -2092,7 +2265,7 @@ impl BrokerClient {
         ledger_id: &str,
         filter: Option<&GetJitBalancesRequest>,
     ) -> Result<JitLedgerBalances> {
-        let path = format!("/transfers/jit/{ledger_id}/balances");
+        let path = format!("/transfers/jit/{}/balances", segment(ledger_id)?);
         match filter {
             Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
@@ -2219,7 +2392,7 @@ impl BrokerClient {
     /// Propagates transport, API, and decoding failures.
     pub async fn get_ipo_offering(&self, offering_reference: &str) -> Result<IpoOfferingResponse> {
         self.rest
-            .get(&format!("/ipos/{offering_reference}"), &Empty)
+            .get(&format!("/ipos/{}", segment(offering_reference)?), &Empty)
             .await
     }
 
@@ -2583,7 +2756,10 @@ impl BrokerClient {
     ) -> Result<()> {
         self.send_void(
             Method::POST,
-            &format!("/trading/accounts/{account_id}/positions/{contract}/do-not-exercise"),
+            &format!(
+                "/trading/accounts/{account_id}/positions/{}/do-not-exercise",
+                contract.as_path_segment()?
+            ),
             None::<&Empty>,
         )
         .await
@@ -2670,36 +2846,53 @@ impl BrokerClient {
 
     /// Acknowledges an issuer's mint callback.
     ///
+    /// Answers with the confirmed request, which is the ordinary
+    /// [`TokenizationRequest`](crate::trading::TokenizationRequest) the mint and
+    /// lookup routes already return — the spec gives this route that same
+    /// schema, so it gets the shipping type rather than a near-duplicate.
+    ///
+    /// No captured payload exists for this route — paper trading answers 404 on
+    /// this surface — so the response is decoded against a spec-derived model
+    /// and is unverified against a live response.
+    ///
     /// # Errors
-    /// Propagates transport and API failures.
+    /// Returns [`crate::Error::InvalidRequest`] if the body does not name
+    /// exactly one account; see
+    /// [`TokenizationMintCallback::validate`](crate::trading::TokenizationMintCallback::validate).
+    /// Otherwise propagates transport, API, and decoding failures.
     pub async fn tokenization_mint_callback(
         &self,
         account_id: Uuid,
-        body: &serde_json::Value,
-    ) -> Result<()> {
-        self.send_void(
-            Method::POST,
-            &format!("/accounts/{account_id}/tokenization/callback/mint"),
-            Some(body),
-        )
-        .await
+        body: &crate::trading::TokenizationMintCallback,
+    ) -> Result<crate::trading::TokenizationRequest> {
+        body.validate()?;
+        let path = format!("/accounts/{account_id}/tokenization/callback/mint");
+        self.rest.post(&path, body).await
     }
 
     /// Acknowledges an issuer's redeem callback.
     ///
+    /// Answers with a [`TokenizationRedeemResponse`](crate::trading::TokenizationRedeemResponse)
+    /// rather than the [`TokenizationRequest`](crate::trading::TokenizationRequest)
+    /// the mint callback returns; the spec gives the two routes two schemas.
+    ///
+    /// No captured payload exists for this route — paper trading answers 404 on
+    /// this surface — so the response is decoded against a spec-derived model
+    /// and is unverified against a live response.
+    ///
     /// # Errors
-    /// Propagates transport and API failures.
+    /// Returns [`crate::Error::InvalidRequest`] if the body does not name
+    /// exactly one account; see
+    /// [`TokenizationRedeemRequest::validate`](crate::trading::TokenizationRedeemRequest::validate).
+    /// Otherwise propagates transport, API, and decoding failures.
     pub async fn tokenization_redeem_callback(
         &self,
         account_id: Uuid,
-        body: &serde_json::Value,
-    ) -> Result<()> {
-        self.send_void(
-            Method::POST,
-            &format!("/accounts/{account_id}/tokenization/callback/redeem"),
-            Some(body),
-        )
-        .await
+        body: &crate::trading::TokenizationRedeemRequest,
+    ) -> Result<crate::trading::TokenizationRedeemResponse> {
+        body.validate()?;
+        let path = format!("/accounts/{account_id}/tokenization/callback/redeem");
+        self.rest.post(&path, body).await
     }
 
     // ------------------------------------------------- crypto wallets
@@ -2712,12 +2905,13 @@ impl BrokerClient {
         &self,
         account_id: Uuid,
         filter: Option<&crate::trading::GetCryptoWalletsRequest>,
-    ) -> Result<crate::trading::CryptoWallet> {
+    ) -> Result<Vec<crate::trading::CryptoWallet>> {
         let path = format!("/accounts/{account_id}/wallets");
-        match filter {
-            Some(filter) => self.rest.get(&path, filter).await,
-            None => self.rest.get(&path, &Empty).await,
-        }
+        let wallets: OneOrMany<crate::trading::CryptoWallet> = match filter {
+            Some(filter) => self.rest.get(&path, filter).await?,
+            None => self.rest.get(&path, &Empty).await?,
+        };
+        Ok(wallets.into_vec())
     }
 
     /// An account's on-chain transfers.
@@ -2727,9 +2921,11 @@ impl BrokerClient {
     pub async fn get_crypto_transfers_for_account(
         &self,
         account_id: Uuid,
-    ) -> Result<crate::trading::CryptoTransfer> {
+    ) -> Result<Vec<crate::trading::CryptoTransfer>> {
         let path = format!("/accounts/{account_id}/wallets/transfers");
-        self.rest.get(&path, &Empty).await
+        let transfers: OneOrMany<crate::trading::CryptoTransfer> =
+            self.rest.get(&path, &Empty).await?;
+        Ok(transfers.into_vec())
     }
 
     /// Fetches one of an account's on-chain transfers.
@@ -2741,7 +2937,10 @@ impl BrokerClient {
         account_id: Uuid,
         transfer_id: &str,
     ) -> Result<crate::trading::CryptoTransfer> {
-        let path = format!("/accounts/{account_id}/wallets/transfers/{transfer_id}");
+        let path = format!(
+            "/accounts/{account_id}/wallets/transfers/{}",
+            segment(transfer_id)?
+        );
         self.rest.get(&path, &Empty).await
     }
 
@@ -2757,7 +2956,7 @@ impl BrokerClient {
     pub async fn create_crypto_transfer_for_account(
         &self,
         account_id: Uuid,
-        request: &serde_json::Value,
+        request: &crate::trading::CreateCryptoTransferRequest,
     ) -> Result<crate::trading::CryptoTransfer> {
         let path = format!("/accounts/{account_id}/wallets/transfers");
         self.rest.post(&path, request).await
@@ -2770,9 +2969,11 @@ impl BrokerClient {
     pub async fn get_whitelisted_addresses_for_account(
         &self,
         account_id: Uuid,
-    ) -> Result<crate::trading::WhitelistedAddress> {
+    ) -> Result<Vec<crate::trading::WhitelistedAddress>> {
         let path = format!("/accounts/{account_id}/wallets/whitelists");
-        self.rest.get(&path, &Empty).await
+        let addresses: OneOrMany<crate::trading::WhitelistedAddress> =
+            self.rest.get(&path, &Empty).await?;
+        Ok(addresses.into_vec())
     }
 
     /// Allowlists a withdrawal address for an account.
@@ -2799,7 +3000,10 @@ impl BrokerClient {
     ) -> Result<()> {
         self.send_void(
             Method::DELETE,
-            &format!("/accounts/{account_id}/wallets/whitelists/{address_id}"),
+            &format!(
+                "/accounts/{account_id}/wallets/whitelists/{}",
+                segment(address_id)?
+            ),
             None::<&Empty>,
         )
         .await

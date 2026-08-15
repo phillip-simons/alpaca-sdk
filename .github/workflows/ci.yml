@@ -9,14 +9,26 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
 
+# Every `uses:` below is pinned to a commit SHA, with the ref it was resolved
+# from kept as the trailing comment. Dependabot moves both together — see
+# `.github/dependabot.yml`, which schedules the `github-actions` ecosystem so
+# these do not sit frozen on last year's code.
+#
+# `dtolnay/rust-toolchain` carries an extra `toolchain:` input everywhere it is
+# pinned, and that input is not optional. The action has no version tags —
+# `stable`, `nightly` and `1.88.0` are *branches*, and it reads the toolchain to
+# install from whatever ref invoked it. Pinned to a SHA the ref is the SHA, so
+# without `toolchain:` rustup is asked for a release called `4360b52…`. Do not
+# drop these lines when refreshing a pin.
+
 jobs:
   # Which jobs need to run at all.
   #
-  # A docs-only change does not need the compiler, but the nine Rust jobs below
-  # are *required* status checks — so they cannot simply be filtered out of the
-  # workflow. A workflow that never runs never reports, and branch protection
-  # waits for a report that will never arrive, which blocks the pull request
-  # permanently.
+  # A docs-only change does not need the compiler, but `all checks` — which
+  # gates on the Rust jobs below — is a *required* status check, so they cannot
+  # simply be filtered out of the workflow. A workflow that never runs never
+  # reports, and branch protection waits for a report that will never arrive,
+  # which blocks the pull request permanently.
   #
   # Skipping at the *job* level instead is what works: a skipped job still
   # reports, and a skipped required check counts as satisfied. Hence the `needs`
@@ -26,9 +38,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      coverage_doc: ${{ steps.filter.outputs.coverage_doc }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
         id: filter
         with:
           filters: |
@@ -45,6 +58,15 @@ jobs:
               - 'Cargo.lock'
               - 'deny.toml'
               - '.github/workflows/ci.yml'
+            coverage_doc:
+              # What COVERAGE.md is generated from, plus the generator and the
+              # file itself. Deliberately not the `code` filter: `tests/` and
+              # `fixtures/` cannot change the report, and a hand-edit of
+              # COVERAGE.md must trip this job even though it touches no code.
+              - 'src/**'
+              - 'scripts/coverage.py'
+              - 'COVERAGE.md'
+              - '.github/workflows/ci.yml'
 
   fmt:
     name: rustfmt
@@ -52,9 +74,10 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
+          toolchain: stable
           components: rustfmt
       - run: cargo fmt --all --check
 
@@ -64,11 +87,12 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
+          toolchain: stable
           components: clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo clippy --all-targets --all-features
 
   test:
@@ -93,9 +117,11 @@ jobs:
         # so it does not touch branch protection either way.
         os: [ubuntu-latest]
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo test --all-features
 
   features:
@@ -104,15 +130,31 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       # Each surface must build alone; a missing cfg gate only shows up here.
-      - run: cargo check --no-default-features --features rustls-tls
-      - run: cargo check --no-default-features --features trading,rustls-tls
-      - run: cargo check --no-default-features --features data,rustls-tls
-      - run: cargo check --no-default-features --features broker,rustls-tls
-      - run: cargo check --no-default-features --features trading,data,broker,blocking,polars,native-tls
+      #
+      # `--all-targets` because plain `cargo check` builds only the library: an
+      # unguarded *test* file is just as broken under a reduced feature set, and
+      # without this the matrix cannot see it. `tests/integration/enum_parity.rs`
+      # was in exactly that state, and this job as previously written would not
+      # have caught it — `just features` did, which is the wrong way round.
+      - run: cargo check --all-targets --no-default-features --features rustls-tls
+      - run: cargo check --all-targets --no-default-features --features trading,rustls-tls
+      - run: cargo check --all-targets --no-default-features --features data,rustls-tls
+      - run: cargo check --all-targets --no-default-features --features broker,rustls-tls
+      # `polars` alone, to pin the implication: it enables `data`, because the
+      # frame conversion is for the market data collections and the feature would
+      # otherwise compile all of polars and expose nothing.
+      - run: cargo check --all-targets --no-default-features --features polars,rustls-tls
+      # `blocking` alone. It is generic over the client rather than a mirrored
+      # API, so it compiles without any surface enabled — worth knowing stays
+      # true, since a mirrored one would not.
+      - run: cargo check --all-targets --no-default-features --features blocking,rustls-tls
+      - run: cargo check --all-targets --no-default-features --features trading,data,broker,blocking,polars,native-tls
 
   msrv:
     name: minimum supported rust version
@@ -120,9 +162,11 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.88.0
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@2eae45db285e407f22119950686d47e1101e071b # 1.88.0
+        with:
+          toolchain: "1.88.0"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       # polars pulls sysinfo, which needs 1.95. It is off by default, so it
       # does not set the crate's floor; every other feature is covered here.
       - run: >
@@ -135,8 +179,8 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
 
   docs:
     name: rustdoc
@@ -146,10 +190,145 @@ jobs:
     env:
       RUSTDOCFLAGS: -D warnings --cfg docsrs
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@7c8d7d138f5c09cef361f8214cf96882cd029cdb # nightly
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo doc --all-features --no-deps
+      # And once per surface. An intra-doc link that crosses a feature boundary
+      # resolves under --all-features and dangles everywhere else, so the
+      # all-features build above cannot see it. This moved out of `just check`,
+      # where it was two thirds of the rustdoc work on every commit, to here.
+      - run: cargo doc --no-deps --no-default-features --features trading,rustls-tls
+      - run: cargo doc --no-deps --no-default-features --features data,rustls-tls
+      - run: cargo doc --no-deps --no-default-features --features broker,rustls-tls
+
+  coverage-doc:
+    name: COVERAGE.md is current
+    needs: changes
+    if: needs.changes.outputs.coverage_doc == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: taiki-e/install-action@82cd3e7658a6f96c86c0234aeeda1748937cb0a1 # v2
+        with:
+          tool: just
+      # COVERAGE.md says "Do not edit by hand — run `just coverage`", and
+      # CONTRIBUTING makes reading it step 1 of adding a route. Nothing checked
+      # that the committed file still matched the crate, so a route added
+      # without regenerating left the document quietly wrong — and the one
+      # thing a coverage report cannot afford is to be believed while stale.
+      #
+      # No Rust toolchain: `scripts/coverage.py` reads `src/` as text.
+      #
+      # This job reaches the network, because `just coverage` depends on `just
+      # specs`, which fetches the OpenAPI documents from alpaca-java rather
+      # than vendoring 1.2MB of YAML that changes on Alpaca's schedule. So a
+      # failure here means one of two things, and the diff says which: either
+      # the committed report is out of date with this crate, or it is out of
+      # date with the API because the specs moved upstream. Both are worth a
+      # human look; neither should land silently.
+      #
+      # It fetches the specs and *not* the reference. COVERAGE.md is generated
+      # from two sources with different provenance: `just specs` is three files
+      # from one raw.githubusercontent.com path in under a second, while `just
+      # reference` walks ~250 pages of docs.alpaca.markets — a host that
+      # already 403s anything that does not look like curl. Worse for a
+      # reproducibility check, `scripts/reference.py` exits 0 when individual
+      # pages fail and simply omits their operations, so a handful of throttled
+      # requests would silently drop annotations and fail this job with a diff
+      # that says nothing about the crate. A determinism gate cannot be built
+      # on 250 uncached third-party requests whose partial failure is invisible.
+      #
+      # So the comparison covers the specs-derived content only, and both sides
+      # are normalized to that view before diffing. `specs_only` erases the two
+      # things a reference-less run changes: the "run `just reference`" banner,
+      # and the ` — reference: …` suffix on flagged routes. Applied to the
+      # committed file each edit is a no-op, so nothing specs-derived is
+      # excused. What is genuinely no longer checked here is whether the
+      # annotations themselves are current — that needs `just reference`
+      # locally, and it is a question about Alpaca's docs, not about this crate.
+      #
+      # Both patterns are load-bearing against `scripts/coverage.py`. If the
+      # banner wording or the ` — reference: ` prefix changes there, change
+      # them here too, or this job starts comparing the wrong thing.
+      - name: Regenerate and compare
+        run: |
+          set -euo pipefail
+
+          specs_only() {
+            sed -e '/^> `specs\/reference.json` is absent/,/^$/d' \
+                -e 's/ — reference: .*$//' "$1"
+          }
+
+          git show HEAD:COVERAGE.md > "$RUNNER_TEMP/COVERAGE.committed.md"
+          just coverage
+
+          if ! diff -u \
+            --label 'COVERAGE.md (committed)' \
+            --label 'COVERAGE.md (regenerated)' \
+            <(specs_only "$RUNNER_TEMP/COVERAGE.committed.md") \
+            <(specs_only COVERAGE.md); then
+            echo "::error file=COVERAGE.md::COVERAGE.md is out of date — run \`just coverage\` and commit the result"
+            exit 1
+          fi
+          echo "COVERAGE.md matches what the generator produces from the specs"
+          echo "(reference annotations are not checked here — see the comment above)"
+
+  secret-scan:
+    name: no credentials in the tree
+    # No `changes` gate and no `if`. Every other job is allowed to skip on a
+    # documentation-only change; this one is not, because a leaked key is just
+    # as leaked when it arrives in a Markdown file. It costs a checkout and a
+    # grep, so there is nothing to save by skipping it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # An `AKIA`-prefixed AWS key and its SigV4 signature sat in a packaged
+      # fixture until an audit found them (removed in 2e10e9b). Nothing read
+      # that fixture, so no test could have failed on it, and nothing scanned
+      # for it — the only reason it surfaced was someone reading the file.
+      # This job is what makes that a build failure instead of a lucky catch.
+      - name: Grep for credential-shaped names and values
+        run: |
+          set -uo pipefail
+          status=0
+          scan() {
+            label="$1"; pattern="$2"; shift 2
+            hits=$(git ls-files -z -- "$@" | xargs -0 grep -InE -- "$pattern" 2>/dev/null) || true
+            if [ -n "$hits" ]; then
+              echo "::error::$label"
+              echo "$hits"
+              status=1
+            else
+              echo "ok: $label"
+            fi
+          }
+
+          # Shape. These are a credential whatever the surrounding field is
+          # called, so every tracked file is in scope.
+          scan "credential-shaped value in a tracked file" \
+            'AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----' \
+            .
+
+          # Name. Scoped to fixtures/, because `api_key` and `password` are
+          # ordinary identifiers in src/ — `Credentials::new(api_key, ..)` is
+          # not a leak, and a scan that cried wolf there would be turned off.
+          # A fixture is a captured response payload and Alpaca sends no field
+          # by any of these names, so a hit there is a leak or a hand-edit.
+          #
+          # The X-Amz pair is anchored to a value of real length on purpose:
+          # fixtures/broker/test_accounts_routes__test_update_account__01.json
+          # carries a scrubbed `X-Amz-Signature=REDACTED`, which is a
+          # placeholder rather than a secret and must not fail the build.
+          # Nothing here matches a bare `token=`, so the `page_token=` cursors
+          # in fixtures/index.json do not trip it either.
+          scan "credential-shaped name or value in fixtures/" \
+            'X-Amz-Signature=[0-9a-fA-F]{16,}|X-Amz-Credential=[A-Za-z0-9]{16,}|Bearer |api_key|apikey|private_key|password' \
+            fixtures
+
+          exit "$status"
 
   # The single required status check.
   #
@@ -168,7 +347,7 @@ jobs:
   # failure here, not a skip that protection would accept.
   gate:
     name: all checks
-    needs: [changes, fmt, clippy, test, features, msrv, deny, docs]
+    needs: [changes, fmt, clippy, test, features, msrv, deny, docs, coverage-doc, secret-scan]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -186,8 +365,14 @@ jobs:
           done
           echo "every job succeeded or was skipped"
 
-  coverage:
-    name: coverage
+  # Named `line-coverage`, not `coverage`, because `coverage-doc` above is also
+  # about coverage and means something else entirely: that job checks which
+  # documented *routes* the crate implements, this one measures which *lines* a
+  # test has executed. Two unrelated numbers under one word is how someone
+  # reads a green `coverage` check as an answer to the question the other job
+  # asks.
+  line-coverage:
+    name: line coverage
     # Push-only. Nothing gates on the number — it is a map of what no test has
     # ever run, not a target — so measuring it on every pull request would spend
     # an instrumented test run on a report no one is blocked by. `on.push` here
@@ -196,19 +381,20 @@ jobs:
     if: github.event_name == 'push' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
+          toolchain: stable
           components: llvm-tools-preview
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: taiki-e/install-action@82cd3e7658a6f96c86c0234aeeda1748937cb0a1 # v2
         with:
           tool: cargo-llvm-cov
       - name: Measure, and write it to the run summary
         run: |
           set -euo pipefail
           {
-            echo '### Coverage'
+            echo '### Line coverage'
             echo
             echo 'Where no test has ever run. Not a threshold — see `just cov`.'
             echo

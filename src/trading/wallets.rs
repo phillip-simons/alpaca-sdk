@@ -81,20 +81,30 @@ wire_enum! {
 
 /// A deposit wallet.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CryptoWallet {
     /// The on-chain address to deposit to.
     #[serde(default)]
     pub address: Option<String>,
     /// The chain it is on.
     #[serde(default)]
-    pub chain: Option<String>,
+    pub chain: Option<CryptoChain>,
     /// When Alpaca created it.
     #[serde(default)]
     pub created_at: Option<DateTime<Utc>>,
 }
 
 /// An on-chain transfer into or out of an account.
+///
+/// **There is no method to start a withdrawal, on purpose.**
+/// `POST /v2/wallets/transfers` is deprecated as of 2026-07-09 with a sunset of
+/// 2026-10-09, and the reference's replacement is the Alpaca web application
+/// rather than another route — so there is nothing to point a method at.
+/// Everything on the read side is here, and the broker API's own equivalent of
+/// the withdrawal is *not* deprecated and *is* implemented, on
+/// `broker::BrokerClient`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CryptoTransfer {
     /// Alpaca's identifier for the transfer.
     #[serde(default)]
@@ -103,14 +113,14 @@ pub struct CryptoTransfer {
     #[serde(default)]
     pub asset: Option<String>,
     /// How much.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub amount: Option<Decimal>,
     /// What it was worth in USD.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub usd_value: Option<Decimal>,
     /// The chain.
     #[serde(default)]
-    pub chain: Option<String>,
+    pub chain: Option<CryptoChain>,
     /// Which way it moved.
     #[serde(default)]
     pub direction: Option<TransferDirection>,
@@ -124,10 +134,10 @@ pub struct CryptoTransfer {
     #[serde(default)]
     pub to_address: Option<String>,
     /// Alpaca's fee.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub fees: Option<Decimal>,
     /// The chain's own fee.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub network_fee: Option<Decimal>,
     /// The on-chain transaction.
     #[serde(default)]
@@ -139,6 +149,7 @@ pub struct CryptoTransfer {
 
 /// An address a withdrawal may be sent to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct WhitelistedAddress {
     /// Alpaca's identifier for the entry.
     #[serde(default)]
@@ -151,7 +162,7 @@ pub struct WhitelistedAddress {
     pub asset: Option<String>,
     /// The chain.
     #[serde(default)]
-    pub chain: Option<String>,
+    pub chain: Option<CryptoChain>,
     /// Whether it is usable yet.
     #[serde(default)]
     pub status: Option<WhitelistStatus>,
@@ -162,12 +173,13 @@ pub struct WhitelistedAddress {
 
 /// What a proposed transfer would cost in gas.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TransferFeeEstimate {
     /// Alpaca's fee.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub fee: Option<Decimal>,
     /// The chain's own fee.
-    #[serde(default)]
+    #[serde(default, with = "crate::types::option_decimal")]
     pub network_fee: Option<Decimal>,
 }
 
@@ -208,6 +220,42 @@ impl GetCryptoWalletsRequest {
     }
 }
 
+/// A request to withdraw crypto to an on-chain address.
+///
+/// The body of `POST /v1/accounts/{account_id}/wallets/transfers`, on
+/// `broker::BrokerClient::create_crypto_transfer_for_account`. The trading
+/// API's `POST /v2/wallets/transfers` takes the same shape and is deprecated;
+/// see this module's header for why only the broker route is implemented.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct CreateCryptoTransferRequest {
+    /// The destination wallet address.
+    pub address: String,
+    /// The amount, denoted in the specified asset, to be withdrawn from the
+    /// user's wallet.
+    #[serde(with = "crate::types::decimal")]
+    pub amount: Decimal,
+    /// The crypto asset symbol, e.g. BTC, ETH, USDT.
+    pub asset: String,
+    /// The blockchain network used for the withdrawal. Optional: Alpaca infers
+    /// one from the asset when it is left off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain: Option<CryptoChain>,
+}
+
+impl CreateCryptoTransferRequest {
+    /// Withdraws `amount` of `asset` to `address`.
+    #[must_use]
+    pub fn new(address: impl Into<String>, asset: impl Into<String>, amount: Decimal) -> Self {
+        Self {
+            address: address.into(),
+            amount,
+            asset: asset.into(),
+            chain: None,
+        }
+    }
+}
+
 /// A request to allowlist a withdrawal address.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -222,6 +270,7 @@ pub struct CreateWhitelistedAddressRequest {
 
 impl CreateWhitelistedAddressRequest {
     /// Allowlists `address` for `asset` on `chain`.
+    #[must_use]
     pub fn new(address: impl Into<String>, asset: impl Into<String>, chain: CryptoChain) -> Self {
         Self {
             address: address.into(),
@@ -245,12 +294,17 @@ pub struct TransferFeeEstimateRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub to_address: Option<String>,
     /// How much to move.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::types::option_decimal"
+    )]
     pub amount: Option<Decimal>,
 }
 
 impl TransferFeeEstimateRequest {
     /// An estimate for moving `amount` of `asset` between two addresses.
+    #[must_use]
     pub fn new(
         asset: impl Into<String>,
         from_address: impl Into<String>,
