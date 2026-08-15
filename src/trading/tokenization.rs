@@ -84,6 +84,13 @@ wire_enum! {
 #[non_exhaustive]
 pub struct TokenizationRequest {
     /// Alpaca's identifier for the request.
+    ///
+    /// A `String`, not a `Uuid`: the response schema calls this `type: string`
+    /// with no format, and a `Uuid` here would turn a value that is not one
+    /// into [`Error::Decode`](crate::Error::Decode) for the whole response.
+    /// The callback body and the path parameter do say `format: uuid`, and the
+    /// caller supplies those, so [`TokenizationMintCallback`] parses one. The
+    /// split matches the upstream schemas and is meant to stay.
     pub tokenization_request_id: String,
     /// Whether this mints or redeems. Absent on a mint response, which is one.
     #[serde(rename = "type", default)]
@@ -235,6 +242,22 @@ impl GetTokenizationRequestsRequest {
     }
 }
 
+/// The exactly-one-of check both callback bodies carry.
+///
+/// The two types are separate because their wire shapes are, but the rule on
+/// the account identifiers is one rule and reads better written once.
+fn exactly_one_account(has_account_id: bool, has_external_id: bool) -> Result<()> {
+    match (has_account_id, has_external_id) {
+        (false, false) => Err(Error::InvalidRequest(
+            "one of client_account_id and client_external_account_id must be set".to_owned(),
+        )),
+        (true, true) => Err(Error::InvalidRequest(
+            "client_account_id and client_external_account_id are mutually exclusive".to_owned(),
+        )),
+        _ => Ok(()),
+    }
+}
+
 /// An issuer's confirmation that a mint settled on chain.
 ///
 /// The body of `POST /v1/accounts/{account_id}/tokenization/callback/mint`, on
@@ -290,6 +313,24 @@ impl TokenizationMintCallback {
             wallet_address: None,
         }
     }
+
+    /// Checks that the body names exactly one account.
+    ///
+    /// [`new`](Self::new) sets neither identifier, because the schema does not
+    /// say which one a given issuer uses; a body that still carries neither
+    /// would go out with the account unnamed.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if
+    /// neither `client_account_id` nor `client_external_account_id` is set, or
+    /// if both are. The deprecated [`client_id`](Self::client_id) counts as
+    /// `client_external_account_id`, which is what Alpaca still accepts it as.
+    pub fn validate(&self) -> Result<()> {
+        exactly_one_account(
+            self.client_account_id.is_some(),
+            self.client_external_account_id.is_some() || self.client_id.is_some(),
+        )
+    }
 }
 
 /// An issuer's request to redeem tokens back into the underlying asset.
@@ -301,8 +342,12 @@ impl TokenizationMintCallback {
 /// routes share a URL prefix and nothing else, so they get two types.
 ///
 /// Alpaca journals the underlying asset into the Authorized Participant's
-/// account in response. That makes it worth sending an `Idempotency-Key`
-/// header in production, so a retry after a timeout cannot redeem twice.
+/// account in response, so a redeem that ran twice has moved the asset twice.
+/// This crate never replays a `POST`, so a timeout is reported rather than
+/// retried underneath the caller — but it cannot send an `Idempotency-Key`
+/// header either, so a caller who retries by hand has no guard against a
+/// double redeem. `issuer_request_id` is the caller's own: the by-issuer-id
+/// lookup on `broker::BrokerClient` says whether the first attempt landed.
 ///
 /// Exactly one of [`client_account_id`](Self::client_account_id) and
 /// [`client_external_account_id`](Self::client_external_account_id) must be
@@ -366,6 +411,25 @@ impl TokenizationRedeemRequest {
             client_external_account_id: None,
             client_id: None,
         }
+    }
+
+    /// Checks that the body names exactly one account.
+    ///
+    /// [`new`](Self::new) sets neither identifier, because the schema does not
+    /// say which one a given issuer uses; a body that still carries neither
+    /// would go out without naming the account the underlying asset is
+    /// journaled into.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if
+    /// neither `client_account_id` nor `client_external_account_id` is set, or
+    /// if both are. The deprecated [`client_id`](Self::client_id) counts as
+    /// `client_external_account_id`, which is what Alpaca still accepts it as.
+    pub fn validate(&self) -> Result<()> {
+        exactly_one_account(
+            self.client_account_id.is_some(),
+            self.client_external_account_id.is_some() || self.client_id.is_some(),
+        )
     }
 }
 
@@ -544,5 +608,59 @@ mod tests {
             "wallet",
         );
         assert!(request.validate().is_err());
+    }
+
+    #[test]
+    fn a_mint_callback_naming_no_account_or_two_is_refused() {
+        // What `new` leaves behind serialises to a body with neither field,
+        // which the schema calls invalid and the wire would not say so kindly.
+        let mut callback = TokenizationMintCallback::new(Uuid::nil(), "0xdead");
+        assert!(callback.validate().is_err());
+        let encoded = serde_json::to_value(&callback).unwrap();
+        assert!(encoded.get("client_account_id").is_none(), "{encoded}");
+        assert!(
+            encoded.get("client_external_account_id").is_none(),
+            "{encoded}"
+        );
+
+        callback.client_account_id = Some(Uuid::nil());
+        assert!(callback.validate().is_ok());
+
+        callback.client_external_account_id = Some("cust-1".to_owned());
+        assert!(callback.validate().is_err());
+
+        callback.client_account_id = None;
+        assert!(callback.validate().is_ok());
+
+        // The deprecated alias names the same account as the newer field, so
+        // it satisfies the rule and collides with `client_account_id` too.
+        let mut aliased = TokenizationMintCallback::new(Uuid::nil(), "0xdead");
+        aliased.client_id = Some("cust-1".to_owned());
+        assert!(aliased.validate().is_ok());
+        aliased.client_account_id = Some(Uuid::nil());
+        assert!(aliased.validate().is_err());
+    }
+
+    #[test]
+    fn a_redeem_naming_no_account_or_two_is_refused() {
+        let mut request = TokenizationRedeemRequest::new(
+            "iss-1",
+            "AAPL",
+            "AAPLx",
+            Decimal::ONE,
+            TokenizationNetwork::Solana,
+            "wallet",
+            "0xdead",
+        );
+        assert!(request.validate().is_err());
+
+        request.client_external_account_id = Some("cust-1".to_owned());
+        assert!(request.validate().is_ok());
+
+        request.client_account_id = Some(Uuid::nil());
+        assert!(request.validate().is_err());
+
+        request.client_external_account_id = None;
+        assert!(request.validate().is_ok());
     }
 }

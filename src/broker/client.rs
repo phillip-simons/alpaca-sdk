@@ -2856,12 +2856,16 @@ impl BrokerClient {
     /// and is unverified against a live response.
     ///
     /// # Errors
-    /// Propagates transport, API, and decoding failures.
+    /// Returns [`crate::Error::InvalidRequest`] if the body does not name
+    /// exactly one account; see
+    /// [`TokenizationMintCallback::validate`](crate::trading::TokenizationMintCallback::validate).
+    /// Otherwise propagates transport, API, and decoding failures.
     pub async fn tokenization_mint_callback(
         &self,
         account_id: Uuid,
         body: &crate::trading::TokenizationMintCallback,
     ) -> Result<crate::trading::TokenizationRequest> {
+        body.validate()?;
         let path = format!("/accounts/{account_id}/tokenization/callback/mint");
         self.rest.post(&path, body).await
     }
@@ -2877,12 +2881,16 @@ impl BrokerClient {
     /// and is unverified against a live response.
     ///
     /// # Errors
-    /// Propagates transport, API, and decoding failures.
+    /// Returns [`crate::Error::InvalidRequest`] if the body does not name
+    /// exactly one account; see
+    /// [`TokenizationRedeemRequest::validate`](crate::trading::TokenizationRedeemRequest::validate).
+    /// Otherwise propagates transport, API, and decoding failures.
     pub async fn tokenization_redeem_callback(
         &self,
         account_id: Uuid,
         body: &crate::trading::TokenizationRedeemRequest,
     ) -> Result<crate::trading::TokenizationRedeemResponse> {
+        body.validate()?;
         let path = format!("/accounts/{account_id}/tokenization/callback/redeem");
         self.rest.post(&path, body).await
     }

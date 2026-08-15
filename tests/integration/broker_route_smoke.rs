@@ -808,17 +808,16 @@ async fn the_tokenization_routes_keep_their_colons() {
     // The two callbacks used to share one `serde_json::Value` body and so could
     // share a loop. They take different types now — the spec gives them two
     // schemas, `TokenizationMintCallback` and `TokenizationRedeemRequest` —
-    // which is the whole reason they are written out twice.
+    // which is the whole reason they are written out twice. Both name an
+    // account: neither route is reached without one, since the client
+    // validates the exactly-one-of rule before it sends.
     expect_route(
         "POST",
         &format!("/v1/accounts/{ACCOUNT}/tokenization/callback/mint"),
         |broker| async move {
-            broker
-                .tokenization_mint_callback(
-                    account(),
-                    &TokenizationMintCallback::new(Uuid::nil(), "0xdead"),
-                )
-                .await
+            let mut body = TokenizationMintCallback::new(Uuid::nil(), "0xdead");
+            body.client_account_id = Some(account());
+            broker.tokenization_mint_callback(account(), &body).await
         },
     )
     .await;
@@ -827,20 +826,17 @@ async fn the_tokenization_routes_keep_their_colons() {
         "POST",
         &format!("/v1/accounts/{ACCOUNT}/tokenization/callback/redeem"),
         |broker| async move {
-            broker
-                .tokenization_redeem_callback(
-                    account(),
-                    &TokenizationRedeemRequest::new(
-                        "iss-1",
-                        "AAPL",
-                        "AAPLx",
-                        Decimal::ONE,
-                        TokenizationNetwork::Solana,
-                        "wallet",
-                        "0xdead",
-                    ),
-                )
-                .await
+            let mut body = TokenizationRedeemRequest::new(
+                "iss-1",
+                "AAPL",
+                "AAPLx",
+                Decimal::ONE,
+                TokenizationNetwork::Solana,
+                "wallet",
+                "0xdead",
+            );
+            body.client_account_id = Some(account());
+            broker.tokenization_redeem_callback(account(), &body).await
         },
     )
     .await;

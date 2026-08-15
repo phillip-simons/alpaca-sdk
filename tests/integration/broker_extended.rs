@@ -526,6 +526,7 @@ async fn the_mint_callback_decodes_the_shared_tokenization_request() {
         .and(body_json(json!({
             "tokenization_request_id": "00000000-0000-0000-0000-000000000000",
             "tx_hash": "0xdead",
+            "client_account_id": "00000000-0000-0000-0000-000000000000",
         })))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "tokenization_request_id": "5b1d6a3e-7f0a-4d2c-b8e1-9e6f1c0d2c4a",
@@ -544,11 +545,13 @@ async fn the_mint_callback_decodes_the_shared_tokenization_request() {
         .mount(&server)
         .await;
 
+    // The callback has to name an account, and the client refuses to send it
+    // otherwise; `client_account_id` is the identifier this suite uses.
+    let mut body = TokenizationMintCallback::new(Uuid::nil(), "0xdead");
+    body.client_account_id = Some(ACCOUNT);
+
     let confirmed = client(&server)
-        .tokenization_mint_callback(
-            ACCOUNT,
-            &TokenizationMintCallback::new(Uuid::nil(), "0xdead"),
-        )
+        .tokenization_mint_callback(ACCOUNT, &body)
         .await
         .unwrap();
 
@@ -584,19 +587,19 @@ async fn the_redeem_callback_decodes_without_the_fields_the_spec_over_requires()
         .mount(&server)
         .await;
 
+    let mut body = TokenizationRedeemRequest::new(
+        "iss-1",
+        "AAPL",
+        "AAPLx",
+        Decimal::ONE,
+        TokenizationNetwork::Solana,
+        "9xQeWvG816bUx9EPa2",
+        "0xdead",
+    );
+    body.client_account_id = Some(ACCOUNT);
+
     let redeemed = client(&server)
-        .tokenization_redeem_callback(
-            ACCOUNT,
-            &TokenizationRedeemRequest::new(
-                "iss-1",
-                "AAPL",
-                "AAPLx",
-                Decimal::ONE,
-                TokenizationNetwork::Solana,
-                "9xQeWvG816bUx9EPa2",
-                "0xdead",
-            ),
-        )
+        .tokenization_redeem_callback(ACCOUNT, &body)
         .await
         .unwrap();
 
