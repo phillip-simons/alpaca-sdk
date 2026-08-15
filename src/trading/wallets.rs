@@ -88,7 +88,7 @@ pub struct CryptoWallet {
     pub address: Option<String>,
     /// The chain it is on.
     #[serde(default)]
-    pub chain: Option<String>,
+    pub chain: Option<CryptoChain>,
     /// When Alpaca created it.
     #[serde(default)]
     pub created_at: Option<DateTime<Utc>>,
@@ -120,7 +120,7 @@ pub struct CryptoTransfer {
     pub usd_value: Option<Decimal>,
     /// The chain.
     #[serde(default)]
-    pub chain: Option<String>,
+    pub chain: Option<CryptoChain>,
     /// Which way it moved.
     #[serde(default)]
     pub direction: Option<TransferDirection>,
@@ -162,7 +162,7 @@ pub struct WhitelistedAddress {
     pub asset: Option<String>,
     /// The chain.
     #[serde(default)]
-    pub chain: Option<String>,
+    pub chain: Option<CryptoChain>,
     /// Whether it is usable yet.
     #[serde(default)]
     pub status: Option<WhitelistStatus>,

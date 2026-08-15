@@ -148,6 +148,11 @@ async fn main() -> Result<()> {
 | `rustls-tls` | ✅ | TLS via rustls |
 | `native-tls` | | TLS via the platform library |
 
+**Exactly one TLS backend is required.** None of `trading`, `data` or `broker`
+implies one, so turning off default features without naming `rustls-tls` or
+`native-tls` fails the build — rather than compiling into a client that fails
+every HTTPS request at runtime.
+
 Streams stay async even under `blocking`: a blocking iterator over a live feed
 deadlocks as soon as the caller is slower than the socket's read buffer.
 

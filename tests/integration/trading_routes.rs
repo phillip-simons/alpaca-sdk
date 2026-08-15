@@ -132,7 +132,7 @@ async fn get_order_by_id_uses_the_id_in_the_path() {
     .await;
 
     let mut filter = GetOrderByIdRequest::default();
-    filter.nested = true;
+    filter.nested = Some(true);
     client(&server)
         .get_order_by_id(Uuid::parse_str(ORDER_ID).unwrap(), Some(&filter))
         .await
@@ -140,6 +140,29 @@ async fn get_order_by_id_uses_the_id_in_the_path() {
 
     let request = &server.received_requests().await.unwrap()[0];
     assert_eq!(request.url.query(), Some("nested=true"));
+}
+
+/// The default filter must send *no* `nested` parameter, which is what the
+/// doc on `GetOrderByIdRequest` claims and what a `bool` field could not do —
+/// it serialized `?nested=false`, asking the API for the opposite of the
+/// rollup rather than leaving the choice to it.
+#[tokio::test]
+async fn get_order_by_id_with_a_default_filter_sends_no_nested_parameter() {
+    let server = expect(
+        "GET",
+        &format!("/v2/orders/{ORDER_ID}"),
+        fixture("trading/test_order_routes__test_get_order_by_id__01.json"),
+    )
+    .await;
+
+    let filter = GetOrderByIdRequest::default();
+    client(&server)
+        .get_order_by_id(Uuid::parse_str(ORDER_ID).unwrap(), Some(&filter))
+        .await
+        .unwrap();
+
+    let request = &server.received_requests().await.unwrap()[0];
+    assert_eq!(request.url.query(), None);
 }
 
 #[tokio::test]

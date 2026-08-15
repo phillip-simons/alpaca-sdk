@@ -881,12 +881,16 @@ impl GetAccountActivitiesRequest {
 
 /// Filters for fetching one order.
 ///
-/// `Default` leaves `nested` off, which is the API's own default.
+/// `Default` sends no `nested` parameter at all, leaving the API to apply its
+/// own default. It is an `Option` for that reason: a plain `bool` would have
+/// serialized `?nested=false` from a default request, which is a different
+/// thing to ask for than not asking.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct GetOrderByIdRequest {
     /// Whether to roll multi-leg orders up under their parent's `legs`.
-    pub nested: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nested: Option<bool>,
 }
 
 /// Filters for listing assets.

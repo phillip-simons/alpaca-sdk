@@ -8,13 +8,11 @@ mod ident;
 mod logo;
 pub(crate) mod path;
 pub mod serde_util;
-mod shared_enums;
 pub mod timestamp;
 
-pub use common_enums::{Sort, SupportedCurrencies};
+pub use common_enums::{ContractType, Sort, SupportedCurrencies};
 pub use ident::AssetIdent;
 pub use logo::LogoRequest;
-pub use shared_enums::*;
 
 /// Serde codec for optional [`rust_decimal::Decimal`] fields.
 ///

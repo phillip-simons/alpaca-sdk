@@ -36,6 +36,10 @@
 //! | `rustls-tls` | yes | TLS via rustls |
 //! | `native-tls` | no | TLS via the platform library |
 //!
+//! **Exactly one TLS backend is required.** No API surface implies one, so
+//! `default-features = false` without `rustls-tls` or `native-tls` fails the
+//! build rather than compiling into a client that cannot make a request.
+//!
 //! The minimum supported Rust version is **1.88**. Enabling `polars` raises it
 //! to 1.95, which is why that feature is off by default — a convenience feature
 //! does not get to set the crate's floor.
@@ -48,6 +52,21 @@
 // breaking changes went past without anything noticing whether they still
 // built. They did — but only because nobody had needed to find out.
 #![doc = include_str!("../README.md")]
+
+// `reqwest` is depended on with `default-features = false`, and none of
+// `trading`, `data` or `broker` implies a TLS backend — only the two features
+// below reach `reqwest/rustls` and `reqwest/native-tls`. So
+// `default-features = false, features = ["broker"]` used to compile cleanly and
+// then fail *every* HTTPS request at runtime, because the client in
+// `rest::Rest` was built with no backend to negotiate with. Failing the build
+// is the only place that mistake is cheap to find.
+#[cfg(not(any(feature = "rustls-tls", feature = "native-tls")))]
+compile_error!(
+    "alpaca-sdk requires a TLS backend: enable exactly one of the `rustls-tls` \
+     or `native-tls` features. Disabling default features turns off \
+     `rustls-tls`, and none of `trading`, `data` or `broker` enables a backend \
+     on its own, so every HTTPS request would fail at runtime."
+);
 
 pub mod auth;
 pub mod backoff;

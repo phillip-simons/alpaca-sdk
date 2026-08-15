@@ -11,9 +11,96 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-A pre-release audit of the whole crate, and the fixes it produced. Nothing here
-has shipped, so none of it is a break from a published version — but the
-behaviour changes are worth reading before the first release rather than after.
+Nothing yet.
+
+## [0.1.0] — unreleased
+
+The first real release. It also carries a pre-release audit of the whole crate
+and the fixes that audit produced — the `Fixed`, `Added` and `Changed` sections
+below are that work. None of it is a break from a published version, because
+`0.1.0-alpha.1` was a rehearsal of the release pipeline rather than a usable
+baseline, but the behaviour changes are worth reading before depending on this
+rather than after.
+
+### Surfaces
+
+- **Trading REST** — orders, positions, assets, watchlists, the clock and
+  calendar, account configuration and activities, corporate actions, options
+  contracts, crypto funding, locates and tokenization.
+- **Historical market data** — stocks, options, crypto, forex, news, screeners
+  and metadata, with the pagination cursor walked for you.
+- **Live market data streams** — the msgpack websocket for stocks, options,
+  crypto and news, with a reconnect machine that replays subscriptions.
+- **Trade update stream** — the JSON websocket for order lifecycle events.
+- **Broker API** — accounts, onboarding, documents, funding, journals,
+  rebalancing, instant funding, JIT, FPSL, funding wallets, IPOs, reporting and
+  OAuth, plus nine server-sent-event streams (account status, trades, journals,
+  transfers, non-trading activity, activities, admin actions, IPOs and system
+  events).
+
+**251 of the 253 routes the vendored specs document.** The two exceptions are
+deliberate skips, each recorded with its reason in
+[COVERAGE.md](COVERAGE.md) — a route decided against must not keep reading as a
+gap.
+
+### Behaviour worth knowing before you depend on it
+
+- **Money that crosses the wire as a string is `rust_decimal::Decimal`.**
+  Alpaca sends order quantities and prices as strings and market data as JSON
+  numbers, so the deserializer accepts both and market-data floats stay `f64`.
+  Reading a string price as a float loses precision.
+- **Unknown enum values deserialize into `Unknown` rather than failing.** Alpaca
+  adds values without warning, and a new order status should cost a caller a
+  match arm rather than a decode.
+- **Unknown response fields are ignored.** Alpaca sends fields no model declares.
+- **Most paginated endpoints offer two methods** — `get_x` for one page,
+  `get_all_x` to walk every page with an optional cap. Six do: orders (twice),
+  account activities, transfers, rebalancing subscriptions and runs. Five
+  paginated routes have no walker yet and page by hand — `get_locates`,
+  `get_fpsl_loans`, `get_ipo_offerings`, `get_eod_positions` and
+  `get_options_approvals`; each returns a page type carrying `next_page_token`.
+  Note also that `get_all_x` does not always mean "walk": `get_all_positions`,
+  `get_all_assets`, `get_all_accounts_positions`, `get_all_positions_for_account`
+  and `get_all_portfolios` are single-request routes that return everything,
+  named for the endpoint rather than for a walk.
+- **Retries follow Alpaca's own rate-limit guidance**: 429 and 504, three
+  retries after the first request, waiting about a second and doubling to a
+  30-second ceiling, jittered. A response carrying `Retry-After` overrides the
+  curve, clamped to that ceiling; only the delta-seconds form is read, and an
+  HTTP-date is treated as absent.
+- **Request structs and `RestConfig` are `#[non_exhaustive]`.** Build with `new`
+  or `default` and assign fields. This is what lets a newly documented query
+  parameter arrive as a field rather than as a breaking change — which has
+  already happened five times.
+- **`request_raw` is the escape hatch** for routes this crate does not wrap.
+
+### Features
+
+`trading` and `data` are on by default, with `rustls-tls`. `broker`, `blocking`,
+`polars` and `native-tls` are opt-in. Streams stay async even under `blocking`:
+a blocking iterator over a live feed deadlocks as soon as the caller is slower
+than the socket's read buffer.
+
+### Minimum supported Rust version
+
+**1.88.** Enabling `polars` raises it to 1.95, which is why that feature is off
+by default — a convenience feature does not get to set the crate's floor.
+
+### Known limits
+
+These are properties of what could be verified, not of what was implemented.
+
+- **The broker routes have never met a live server.** This account has no broker
+  sandbox key, so all 153 are verified against captured payloads, the published
+  reference and the vendored specs — never against a response. Treat a decode
+  failure on a first real payload as expected work rather than a regression.
+- **The `CIP*` models are unverified and probably unverifiable.** alpaca-py's own
+  comment says the sandbox answers 404 for those routes.
+- **Forex, indices and logos answer `403 insufficient grants`** on a plan that
+  reaches SIP, so they are per-product entitlements. The models follow the
+  published reference.
+- **Locates, tokenization and crypto funding answer 404 on the paper API**,
+  which is a different kind of unverified from a 403.
 
 ### Fixed — correctness
 
@@ -143,6 +230,27 @@ behaviour changes are worth reading before the first release rather than after.
   rather than a decode mismatch. It returns one record, so it cannot skip the way
   the three sibling helpers do — but the error now says the response carried
   nothing for that symbol instead of blaming the shape.
+- **A build with no TLS backend is refused at compile time.** `reqwest` is
+  depended on with default features off, and none of `trading`, `data` or
+  `broker` reaches `reqwest/rustls` or `reqwest/native-tls` — so
+  `default-features = false, features = ["broker"]` compiled cleanly and then
+  failed *every* HTTPS request at runtime, from a client built with no backend
+  to negotiate with. It is now a `compile_error!` naming both features.
+- **Sixty-five `Decimal` fields went through `rust_decimal`'s own
+  implementation** rather than this crate's codec, so they neither mapped `""`
+  to `None` nor rejected the digit separator `parse_exact` refuses. A single
+  empty-string amount anywhere in a response failed the entire decode. Twelve
+  trading and fifty-three broker fields now route through
+  `crate::types::[option_]decimal`, and `OptionContract::size` and
+  `::open_interest` through the integer codec that accepts both a number and a
+  string. `IraExcessContribution` is deliberately left alone: the spec declares
+  its fields as JSON numbers, so a string-emitting codec would have changed what
+  this crate puts on the wire.
+- **`exercise_do_not_exercise` decodes its empty `204`.** It went through the
+  JSON path, so a route that answers with no body at all returned
+  `Error::Decode` on success.
+- **Both retry loops are bounded with `saturating_add`,** so a `u32::MAX`
+  attempt count can no longer overflow into a loop that never runs.
 
 ### Added
 
@@ -178,9 +286,8 @@ Decisions that become expensive after the first release, settled now.
   action shapes and the funding, JIT, reporting, IPO, OAuth and locate responses.
   Request structs carry it too, as CONTRIBUTING states. The exemptions are the
   clients, and the caller-constructed value types where the attribute costs
-  something and buys nothing — among them `OrderAmount`, `Trail`, `StopLimit`,
-  `AssetIdent`, `Symbols`, `TimeFrame`, `SettlementTransfer`, `W8BenDocument`
-  and `StreamConfig`.
+  something and buys nothing — `Symbols`, `TimeFrame`, `W8BenDocument` and
+  `StreamConfig`.
 
   `tests/request_construction.rs` is the check that the line between the two
   groups is drawn somewhere a caller can actually build from. It is an
@@ -230,11 +337,12 @@ Decisions that become expensive after the first release, settled now.
   `ApiError::is_retryable` is now `ApiError::is_retried_by_default`, which is
   what it measured — the default status set, not the policy the client was built
   with.
-- **`EventStreamRequest::after_id` is now `from_id`**, and
-  `GetEventsRequest::after_ulid` is now `from_ulid`. "After" asserted an
-  exclusivity only some of these streams have: Alpaca documents `since_id` as
-  inclusive for corporate actions and exclusive for IPO events. Deduplicate on
-  the event id.
+- **`EventStreamRequest::after_id` and `GetEventsRequest::after_ulid` are both
+  now `from_id`.** "After" asserted an exclusivity only some of these streams
+  have: Alpaca documents `since_id` as inclusive for corporate actions and
+  exclusive for IPO events. Deduplicate on the event id. The two carry the same
+  `since_id` to the wire, so they are named the same thing — `after_ulid` also
+  named the id's encoding, which is not what a caller is choosing.
 - **`currency` is `SupportedCurrencies` everywhere,** rather than the enum on
   some types and `String` on others — including on the one you read back after
   setting it, where the mismatch turned a compile error into a string comparison
@@ -275,6 +383,53 @@ Decisions that become expensive after the first release, settled now.
 - **`AssetIdent::as_path_segment` returns `Result<String>`** and encodes. It was
   `self.to_string()` — a no-op that no route called.
 - `Event` and `JitReportInline` are `#[non_exhaustive]`.
+- **Twelve further types are `#[non_exhaustive]`** — the caller-constructed ones
+  the sweep above had exempted: `OrderAmount`, `Trail`, `StopLimit`,
+  `AssetIdent`, `ClosePositionRequest`, `Replay`,
+  `CreateACHRelationshipRequest`, `CreateTransferRequest`, `UploadDocument`,
+  `TransmitterInfo`, `SettlementTransfer` and `JitSettlementAccount`. Every one
+  of them is a *request* shape, and a newly documented parameter has already
+  arrived on this crate's request surface five times — the exemption's argument
+  held for a value type and not for these. `StopLimit::new`,
+  `SettlementTransfer::new` and `JitSettlementAccount::new` arrive with it, so
+  the types that compose them stay constructible from outside the crate.
+- **`TokenizationRequest::r#type` is now `request_type`.** The wire key is still
+  `type`; this was the last raw identifier in the public surface.
+- **`order_type_deprecated` is now `legacy_order_type`,** carrying
+  `#[deprecated]` rather than encoding the deprecation in a name, where no
+  compiler could act on it and undoing it would need a second rename.
+- **`trading::locates`, `::markets`, `::tokenization` and `::wallets` are
+  private.** Every type in them was already re-exported at `trading::Type`, so
+  each had two public paths and the second froze a module layout no caller was
+  meant to depend on. Import from `trading` directly. The prose those module
+  headers carried moved onto the public types it describes.
+- **`ClosePositionRequest` is taken by reference** by
+  `TradingClient::close_position` and
+  `BrokerClient::close_position_for_account`, as every other filter already was.
+  The two clients disagreed on how they took the same type.
+- **`types::timestamp::from_extension` is `pub(crate)`,** behind the `data`
+  feature. It parses a market data extension field, which no caller has in hand.
+- **The `LiveStreamConfig` alias is removed.** It was a second public path to
+  `StreamConfig` that nothing reached by that name.
+- **The `common!` macro's in-place setters are named `set_*`.** `data_timeout`
+  meant "set it and hand back `Self`" on one receiver and "set it in place" on
+  another — a difference the call sites did not show.
+- **`GetOrderByIdRequest::nested` is `Option<bool>`,** matching
+  `GetOrdersRequest::nested` and every other filter field beside it. As a plain
+  `bool` a default request serialized `?nested=false`, actively asking Alpaca
+  *not* to roll multi-leg orders under their parent, while the type's own
+  documentation said a default sent nothing. A test now pins that it sends
+  nothing.
+- **`CryptoWallet::chain`, `CryptoTransfer::chain` and
+  `WhitelistedAddress::chain` are `Option<CryptoChain>`,** not
+  `Option<String>` — the enum was already declared in the same file and already
+  used on the request side. Nothing that decodes today can start failing, since
+  an unrecognised value degrades to `Unknown(String)` like every other wire
+  enum.
+- **`OptionContract::max_margin_multiplier` is a `Decimal`,** like
+  `TradeAccount::multiplier`, and **`RecipientBank::routing_code_type` is a
+  `RoutingCodeType`** rather than a `String` — the enum its own request side
+  already used.
 
 ### Documented
 
@@ -290,6 +445,18 @@ Decisions that become expensive after the first release, settled now.
   holds for what Alpaca *quotes*.
 - The fixture corpus is 227 captured payloads and 232KiB, not the 135 recorded in three
   places. `RELEASING.md` names `all checks` rather than "the 9 required checks".
+- **The README is the crate's front page and its examples are doctests.** It is
+  included with `#![doc = include_str!("../README.md")]`, so the five examples a
+  reader meets first now compile on every `cargo test`. One of them never had,
+  and two prose links resolved only because nothing had ever linted them.
+- The locate, calendar, tokenization and withdrawal prose lives on the public
+  types it describes, having stopped rendering anywhere when those four modules
+  were made private. The crate docs state the MSRV and the polars 1.95 caveat,
+  and note that exactly one TLS backend is required.
+- docs.rs builds an explicit feature list rather than `all-features`, which had
+  been turning on both TLS backends at once — against this crate's own "pick
+  exactly one" rule — and listing the internal `_ws` and `_sse` features in the
+  sidebar as though a caller were meant to reach for them.
 
 ### Dependencies
 
@@ -311,90 +478,6 @@ Decisions that become expensive after the first release, settled now.
 - **No `Idempotency-Key`.** Not replaying a `POST` closes the defect this crate
   introduced; it does not protect a caller who retries one themselves. Alpaca's
   reference asks for the header on journals, and there is no way to send one yet.
-
-## [0.1.0] — unreleased
-
-The first real release.
-
-### Surfaces
-
-- **Trading REST** — orders, positions, assets, watchlists, the clock and
-  calendar, account configuration and activities, corporate actions, options
-  contracts, crypto funding, locates and tokenization.
-- **Historical market data** — stocks, options, crypto, forex, news, screeners
-  and metadata, with the pagination cursor walked for you.
-- **Live market data streams** — the msgpack websocket for stocks, options,
-  crypto and news, with a reconnect machine that replays subscriptions.
-- **Trade update stream** — the JSON websocket for order lifecycle events.
-- **Broker API** — accounts, onboarding, documents, funding, journals,
-  rebalancing, instant funding, JIT, FPSL, funding wallets, IPOs, reporting and
-  OAuth, plus nine server-sent-event streams (account status, trades, journals,
-  transfers, non-trading activity, activities, admin actions, IPOs and system
-  events).
-
-**251 of the 253 routes the vendored specs document.** The two exceptions are
-deliberate skips, each recorded with its reason in
-[COVERAGE.md](COVERAGE.md) — a route decided against must not keep reading as a
-gap.
-
-### Behaviour worth knowing before you depend on it
-
-- **Money that crosses the wire as a string is `rust_decimal::Decimal`.**
-  Alpaca sends order quantities and prices as strings and market data as JSON
-  numbers, so the deserializer accepts both and market-data floats stay `f64`.
-  Reading a string price as a float loses precision.
-- **Unknown enum values deserialize into `Unknown` rather than failing.** Alpaca
-  adds values without warning, and a new order status should cost a caller a
-  match arm rather than a decode.
-- **Unknown response fields are ignored.** Alpaca sends fields no model declares.
-- **Most paginated endpoints offer two methods** — `get_x` for one page,
-  `get_all_x` to walk every page with an optional cap. Six do: orders (twice),
-  account activities, transfers, rebalancing subscriptions and runs. Five
-  paginated routes have no walker yet and page by hand — `get_locates`,
-  `get_fpsl_loans`, `get_ipo_offerings`, `get_eod_positions` and
-  `get_options_approvals`; each returns a page type carrying `next_page_token`.
-  Note also that `get_all_x` does not always mean "walk": `get_all_positions`,
-  `get_all_assets`, `get_all_accounts_positions`, `get_all_positions_for_account`
-  and `get_all_portfolios` are single-request routes that return everything,
-  named for the endpoint rather than for a walk.
-- **Retries follow Alpaca's own rate-limit guidance**: 429 and 504, three
-  retries after the first request, waiting about a second and doubling to a
-  30-second ceiling, jittered. A response carrying `Retry-After` overrides the
-  curve, clamped to that ceiling; only the delta-seconds form is read, and an
-  HTTP-date is treated as absent.
-- **Request structs and `RestConfig` are `#[non_exhaustive]`.** Build with `new`
-  or `default` and assign fields. This is what lets a newly documented query
-  parameter arrive as a field rather than as a breaking change — which has
-  already happened five times.
-- **`request_raw` is the escape hatch** for routes this crate does not wrap.
-
-### Features
-
-`trading` and `data` are on by default, with `rustls-tls`. `broker`, `blocking`,
-`polars` and `native-tls` are opt-in. Streams stay async even under `blocking`:
-a blocking iterator over a live feed deadlocks as soon as the caller is slower
-than the socket's read buffer.
-
-### Minimum supported Rust version
-
-**1.88.** Enabling `polars` raises it to 1.95, which is why that feature is off
-by default — a convenience feature does not get to set the crate's floor.
-
-### Known limits
-
-These are properties of what could be verified, not of what was implemented.
-
-- **The broker routes have never met a live server.** This account has no broker
-  sandbox key, so all 153 are verified against captured payloads, the published
-  reference and the vendored specs — never against a response. Treat a decode
-  failure on a first real payload as expected work rather than a regression.
-- **The `CIP*` models are unverified and probably unverifiable.** alpaca-py's own
-  comment says the sandbox answers 404 for those routes.
-- **Forex, indices and logos answer `403 insufficient grants`** on a plan that
-  reaches SIP, so they are per-product entitlements. The models follow the
-  published reference.
-- **Locates, tokenization and crypto funding answer 404 on the paper API**,
-  which is a different kind of unverified from a 403.
 
 ### If you pinned `0.1.0-alpha.1`
 
@@ -436,5 +519,9 @@ with them. `scripts/`, `RELEASING.md` and `.github/` are excluded: they cannot
 run, or have no meaning, outside a clone. `ROADMAP.md` was a working document
 for building the crate and has been removed; it is in the git history.
 
-[Unreleased]: https://github.com/phillip-simons/alpaca-sdk/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/phillip-simons/alpaca-sdk/releases/tag/v0.1.0
+<!-- `v0.1.0` is not tagged yet, so both refs compare against the alpha rather
+     than pointing at a tag that would 404. At tag time: `[Unreleased]` becomes
+     `compare/v0.1.0...HEAD` and `[0.1.0]` becomes `releases/tag/v0.1.0`. -->
+
+[Unreleased]: https://github.com/phillip-simons/alpaca-sdk/compare/v0.1.0-alpha.1...HEAD
+[0.1.0]: https://github.com/phillip-simons/alpaca-sdk/compare/v0.1.0-alpha.1...HEAD

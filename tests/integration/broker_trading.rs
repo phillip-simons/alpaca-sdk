@@ -36,7 +36,7 @@ fn account_id() -> Uuid {
 /// and adjusted rather than written as a literal.
 fn nested_order_request() -> GetOrderByIdRequest {
     let mut request = GetOrderByIdRequest::default();
-    request.nested = true;
+    request.nested = Some(true);
     request
 }
 
