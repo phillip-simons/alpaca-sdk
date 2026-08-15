@@ -12,9 +12,9 @@
 use crate::common::credentials;
 use alpaca_sdk::data::{
     CorporateActionsClient, CryptoFeed, CryptoHistoricalDataClient, CryptoLatestRequest,
-    CryptoSnapshotRequest, ForexDataClient, LogoClient, NewsClient, OptionHistoricalDataClient,
-    OptionLatestRequest, ScreenerClient, SingleSymbolRequest, StockHistoricalDataClient,
-    StockLatestRequest, StockTimeseriesRequest, TimeseriesRequest,
+    CryptoSnapshotRequest, ForexDataClient, LogoClient, NewsClient, NewsRequest,
+    OptionHistoricalDataClient, OptionLatestRequest, ScreenerClient, SingleSymbolRequest,
+    StockHistoricalDataClient, StockLatestRequest, StockTimeseriesRequest, TimeseriesRequest,
 };
 use alpaca_sdk::{RestConfig, RetryConfig};
 use futures_util::StreamExt as _;
@@ -38,6 +38,10 @@ fn options(server: &MockServer) -> OptionHistoricalDataClient {
 
 fn crypto(server: &MockServer) -> CryptoHistoricalDataClient {
     CryptoHistoricalDataClient::with_config(None, config(server, "v1beta3")).unwrap()
+}
+
+fn news(server: &MockServer) -> NewsClient {
+    NewsClient::with_config(&credentials(), config(server, "v1beta1")).unwrap()
 }
 
 /// Serves `body` on exactly one path, and fails on drop if it was not called.
@@ -426,4 +430,44 @@ async fn the_option_routes_live_on_v1beta1() {
             .len(),
         1
     );
+}
+
+// -------------------------------------------------------------------- news
+
+/// The single-page news accessor: where it goes, and that the resume token
+/// survives the trip.
+///
+/// `get_news` walks to completion and hardcodes `next_page_token: None`, so
+/// before `get_news_page` existed the field could not be `Some` through any
+/// public call — a structurally dead field that no test could have caught by
+/// exercising `get_news`. This asserts both halves: the `v1beta1` segment and
+/// the `/news` path, and that the token Alpaca sent is the one handed back.
+#[tokio::test]
+async fn the_single_page_news_route_keeps_its_resume_token() {
+    let server = serving(
+        "/v1beta1/news",
+        json!({
+            "news": [{
+                "id": 24843171,
+                "headline": "Market wrap",
+                "source": "benzinga",
+                "url": "https://example.invalid/1",
+                "summary": "",
+                "created_at": "2026-01-02T15:04:05Z",
+                "updated_at": "2026-01-02T15:04:05Z",
+                "symbols": ["AAPL"],
+            }],
+            "next_page_token": "MTcwNDIwNjI0NQ==",
+        }),
+    )
+    .await;
+
+    let page = news(&server)
+        .get_news_page(&NewsRequest::new())
+        .await
+        .unwrap();
+
+    assert_eq!(page.news.len(), 1);
+    assert_eq!(page.news[0].headline, "Market wrap");
+    assert_eq!(page.next_page_token.as_deref(), Some("MTcwNDIwNjI0NQ=="));
 }

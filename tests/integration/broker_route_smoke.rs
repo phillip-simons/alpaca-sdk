@@ -28,13 +28,13 @@ use alpaca_sdk::broker::{
     UpdateOnfidoOutcomeRequest,
 };
 use alpaca_sdk::trading::{
-    ByClientRequestId, CreateWatchlistRequest, CreateWhitelistedAddressRequest, CryptoChain,
-    MintTokenRequest, ReplaceOrderRequest, TokenizationIssuer, TokenizationNetwork,
+    ByClientRequestId, CreateCryptoTransferRequest, CreateWatchlistRequest,
+    CreateWhitelistedAddressRequest, CryptoChain, MintTokenRequest, ReplaceOrderRequest,
+    TokenizationIssuer, TokenizationMintCallback, TokenizationNetwork, TokenizationRedeemRequest,
     TransferFeeEstimateRequest, UpdateWatchlistRequest,
 };
 use alpaca_sdk::types::{AssetIdent, SupportedCurrencies};
 use rust_decimal::Decimal;
-use serde_json::json;
 use std::future::Future;
 use uuid::Uuid;
 use wiremock::matchers::{method, path};
@@ -805,21 +805,45 @@ async fn the_tokenization_routes_keep_their_colons() {
     )
     .await;
 
-    for callback in ["mint", "redeem"] {
-        expect_route(
-            "POST",
-            &format!("/v1/accounts/{ACCOUNT}/tokenization/callback/{callback}"),
-            |broker| async move {
-                let body = json!({});
-                if callback == "mint" {
-                    broker.tokenization_mint_callback(account(), &body).await
-                } else {
-                    broker.tokenization_redeem_callback(account(), &body).await
-                }
-            },
-        )
-        .await;
-    }
+    // The two callbacks used to share one `serde_json::Value` body and so could
+    // share a loop. They take different types now — the spec gives them two
+    // schemas, `TokenizationMintCallback` and `TokenizationRedeemRequest` —
+    // which is the whole reason they are written out twice.
+    expect_route(
+        "POST",
+        &format!("/v1/accounts/{ACCOUNT}/tokenization/callback/mint"),
+        |broker| async move {
+            broker
+                .tokenization_mint_callback(
+                    account(),
+                    &TokenizationMintCallback::new(Uuid::nil(), "0xdead"),
+                )
+                .await
+        },
+    )
+    .await;
+
+    expect_route(
+        "POST",
+        &format!("/v1/accounts/{ACCOUNT}/tokenization/callback/redeem"),
+        |broker| async move {
+            broker
+                .tokenization_redeem_callback(
+                    account(),
+                    &TokenizationRedeemRequest::new(
+                        "iss-1",
+                        "AAPL",
+                        "AAPLx",
+                        Decimal::ONE,
+                        TokenizationNetwork::Solana,
+                        "wallet",
+                        "0xdead",
+                    ),
+                )
+                .await
+        },
+    )
+    .await;
 }
 
 // ---------------------------------------------------------- crypto writes
@@ -831,7 +855,10 @@ async fn the_crypto_wallet_writes_reach_their_paths() {
         &format!("/v1/accounts/{ACCOUNT}/wallets/transfers"),
         |broker| async move {
             broker
-                .create_crypto_transfer_for_account(account(), &json!({}))
+                .create_crypto_transfer_for_account(
+                    account(),
+                    &CreateCryptoTransferRequest::new("0xabc", "ETH", Decimal::ONE),
+                )
                 .await
         },
     )

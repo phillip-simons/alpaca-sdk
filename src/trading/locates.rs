@@ -207,11 +207,19 @@ impl GetLocatesRequest {
     }
 
     /// Restricts the trading-date window.
-    #[must_use]
-    pub fn between(mut self, start: NaiveDate, end: NaiveDate) -> Self {
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if `end`
+    /// is before `start`.
+    pub fn between(mut self, start: NaiveDate, end: NaiveDate) -> crate::Result<Self> {
+        if end < start {
+            return Err(crate::Error::InvalidRequest(format!(
+                "end ({end}) is before start ({start})"
+            )));
+        }
         self.start = Some(start);
         self.end = Some(end);
-        self
+        Ok(self)
     }
 }
 
@@ -314,6 +322,17 @@ mod tests {
         let request = GetLocateQuotesRequest::new(vec!["TSLA".to_owned(), "GME".to_owned()]);
         let json = serde_json::to_value(&request).unwrap();
         assert_eq!(json["symbols"], "TSLA,GME");
+    }
+
+    #[test]
+    fn a_backwards_window_is_refused() {
+        // The same check its twin `GetMarketCalendarRequest::between` makes.
+        // A backwards window used to be accepted here and answered with an
+        // empty list, which reads as "no locates" rather than "bad request".
+        let start: NaiveDate = "2026-01-10".parse().unwrap();
+        let end: NaiveDate = "2026-01-01".parse().unwrap();
+        assert!(GetLocatesRequest::new().between(start, end).is_err());
+        assert!(GetLocatesRequest::new().between(end, start).is_ok());
     }
 
     #[test]

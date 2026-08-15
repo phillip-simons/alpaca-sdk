@@ -2851,7 +2851,7 @@ impl BrokerClient {
     pub async fn tokenization_mint_callback(
         &self,
         account_id: Uuid,
-        body: &serde_json::Value,
+        body: &crate::trading::TokenizationMintCallback,
     ) -> Result<()> {
         self.send_void(
             Method::POST,
@@ -2868,7 +2868,7 @@ impl BrokerClient {
     pub async fn tokenization_redeem_callback(
         &self,
         account_id: Uuid,
-        body: &serde_json::Value,
+        body: &crate::trading::TokenizationRedeemRequest,
     ) -> Result<()> {
         self.send_void(
             Method::POST,
@@ -2939,7 +2939,7 @@ impl BrokerClient {
     pub async fn create_crypto_transfer_for_account(
         &self,
         account_id: Uuid,
-        request: &serde_json::Value,
+        request: &crate::trading::CreateCryptoTransferRequest,
     ) -> Result<crate::trading::CryptoTransfer> {
         let path = format!("/accounts/{account_id}/wallets/transfers");
         self.rest.post(&path, request).await

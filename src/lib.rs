@@ -97,6 +97,12 @@ pub mod trading;
 /// `polars::prelude::DataFrame`, and a caller who depends on a different polars
 /// version gets two incompatible `DataFrame` types with the same name. Reach for
 /// this one, or match the version in `Cargo.toml`.
+///
+/// Because the version is part of this crate's public API, **a major or minor
+/// bump of `polars` is treated as a breaking change of `alpaca-sdk`** and gets
+/// one here too. `polars` is pre-1.0 and moves quickly, where a minor bump is
+/// the breaking one — so in practice its release cadence, not this crate's,
+/// drives how often `alpaca-sdk`'s own version has to break.
 #[cfg(feature = "polars")]
 #[cfg_attr(docsrs, doc(cfg(feature = "polars")))]
 pub use polars;
@@ -108,6 +114,10 @@ pub use polars;
 /// on a different `rust_decimal` version gets two incompatible `Decimal` types
 /// with the same name and an error that does not explain itself. Reach for this
 /// one, or match the version in `Cargo.toml`.
+///
+/// Because the version is part of this crate's public API, **a major or minor
+/// bump of `rust_decimal` is treated as a breaking change of `alpaca-sdk`** and
+/// gets one here too.
 ///
 /// It is also the way to the rest of that crate without declaring the
 /// dependency twice — `RoundingStrategy` for the rounding modes, and the

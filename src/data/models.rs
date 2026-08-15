@@ -569,6 +569,9 @@ pub struct NewsSet {
     )]
     pub news: Vec<News>,
     /// Token for the next page, when the caller paginates manually.
+    ///
+    /// Populated by `NewsClient::get_news_page`. `NewsClient::get_news` walks
+    /// to completion, so it always leaves this `None`.
     #[serde(default)]
     pub next_page_token: Option<String>,
 }

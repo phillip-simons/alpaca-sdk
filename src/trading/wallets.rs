@@ -220,6 +220,42 @@ impl GetCryptoWalletsRequest {
     }
 }
 
+/// A request to withdraw crypto to an on-chain address.
+///
+/// The body of `POST /v1/accounts/{account_id}/wallets/transfers`, on
+/// `broker::BrokerClient::create_crypto_transfer_for_account`. The trading
+/// API's `POST /v2/wallets/transfers` takes the same shape and is deprecated;
+/// see this module's header for why only the broker route is implemented.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct CreateCryptoTransferRequest {
+    /// The destination wallet address.
+    pub address: String,
+    /// The amount, denoted in the specified asset, to be withdrawn from the
+    /// user's wallet.
+    #[serde(with = "crate::types::decimal")]
+    pub amount: Decimal,
+    /// The crypto asset symbol, e.g. BTC, ETH, USDT.
+    pub asset: String,
+    /// The blockchain network used for the withdrawal. Optional: Alpaca infers
+    /// one from the asset when it is left off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain: Option<CryptoChain>,
+}
+
+impl CreateCryptoTransferRequest {
+    /// Withdraws `amount` of `asset` to `address`.
+    #[must_use]
+    pub fn new(address: impl Into<String>, asset: impl Into<String>, amount: Decimal) -> Self {
+        Self {
+            address: address.into(),
+            amount,
+            asset: asset.into(),
+            chain: None,
+        }
+    }
+}
+
 /// A request to allowlist a withdrawal address.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]

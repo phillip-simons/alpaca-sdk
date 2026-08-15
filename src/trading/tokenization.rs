@@ -235,6 +235,140 @@ impl GetTokenizationRequestsRequest {
     }
 }
 
+/// An issuer's confirmation that a mint settled on chain.
+///
+/// The body of `POST /v1/accounts/{account_id}/tokenization/callback/mint`, on
+/// `broker::BrokerClient::tokenization_mint_callback`. Sent *to* Alpaca by the
+/// issuer, not by the Authorized Participant — which is why the account is
+/// identified in the body rather than taken from the caller's credentials.
+///
+/// Exactly one of [`client_account_id`](Self::client_account_id) and
+/// [`client_external_account_id`](Self::client_external_account_id) must be
+/// set, and it must match the identifier used on the original mint request.
+///
+/// The redeem callback is a **different shape**, not a mirror of this one —
+/// see [`TokenizationRedeemRequest`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct TokenizationMintCallback {
+    /// Alpaca's identifier for the request being confirmed.
+    pub tokenization_request_id: Uuid,
+    /// Transaction hash of the completed request on the blockchain.
+    pub tx_hash: String,
+    /// Alpaca account id of the Authorized Participant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_account_id: Option<Uuid>,
+    /// The customer's identifier on the issuer's platform.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_external_account_id: Option<String>,
+    /// Alpaca's older alias for
+    /// [`client_external_account_id`](Self::client_external_account_id).
+    ///
+    /// Deprecated since 2026-07-15 and sunsetting 2026-10-15. Still accepted
+    /// until then, so the field is here; set the newer one instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
+    /// The chain the mint settled on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<TokenizationNetwork>,
+    /// The wallet address that received the tokenized asset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wallet_address: Option<String>,
+}
+
+impl TokenizationMintCallback {
+    /// Confirms `tokenization_request_id` settled as `tx_hash`.
+    #[must_use]
+    pub fn new(tokenization_request_id: Uuid, tx_hash: impl Into<String>) -> Self {
+        Self {
+            tokenization_request_id,
+            tx_hash: tx_hash.into(),
+            client_account_id: None,
+            client_external_account_id: None,
+            client_id: None,
+            network: None,
+            wallet_address: None,
+        }
+    }
+}
+
+/// An issuer's request to redeem tokens back into the underlying asset.
+///
+/// The body of `POST /v1/accounts/{account_id}/tokenization/callback/redeem`,
+/// on `broker::BrokerClient::tokenization_redeem_callback`. Alpaca's spec names
+/// this schema `TokenizationRedeemRequest` rather than a "callback", and it
+/// carries seven required fields against the mint callback's two — the two
+/// routes share a URL prefix and nothing else, so they get two types.
+///
+/// Alpaca journals the underlying asset into the Authorized Participant's
+/// account in response. That makes it worth sending an `Idempotency-Key`
+/// header in production, so a retry after a timeout cannot redeem twice.
+///
+/// Exactly one of [`client_account_id`](Self::client_account_id) and
+/// [`client_external_account_id`](Self::client_external_account_id) must be
+/// set, identifying whose account receives the underlying asset.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct TokenizationRedeemRequest {
+    /// The issuer's own identifier for the redemption.
+    pub issuer_request_id: String,
+    /// The underlying asset's symbol.
+    pub underlying_symbol: String,
+    /// The tokenized asset's symbol.
+    pub token_symbol: String,
+    /// How much to convert back. May be fractional.
+    #[serde(with = "crate::types::decimal")]
+    pub qty: Decimal,
+    /// The chain the tokens were held on.
+    pub network: TokenizationNetwork,
+    /// The address the redeemed tokens were originally held at.
+    pub wallet_address: String,
+    /// Transaction hash of the completed request on the blockchain.
+    pub tx_hash: String,
+    /// Alpaca account id of the Authorized Participant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_account_id: Option<Uuid>,
+    /// The customer's identifier on the issuer's platform.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_external_account_id: Option<String>,
+    /// Alpaca's older alias for
+    /// [`client_external_account_id`](Self::client_external_account_id).
+    ///
+    /// Deprecated since 2026-07-15 and sunsetting 2026-10-15. Still accepted
+    /// until then, so the field is here; set the newer one instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
+}
+
+impl TokenizationRedeemRequest {
+    /// Redeems `qty` of `token_symbol` back into `underlying_symbol`.
+    ///
+    /// Every parameter is required by the schema; there is no shorter form.
+    #[must_use]
+    pub fn new(
+        issuer_request_id: impl Into<String>,
+        underlying_symbol: impl Into<String>,
+        token_symbol: impl Into<String>,
+        qty: Decimal,
+        network: TokenizationNetwork,
+        wallet_address: impl Into<String>,
+        tx_hash: impl Into<String>,
+    ) -> Self {
+        Self {
+            issuer_request_id: issuer_request_id.into(),
+            underlying_symbol: underlying_symbol.into(),
+            token_symbol: token_symbol.into(),
+            qty,
+            network,
+            wallet_address: wallet_address.into(),
+            tx_hash: tx_hash.into(),
+            client_account_id: None,
+            client_external_account_id: None,
+            client_id: None,
+        }
+    }
+}
+
 /// A lookup by the caller's own request id.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]

@@ -1086,7 +1086,32 @@ impl NewsClient {
         &self.rest
     }
 
-    /// News articles matching the filter.
+    /// Fetches one page of news articles.
+    ///
+    /// The page carries the token for the next one in
+    /// [`NewsSet::next_page_token`]; feed it back through
+    /// [`NewsRequest::page_token`] to resume. See
+    /// [`get_news`](Self::get_news) to walk them all.
+    ///
+    /// Prefer this one when the caller paginates on its own schedule — news
+    /// pages at 50 articles, so a broad query walks many pages, and this is
+    /// the only way to stop part-way, or to hand a resume token to something
+    /// that will continue later.
+    ///
+    /// # Errors
+    /// Propagates transport, API, and decoding failures.
+    pub async fn get_news_page(&self, request: &NewsRequest) -> Result<NewsSet> {
+        self.rest.get("/news", request).await
+    }
+
+    /// Walks every page of news articles.
+    ///
+    /// Returns once Alpaca stops handing back a token, so
+    /// [`NewsSet::next_page_token`] on the result is always `None` — there is
+    /// nothing left to resume. Cap the walk with
+    /// [`NewsRequest::limit`], which counts articles across all pages, and
+    /// prefer [`get_news_page`](Self::get_news_page) when the caller wants the
+    /// pages one at a time.
     ///
     /// # Errors
     /// Propagates transport, API, and decoding failures.
@@ -1111,8 +1136,8 @@ impl NewsClient {
         Ok(NewsSet {
             news: articles,
             // The merge loop follows every page, so nothing is left to resume.
-            // Always None once pagination has run to completion; the field
-            // exists for the single-page shape.
+            // Always None once pagination has run to completion; `get_news_page`
+            // is the accessor that hands back a live token.
             next_page_token: None,
         })
     }
