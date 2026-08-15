@@ -316,7 +316,7 @@ async fn close_position_sends_qty_or_percentage() {
     client(&server)
         .close_position(
             &AssetIdent::from("AAPL"),
-            Some(ClosePositionRequest::Qty(Decimal::new(15, 1))),
+            Some(&ClosePositionRequest::Qty(Decimal::new(15, 1))),
         )
         .await
         .unwrap();
@@ -333,7 +333,7 @@ async fn close_position_sends_qty_or_percentage() {
     client(&server)
         .close_position(
             &AssetIdent::from("AAPL"),
-            Some(ClosePositionRequest::Percentage(Decimal::from(50))),
+            Some(&ClosePositionRequest::Percentage(Decimal::from(50))),
         )
         .await
         .unwrap();

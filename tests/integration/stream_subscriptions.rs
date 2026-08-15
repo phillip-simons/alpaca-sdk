@@ -172,9 +172,9 @@ fn a_news_stream_carries_one_channel() {
 fn a_staleness_timeout_must_be_positive() {
     let mut stream = StockDataStream::new(credentials(), DataFeed::Iex).unwrap();
 
-    assert!(stream.data_timeout(Duration::from_secs(30)).is_ok());
+    assert!(stream.set_data_timeout(Duration::from_secs(30)).is_ok());
     // Zero would reconnect continuously rather than never.
-    assert!(stream.data_timeout(Duration::ZERO).is_err());
+    assert!(stream.set_data_timeout(Duration::ZERO).is_err());
 }
 
 /// Every stream takes an explicit endpoint, which is what the mock-server tests

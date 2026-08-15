@@ -107,7 +107,7 @@ macro_rules! common {
         ///
         /// # Errors
         /// Returns [`Error::InvalidRequest`] if the timeout is not positive.
-        pub fn data_timeout(&mut self, timeout: Duration) -> Result<&mut Self> {
+        pub fn set_data_timeout(&mut self, timeout: Duration) -> Result<&mut Self> {
             self.inner.config_mut().set_data_timeout(timeout)?;
             Ok(self)
         }
@@ -121,7 +121,7 @@ macro_rules! common {
         /// # Errors
         /// Returns [`Error::InvalidRequest`] if `min` is zero, or if `max` is
         /// smaller than `min`.
-        pub fn backoff(&mut self, min: Duration, max: Duration) -> Result<&mut Self> {
+        pub fn set_backoff(&mut self, min: Duration, max: Duration) -> Result<&mut Self> {
             self.inner.config_mut().set_backoff(min, max)?;
             Ok(self)
         }
@@ -132,7 +132,7 @@ macro_rules! common {
         ///
         /// # Errors
         /// Returns [`Error::InvalidRequest`] if the duration is zero.
-        pub fn stable_session(&mut self, after: Duration) -> Result<&mut Self> {
+        pub fn set_stable_session(&mut self, after: Duration) -> Result<&mut Self> {
             self.inner.config_mut().set_stable_session(after)?;
             Ok(self)
         }

@@ -276,7 +276,7 @@ impl TradingClient {
     pub async fn close_position(
         &self,
         asset: &AssetIdent,
-        close: Option<ClosePositionRequest>,
+        close: Option<&ClosePositionRequest>,
     ) -> Result<Order> {
         let path = format!("/positions/{}", asset.as_path_segment()?);
         match close {

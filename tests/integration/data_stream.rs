@@ -420,7 +420,7 @@ async fn a_mute_connection_reconnects_when_a_data_timeout_is_set() {
     let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
     stream.subscribe_trades(["AAPL"]);
     stream
-        .data_timeout(Duration::from_millis(300))
+        .set_data_timeout(Duration::from_millis(300))
         .expect("a positive timeout");
 
     let mut messages = Box::pin(stream.run());
@@ -455,7 +455,7 @@ async fn a_mute_connection_is_left_alone_without_a_data_timeout() {
 #[tokio::test]
 async fn a_data_timeout_must_be_positive() {
     let mut stream = StockDataStream::with_endpoint(credentials(), "ws://127.0.0.1:1");
-    assert!(stream.data_timeout(Duration::ZERO).is_err());
+    assert!(stream.set_data_timeout(Duration::ZERO).is_err());
 }
 
 // ----------------------------------------------------------- misc framing
@@ -543,7 +543,7 @@ async fn a_timeout_longer_than_the_poll_interval_is_not_fired_early() {
     stream.subscribe_trades(["AAPL"]);
     // Well above RECEIVE_POLL (5s).
     stream
-        .data_timeout(Duration::from_secs(30))
+        .set_data_timeout(Duration::from_secs(30))
         .expect("a positive timeout");
 
     let mut messages = Box::pin(stream.run());
@@ -566,7 +566,7 @@ async fn a_timeout_longer_than_the_poll_interval_still_fires_eventually() {
     let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
     stream.subscribe_trades(["AAPL"]);
     stream
-        .data_timeout(Duration::from_secs(7))
+        .set_data_timeout(Duration::from_secs(7))
         .expect("a positive timeout");
 
     let mut messages = Box::pin(stream.run());
@@ -600,13 +600,13 @@ async fn a_quiet_session_that_stayed_up_clears_the_failure_count() {
     let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
     stream.subscribe_trades(["AAPL"]);
     stream
-        .stable_session(Duration::from_millis(150))
+        .set_stable_session(Duration::from_millis(150))
         .expect("a positive duration");
     // A small `min_backoff` so the growing curve has room to double many times
     // inside the window. With the default 1s base the third gap already overlaps
     // three times the first, and the test passed against the bug on ~40% of runs.
     stream
-        .backoff(Duration::from_millis(50), Duration::from_secs(30))
+        .set_backoff(Duration::from_millis(50), Duration::from_secs(30))
         .expect("a valid window");
 
     let mut messages = Box::pin(stream.run());
@@ -647,7 +647,7 @@ async fn a_session_that_dropped_immediately_does_advance_the_backoff_curve() {
     let mut stream = StockDataStream::with_endpoint(credentials(), endpoint);
     stream.subscribe_trades(["AAPL"]);
     stream
-        .stable_session(Duration::from_millis(150))
+        .set_stable_session(Duration::from_millis(150))
         .expect("a positive duration");
 
     let mut messages = Box::pin(stream.run());
@@ -673,5 +673,5 @@ async fn a_session_that_dropped_immediately_does_advance_the_backoff_curve() {
 #[tokio::test]
 async fn a_stable_session_must_be_positive() {
     let mut stream = StockDataStream::with_endpoint(credentials(), "ws://127.0.0.1:1");
-    assert!(stream.stable_session(Duration::ZERO).is_err());
+    assert!(stream.set_stable_session(Duration::ZERO).is_err());
 }

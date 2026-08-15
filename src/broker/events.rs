@@ -108,7 +108,7 @@ impl GetEventsRequest {
     /// redelivered varies by stream, the same way it does for
     /// [`EventStreamRequest::since_id`](crate::EventStreamRequest::since_id).
     #[must_use]
-    pub fn from_ulid(since_id: impl Into<String>) -> Self {
+    pub fn from_id(since_id: impl Into<String>) -> Self {
         Self {
             since_id: Some(since_id.into()),
             ..Self::default()

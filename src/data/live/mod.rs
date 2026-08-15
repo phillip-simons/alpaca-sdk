@@ -10,7 +10,6 @@
 mod messages;
 mod streams;
 
-pub use self::StreamConfig as LiveStreamConfig;
 pub use messages::{Channel, StreamError, StreamMessage, Subscriptions};
 pub use streams::{CryptoDataStream, NewsDataStream, OptionDataStream, StockDataStream};
 
