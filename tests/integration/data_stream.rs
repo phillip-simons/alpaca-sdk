@@ -542,6 +542,13 @@ async fn the_stock_stream_rejects_a_feed_without_a_live_socket() {
 /// any timeout above 5s behaved as exactly 5s: an overnight stock stream
 /// reconnected every five seconds against an endpoint allowing one connection
 /// per account.
+///
+/// `main` arrived at the same test independently, as
+/// `a_data_timeout_longer_than_the_poll_interval_is_still_honoured` in
+/// `e53458e`; it was reconciled into this one on merge rather than kept
+/// alongside it. This version subsumes it — a 30s timeout asserted over 12s
+/// against that one's 12s over 8s — and duplicating it would have cost the
+/// suite another eight real seconds to prove the same thing.
 #[tokio::test]
 async fn a_timeout_longer_than_the_poll_interval_is_not_fired_early() {
     let (endpoint, _, connections) = serve(Script::GoMute).await;

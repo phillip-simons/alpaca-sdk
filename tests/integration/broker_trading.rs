@@ -52,6 +52,14 @@ fn a_broker_order_carries_the_commission_the_trading_model_has_no_field_for() {
 
     assert_eq!(order.commission, Some(Decimal::new(125, 2)));
     // ...and the flattened trading fields still parse.
+    //
+    // The trailing backtick is a typo in alpaca-py's own test file, which this
+    // payload was captured from — not something Alpaca sends. It is asserted
+    // verbatim because the fixture is a faithful copy of its source and editing
+    // it by hand would make it a worse record of one; what is being proved here
+    // is that `#[serde(flatten)]` reaches the trading fields at all, and any
+    // string does that. See `UPSTREAM_SYMBOL_TYPO` in
+    // tests/integration/trading_routes.rs.
     assert_eq!(order.order.symbol.as_deref(), Some("AAPL`"));
     assert_eq!(order.order.id.to_string(), ORDER_ID);
 }

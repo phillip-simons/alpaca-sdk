@@ -41,6 +41,10 @@ const MAX_FRAME_SIZE: usize = 32_768;
 /// Poll granularity only — never the timeout itself. Feeding this straight to
 /// the socket read and treating an elapsed read as staleness is what made
 /// `data_timeout` mean a hardcoded five seconds whatever the caller set.
+///
+/// The cap itself is still needed: the loop has to wake periodically whatever
+/// the configuration says, because the stream is cancelled by dropping it and a
+/// socket parked in an hour-long read would not notice.
 const RECEIVE_POLL: Duration = Duration::from_secs(5);
 
 pub use crate::config::DEFAULT_STABLE_SESSION;
@@ -435,7 +439,8 @@ impl DataStream {
                             if remaining.is_zero() {
                                 tracing::warn!(
                                     endpoint = %self.config.endpoint,
-                                    ?timeout,
+                                    elapsed_ms = last_data.elapsed().as_millis(),
+                                    timeout_ms = timeout.as_millis(),
                                     "no market data within the timeout, reconnecting"
                                 );
                                 break 'session Outcome::Reconnect;
@@ -478,6 +483,9 @@ impl DataStream {
                                     break 'session Outcome::Fatal;
                                 }
                                 if message.is_market_data() {
+                                    // Data arrived: the staleness clock restarts,
+                                    // and the connection has proved itself, so the
+                                    // backoff is cleared when the session ends.
                                     last_data = Instant::now();
                                     delivered_data = true;
                                 }
