@@ -112,9 +112,5 @@ shipped runnable, which is why the 232KiB of captured payloads they read ship
 with them. `scripts/`, `RELEASING.md` and `.github/` are excluded: they cannot
 run, or have no meaning, outside a clone.
 
-<!-- `v0.1.0` is not tagged yet, so both refs compare against the alpha rather
-     than pointing at a tag that would 404. At tag time: `[Unreleased]` becomes
-     `compare/v0.1.0...HEAD` and `[0.1.0]` becomes `releases/tag/v0.1.0`. -->
-
-[Unreleased]: https://github.com/phillip-simons/alpaca-sdk/compare/v0.1.0-alpha.1...HEAD
-[0.1.0]: https://github.com/phillip-simons/alpaca-sdk/compare/v0.1.0-alpha.1...HEAD
+[Unreleased]: https://github.com/phillip-simons/alpaca-sdk/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/phillip-simons/alpaca-sdk/releases/tag/v0.1.0
