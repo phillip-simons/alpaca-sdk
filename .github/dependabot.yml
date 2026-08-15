@@ -39,4 +39,20 @@ updates:
       #
       # The MSRV moves when `rust-version` in Cargo.toml moves, by hand, as a
       # deliberate and breaking-ish decision. Never automatically.
+      #
+      # Scoped to minor and patch, which is the shape that bad pull request had
+      # (1.88.0 -> 1.100.0), rather than to the action as a whole. The whole-
+      # action form used to be here, and it silently covered the `@stable` and
+      # `@nightly` uses too — harmless while those were tag refs that resolve
+      # themselves, and not harmless now that all three are commit SHAs. A SHA
+      # is exactly as old as the day it was pinned, so an action excluded from
+      # updates is an action excluded from *security* updates.
+      #
+      # Dependabot names a github-actions dependency by repository, with no way
+      # to say "this `uses:` line but not that one", so this is as narrow as the
+      # schema goes: a major-version update still opens a pull request, and the
+      # MSRV pin is protected from the automated Rust-version churn.
       - dependency-name: dtolnay/rust-toolchain
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
