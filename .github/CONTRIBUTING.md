@@ -141,6 +141,20 @@ against a key that is not `PK`-prefixed.
 
 **Use paper keys.** Never put credentials in a file the repository tracks.
 
+## Personal data in fixtures
+
+No credentials, account numbers or personal identifiers belong in a diff,
+fixtures included. One narrow exemption: the payloads `just fixtures` extracts
+from [alpaca-py](https://github.com/alpacahq/alpaca-py)'s test suite carry that
+project's own synthetic values in `account_number`, `email_address`,
+`phone_number`, `street_address` and `date_of_birth`. Those are kept as
+extracted, because editing a captured payload stops it being evidence of what
+the wire sends. The exemption reaches those fields, in fixtures traceable to
+that suite, and nothing further — **data belonging to a real person or a real
+account is forbidden without exception**, in any field, and a credential is
+never exempt in any file. If you are unsure which kind you are holding, it is
+the real kind: redact it.
+
 ## Reporting a bug
 
 A decode failure is the most useful bug report this crate can get, and the most
