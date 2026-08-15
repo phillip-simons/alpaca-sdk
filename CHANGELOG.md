@@ -57,9 +57,11 @@ gap.
   30-second ceiling, jittered. A response carrying `Retry-After` overrides the
   curve, clamped to that ceiling; only the delta-seconds form is read, and an
   HTTP-date is treated as absent.
-- **Request structs and `RestConfig` are `#[non_exhaustive]`.** Build with `new`
-  or `default` and assign fields. This is what lets a newly documented query
-  parameter arrive as a field rather than as a breaking change.
+- **Request structs and `RestConfig` are `#[non_exhaustive]`.** Build with the
+  constructor the type provides — `new`, `default`, or a named one where the
+  shape depends on the choice, as with `OrderRequest::limit` and
+  `CreateJournalRequest::cash` — then assign fields. This is what lets a newly
+  documented query parameter arrive as a field rather than as a breaking change.
 - **`request_raw` is the escape hatch** for routes this crate does not wrap.
 
 ### Features
@@ -107,10 +109,18 @@ and it will be yanked once `0.1.0` is out. Upgrade rather than diff.
 
 ### Packaging
 
-The published tarball ships `src/`, `tests/` and `fixtures/` — the tests are
+The published tarball ships the crate and everything needed to check it: `src/`
+and `build.rs`, `examples/`, and `tests/` with `fixtures/` — the tests are
 shipped runnable, which is why the 232KiB of captured payloads they read ship
-with them. `scripts/`, `RELEASING.md` and `.github/` are excluded: they cannot
-run, or have no meaning, outside a clone.
+with them. `Cargo.lock` pins a build that is known to work, `justfile` and
+`deny.toml` are the commands and the licence policy those checks run under, and
+`LICENSE`, `NOTICE`, `README.md`, `CHANGELOG.md` and `COVERAGE.md` are the
+crate's own record.
+
+Excluded are `scripts/`, `RELEASING.md`, `.github/` and `.githooks/`: they
+cannot run, or have no meaning, outside a clone — `scripts/` needs other SDKs'
+checkouts and downloaded specs, and the rest describe publishing this crate or
+developing against it.
 
 [Unreleased]: https://github.com/phillip-simons/alpaca-sdk/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/phillip-simons/alpaca-sdk/releases/tag/v0.1.0

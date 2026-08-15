@@ -127,9 +127,15 @@ doing when it found it.
   arm rather than a decode.
 - **Unknown response fields are ignored.** Alpaca sends fields no model
   declares.
-- **Request structs are `#[non_exhaustive]`.** Build with `new` or `default`
-  and assign fields. This is what lets a newly documented parameter arrive as a
-  field rather than as a breaking change.
+- **Request structs are `#[non_exhaustive]`.** Build with the constructor the
+  type provides, then assign fields. That is usually `new` or `default`, but a
+  type whose valid fields depend on a choice offers named constructors instead
+  — `OrderRequest::limit`, `CreateJournalRequest::cash`,
+  `CreateBankRequest::domestic` — and `AccountConfiguration` offers neither,
+  because it is a read-modify-write and a constructor would invite resetting
+  every setting the caller did not name. Give a new request struct the
+  constructor its shape justifies. This is what lets a newly documented
+  parameter arrive as a field rather than as a breaking change.
 - **Alpaca's typos are load-bearing.** `face_comparision` and `parnter_fee` are
   spelled that way on the wire. Do not "fix" them.
 

@@ -173,8 +173,9 @@ The decisions a caller actually runs into, and why each one is the way it is.
 - **Unknown response fields are ignored**, for the same reason.
 - **Paginated endpoints offer two methods.** `get_x` fetches one page;
   `get_all_x` walks every page, with an optional cap.
-- **Request structs are `#[non_exhaustive]`.** Build one with `new` or
-  `default` and assign fields:
+- **Request structs are `#[non_exhaustive]`.** Build one with the constructor
+  the type provides — `new`, `default`, or a named one like the
+  `OrderRequest::limit` in the example above — and assign fields:
 
   ```rust,no_run
   use alpaca_sdk::trading::GetOrdersRequest;
@@ -213,11 +214,11 @@ That order is not academic. Three event streams were in the specs, looked
 healthy from the crate's side, and had been switched off; the reference was the
 only source that said so.
 
-`fixtures/` holds 227 real API responses, and every model is checked against
+`fixtures/` holds 224 real API responses, and every model is checked against
 them. `just coverage`, `just parameters` and `just enums-drift` diff this crate
 against the specs and the reference by machine, because reading does not scale
 to 251 routes — each of the three found something a careful read had missed.
-Route results are checked in at [COVERAGE.md](COVERAGE.md).
+Route results are checked in at [COVERAGE.md](https://github.com/phillip-simons/alpaca-sdk/blob/main/COVERAGE.md).
 
 ### What is *not* verified against a live server
 
@@ -247,7 +248,7 @@ See [CONTRIBUTING.md](https://github.com/phillip-simons/alpaca-sdk/blob/main/.gi
 usually a captured API response or a precise bug report rather than a large
 patch. Security issues: [SECURITY.md](https://github.com/phillip-simons/alpaca-sdk/blob/main/.github/SECURITY.md).
 
-Release notes are in [CHANGELOG.md](CHANGELOG.md).
+Release notes are in [CHANGELOG.md](https://github.com/phillip-simons/alpaca-sdk/blob/main/CHANGELOG.md).
 
 ## License
 

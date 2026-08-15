@@ -447,7 +447,7 @@ impl TokenizationRedeemRequest {
 /// unknown fields are ignored, but a field wrongly declared required would turn
 /// a working route into [`Error::Decode`](crate::Error::Decode). The fields
 /// left non-optional are the ones [`TokenizationRequest`] already requires
-/// across the six tokenization routes this crate ships, so requiring them here
+/// across the six broker routes that answer with one, so requiring them here
 /// adds no failure that is not already in the crate.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
