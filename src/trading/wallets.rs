@@ -246,7 +246,7 @@ impl CreateCryptoTransferRequest {
 }
 
 /// A request to allowlist a withdrawal address.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateWhitelistedAddressRequest {
     /// The address to allow.

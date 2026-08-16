@@ -478,7 +478,7 @@ pub enum CreateACHRelationshipRequest {
 }
 
 /// Bank details for an ACH relationship opened by hand.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct ManualACHRelationship {
     /// The name on the bank account.
@@ -491,11 +491,12 @@ pub struct ManualACHRelationship {
     pub bank_routing_number: String,
     /// A name for the relationship.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into, doc = "Names the relationship.")]
     pub nickname: Option<String>,
 }
 
 /// The processor token from a completed Plaid link.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct PlaidACHRelationship {
     /// The Alpaca-specific processor token Plaid returned.
@@ -518,13 +519,6 @@ impl ManualACHRelationship {
             bank_routing_number: bank_routing_number.into(),
             nickname: None,
         }
-    }
-
-    /// Names the relationship.
-    #[must_use]
-    pub fn nickname(mut self, nickname: impl Into<String>) -> Self {
-        self.nickname = Some(nickname.into());
-        self
     }
 }
 
@@ -662,7 +656,7 @@ impl CreateBankRequest {
 /// Built from [`Default`] and then assigned field by field: all five are
 /// `String`, so a positional constructor would let a city and a postal code
 /// swap places with nothing to catch it. Named assignment cannot.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Setters)]
 #[non_exhaustive]
 pub struct BankAddress {
     /// The bank's country.
@@ -1066,7 +1060,7 @@ impl ReverseBatchJournalRequestEntry {
 ///
 /// Only cash batch journals are supported, so `entry_type` is always
 /// [`JournalEntryType::Cash`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateBatchJournalRequest {
     /// Always [`JournalEntryType::Cash`].
@@ -1093,7 +1087,7 @@ impl CreateBatchJournalRequest {
 ///
 /// Only cash reverse batch journals are supported, so `entry_type` is always
 /// [`JournalEntryType::Cash`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateReverseBatchJournalRequest {
     /// Always [`JournalEntryType::Cash`].
@@ -1455,7 +1449,7 @@ pub struct GetPortfoliosRequest {
 }
 
 /// The body that subscribes an account to a portfolio.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateSubscriptionRequest {
     /// The account to rebalance.
@@ -1495,7 +1489,7 @@ pub struct GetSubscriptionsRequest {
 }
 
 /// The body that starts a rebalancing run by hand.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateRunRequest {
     /// The account to rebalance.

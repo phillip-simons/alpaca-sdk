@@ -126,7 +126,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         return Err(syn::Error::new_spanned(
             &data.fields,
             "Setters needs named fields — a setter is named after the field it \
-             writes, and a tuple struct has no such name",
+             writes, and neither a tuple struct nor a unit struct has one",
         ));
     };
 

@@ -103,7 +103,7 @@ pub struct OAuthToken {
 /// A request to authorize an app against an account, or to issue it a token.
 ///
 /// Both routes take the same body, which is why one type serves them.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct OAuthRequest {
     /// The account being acted on behalf of.

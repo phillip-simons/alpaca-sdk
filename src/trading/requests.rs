@@ -95,7 +95,7 @@ pub enum Trail {
 }
 
 /// The profit-taking leg of a bracket, OCO, or OTO order.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct TakeProfitRequest {
     /// The limit price to exit a profitable trade at.
@@ -937,7 +937,7 @@ pub struct GetPortfolioHistoryRequest {
 }
 
 /// A new watchlist.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateWatchlistRequest {
     /// The watchlist name, up to 64 characters.

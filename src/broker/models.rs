@@ -1263,7 +1263,7 @@ pub struct RunsPage {
 /// The KYC provider's verdict on the account holder.
 ///
 /// Every field is optional, because which of them a provider fills in varies.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CIPKycInfo {
     /// The provider's id for this check.
@@ -1281,9 +1281,11 @@ pub struct CIPKycInfo {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub risk_level: Option<String>,
     /// Which risk categories applied.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub risk_categories: Option<Vec<String>>,
     /// The applicant's name.
     #[serde(
@@ -1291,6 +1293,7 @@ pub struct CIPKycInfo {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub applicant_name: Option<String>,
     /// The applicant's email address.
     #[serde(
@@ -1298,6 +1301,7 @@ pub struct CIPKycInfo {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub email_address: Option<String>,
     /// The applicant's nationality.
     #[serde(
@@ -1305,6 +1309,7 @@ pub struct CIPKycInfo {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub nationality: Option<String>,
     /// The applicant's date of birth.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1315,6 +1320,7 @@ pub struct CIPKycInfo {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub address: Option<String>,
     /// The applicant's postal code.
     #[serde(
@@ -1322,6 +1328,7 @@ pub struct CIPKycInfo {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub postal_code: Option<String>,
     /// The applicant's country of residency.
     #[serde(
@@ -1329,6 +1336,7 @@ pub struct CIPKycInfo {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub country_of_residency: Option<String>,
     /// When KYC finished.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1339,6 +1347,7 @@ pub struct CIPKycInfo {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub ip_address: Option<String>,
     /// When the check started.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1359,6 +1368,7 @@ pub struct CIPKycInfo {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub approved_by: Option<String>,
     /// Why.
     #[serde(
@@ -1366,6 +1376,7 @@ pub struct CIPKycInfo {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub approved_reason: Option<String>,
     /// When.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1389,7 +1400,7 @@ impl CIPKycInfo {
 }
 
 /// The provider's checks on an identity document.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CIPDocument {
     /// The provider's id for this check.
@@ -1419,6 +1430,7 @@ pub struct CIPDocument {
     pub date_of_expiry: Option<DateTime<Utc>>,
     /// The numbers printed on the document.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub document_numbers: Option<Vec<String>>,
     /// What kind of document it is.
     #[serde(
@@ -1426,6 +1438,7 @@ pub struct CIPDocument {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub document_type: Option<String>,
     /// The first name on the document.
     #[serde(
@@ -1433,6 +1446,7 @@ pub struct CIPDocument {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub first_name: Option<String>,
     /// The last name on the document.
     #[serde(
@@ -1440,6 +1454,7 @@ pub struct CIPDocument {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub last_name: Option<String>,
     /// The gender on the document.
     #[serde(
@@ -1447,6 +1462,7 @@ pub struct CIPDocument {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub gender: Option<String>,
     /// The country that issued it.
     #[serde(
@@ -1454,6 +1470,7 @@ pub struct CIPDocument {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub issuing_country: Option<String>,
     /// The nationality on the document.
     #[serde(
@@ -1461,6 +1478,7 @@ pub struct CIPDocument {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub nationality: Option<String>,
     /// Whether the age checks out.
     #[serde(
@@ -1496,6 +1514,7 @@ pub struct CIPDocument {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub data_comparison_breakdown: Option<String>,
     /// Whether the image is intact.
     #[serde(
@@ -1510,6 +1529,7 @@ pub struct CIPDocument {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub image_integrity_breakdown: Option<String>,
     /// Whether the document looks genuine.
     #[serde(
@@ -1517,6 +1537,7 @@ pub struct CIPDocument {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub visual_authenticity: Option<String>,
 }
 
@@ -1537,7 +1558,7 @@ impl CIPDocument {
 }
 
 /// The provider's checks on a submitted photo.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CIPPhoto {
     /// The provider's id for this check.
@@ -1576,6 +1597,7 @@ pub struct CIPPhoto {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub face_comparison_breakdown: Option<String>,
     /// Whether the image is intact.
     #[serde(
@@ -1590,6 +1612,7 @@ pub struct CIPPhoto {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub image_integrity_breakdown: Option<String>,
     /// Whether the photo looks genuine.
     #[serde(
@@ -1604,6 +1627,7 @@ pub struct CIPPhoto {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub visual_authenticity_breakdown: Option<String>,
 }
 
@@ -1624,7 +1648,7 @@ impl CIPPhoto {
 }
 
 /// The provider's checks against identity databases.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CIPIdentity {
     /// The provider's id for this check.
@@ -1659,6 +1683,7 @@ pub struct CIPIdentity {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub matched_addresses: Option<String>,
     /// Whether the sources agreed.
     #[serde(
@@ -1673,6 +1698,7 @@ pub struct CIPIdentity {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub sources_breakdown: Option<String>,
     /// Whether the address checks out.
     #[serde(
@@ -1687,6 +1713,7 @@ pub struct CIPIdentity {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub address_breakdown: Option<String>,
     /// Whether the date of birth checks out.
     #[serde(
@@ -1701,6 +1728,7 @@ pub struct CIPIdentity {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub date_of_birth_breakdown: Option<String>,
     /// Whether the tax id checks out.
     #[serde(
@@ -1715,6 +1743,7 @@ pub struct CIPIdentity {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub tax_id_breakdown: Option<String>,
 }
 
@@ -1735,7 +1764,7 @@ impl CIPIdentity {
 }
 
 /// The provider's checks against sanctions and watchlists.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CIPWatchlist {
     /// The provider's id for this check.
@@ -1763,6 +1792,7 @@ pub struct CIPWatchlist {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub records: Option<String>,
     /// Whether the applicant is politically exposed.
     #[serde(

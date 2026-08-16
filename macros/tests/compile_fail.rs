@@ -13,9 +13,10 @@
 //! sharpest: it reads as a settled decision about a real name collision when
 //! the field would never have had a setter either way.
 //!
-//! There is one case per refusal in `expand` and `parse_options`, which is what
-//! makes a refusal added without a case here visible — the count of `*_fails.rs`
-//! files and the count of `return Err` sites should move together.
+//! There is one case per refusal in `expand` and `parse_options`, plus
+//! `a_skipped_field_has_no_setter_fails.rs`, which is not a refusal at all — it
+//! fails to compile because the method genuinely is not there, which is the
+//! assertion every `#[setters(skip)]` in the SDK rests on.
 //!
 //! # Where this runs, and where it deliberately does not
 //!

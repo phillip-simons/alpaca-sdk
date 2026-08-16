@@ -131,7 +131,7 @@ pub struct OptionsApprovalsPage {
 }
 
 /// A request for a given options level.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct RequestOptionsApprovalRequest {
     /// The level to ask for.

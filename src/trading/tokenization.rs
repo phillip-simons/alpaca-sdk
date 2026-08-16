@@ -144,7 +144,7 @@ pub struct TokenizationRequest {
 }
 
 /// A request to mint a tokenized asset.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct MintTokenRequest {
     /// The position to tokenize.
@@ -482,7 +482,7 @@ pub struct TokenizationRedeemResponse {
 }
 
 /// A lookup by the caller's own request id.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct ByClientRequestId {
     /// The identifier the caller sent with the request.

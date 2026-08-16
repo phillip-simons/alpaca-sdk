@@ -72,7 +72,11 @@ pub struct EventStreamRequest {
     ///
     /// Mutually exclusive with `since`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(into)]
+    #[setters(skip = "`from_id` is the constructor for this cursor, and the \
+                      line above is why it is not also a setter — `since` and \
+                      `since_id` are the two ways to say where to resume, and \
+                      a chain that set both would be two blessed methods \
+                      producing a request Alpaca is documented to refuse")]
     pub since_id: Option<String>,
     /// Close the connection once this ULID has been delivered, inclusive.
     #[serde(default, skip_serializing_if = "Option::is_none")]

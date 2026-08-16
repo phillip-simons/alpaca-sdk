@@ -464,7 +464,7 @@ impl GetUsTreasuriesRequest {
 }
 
 /// A request for entry requirements.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetEntryRequirementsRequest {
     /// The symbols to ask about, sent as one comma-separated parameter.

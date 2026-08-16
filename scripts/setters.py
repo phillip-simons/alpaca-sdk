@@ -8,7 +8,7 @@ from any crate. What it is not is the idiom the rest of the surface reads in.
 them, and nothing said so: a missing setter is not a compile error, not a
 failing test, and not visible in a diff that adds a field. It is only visible by
 reading the struct and the impl side by side and noticing a name in one and not
-the other. Nobody does that for eighty-two types.
+the other. Nobody does that for a hundred and twenty types.
 
 # What this checks, and what the compiler checks
 
@@ -27,12 +27,20 @@ of this script with it.
 # What counts as a request
 
 The `*Request*` name rule, which is the rule the `#[non_exhaustive]` audit
-already applied to reach its count of 103. `ADDITIONS` carries the types a
-caller must build that the name rule cannot see — `Identity` and `Disclosures`
-are fields of the account *response* as well as of the account *creation*
-payload, so no name rule reaches them. `EXCLUSIONS` carries the one false
-positive: `TokenizationRequest` is named like a request and appears only in
-return position.
+already applied. `ADDITIONS` carries the types a caller must build that the name
+rule cannot see — `Identity` and `Disclosures` are fields of the account
+*response* as well as of the account *creation* payload, so no name rule reaches
+them. `EXCLUSIONS` carries the one false positive: `TokenizationRequest` is
+named like a request and appears only in return position.
+
+**`ADDITIONS` is the weak point, and it fails silently.** A caller-built type
+that is not named there is not reported as uncovered; it is not reported at all,
+and this script says "every request type derives `Setters`" with a straight
+face. That is not hypothetical: `CIPInfo` was listed and the five check types
+nested inside it were not, so 68 of its fields sat uncovered under a clean
+report. `tests/integration/request_construction.rs` is the cross-check — its
+import list is every type a caller has to build, written down for a different
+reason, and anything there with an optional field belongs here.
 
 Both maps are claims, not conveniences, and each entry says which. An entry that
 stops matching a struct fails the run rather than going quiet, for the same
@@ -127,6 +135,23 @@ ADDITIONS: dict[str, str] = {
     "Weight": "a leg of a rebalancing portfolio",
     "RebalancingCondition": "a trigger on a rebalancing subscription",
     "CIPInfo": "the CIP payload uploaded for an account",
+    # The five checks nested inside `CIPInfo`. `tests/integration/
+    # request_construction.rs` was written because these were unbuildable from
+    # outside the crate, and its comment names them as what `CIPInfo` "drags in"
+    # — so a caller who builds a CIP payload builds these too. `CIPInfo` was
+    # here and they were not, which left 68 of its fields uncovered while the
+    # report read clean.
+    "CIPKycInfo": "the KYC check inside `CIPInfo`",
+    "CIPDocument": "the document check inside `CIPInfo`",
+    "CIPPhoto": "the photo check inside `CIPInfo`",
+    "CIPIdentity": "the identity check inside `CIPInfo`",
+    "CIPWatchlist": "the watchlist check inside `CIPInfo`",
+    "ManualACHRelationship": "the hand-entered arm of `CreateACHRelationshipRequest`",
+    # No optional fields today, so nothing is generated for them and nothing is
+    # demanded. Named anyway: they are built by a caller, and the day one grows
+    # an optional field is the day this list decides whether anybody notices.
+    "PlaidACHRelationship": "the Plaid arm of `CreateACHRelationshipRequest`",
+    "BankAddress": "the address on a `CreateBankRequest`",
     "TransmitterInfo": "the travel-rule payload on a crypto transfer",
     "AccountConfiguration": "read-modify-write: fetched, adjusted, sent back",
     "TokenizationMintCallback": "the callback body a caller posts back",

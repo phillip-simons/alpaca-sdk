@@ -162,7 +162,7 @@ impl StockBarsRequest {
 }
 
 /// Historical bars for crypto.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CryptoBarsRequest {
     /// The shared time series filters.
@@ -183,7 +183,7 @@ impl CryptoBarsRequest {
 }
 
 /// Historical bars for options.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct OptionBarsRequest {
     /// The shared time series filters.
@@ -309,7 +309,7 @@ impl StockLatestRequest {
 }
 
 /// A request for the most recent crypto data.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CryptoLatestRequest {
     /// The symbols to query.
@@ -576,7 +576,7 @@ impl ForexRatesRequest {
 }
 
 /// The latest forex rates for currency pairs.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct ForexLatestRatesRequest {
     /// The pairs to query.
@@ -594,7 +594,7 @@ impl ForexLatestRatesRequest {
 }
 
 /// A request for the most actively traded stocks.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct MostActivesRequest {
     /// How many to return.
@@ -626,7 +626,7 @@ fn default_market_type() -> MarketType {
 }
 
 /// A request for the day's biggest movers.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct MarketMoversRequest {
     /// How many of each direction to return.

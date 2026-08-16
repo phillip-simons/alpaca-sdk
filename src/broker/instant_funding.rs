@@ -249,7 +249,7 @@ impl GetInstantFundingRequest {
 }
 
 /// A request to advance cash against an uncleared deposit.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateInstantFundingRequest {
     /// The account to credit.
@@ -365,7 +365,7 @@ pub struct GetInstantFundingReportRequest {
 }
 
 /// A request for several accounts' instant funding limits.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetAccountLimitsRequest {
     /// The accounts to ask about, sent as one comma-separated parameter.
