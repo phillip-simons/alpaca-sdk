@@ -170,12 +170,29 @@ class TestCfgTestExclusion(TreeTest):
     def test_a_compound_cfg_on_a_file_module_is_still_test_only(self) -> None:
         self.write(
             "src/types/mod.rs",
-            '#[cfg(any(test, feature = "trading"))]\nmod wire_tests;\n',
+            '#[cfg(all(test, feature = "trading"))]\nmod wire_tests;\n',
         )
         self.write("src/types/wire_tests.rs", wire_enum("Side", {"Buy": "buy"}))
         self.write("src/lib.rs", wire_enum("Shipping", {"Live": "live"}))
 
         self.assertEqual(sorted(self.enums()), ["Shipping"])
+
+    def test_an_any_cfg_ships_and_is_not_excluded(self) -> None:
+        """`any(test, feature = "x")` compiles under x, so its enums ship.
+
+        Tests are sufficient there, not necessary — the opposite of
+        `all(test, …)`, and the same `test` token in both. Treating it as
+        test-only drops a real wire enum with no diagnostic and exit 0.
+        """
+        self.write(
+            "src/lib.rs",
+            '#[cfg(any(test, feature = "test-utils"))]\nmod helpers;\n',
+        )
+        self.write(
+            "src/lib/helpers.rs", wire_enum("ShipsUnderFeature", {"Live": "live"})
+        )
+
+        self.assertEqual(sorted(self.enums()), ["ShipsUnderFeature"])
 
     def test_a_feature_merely_named_test_is_not_excluded(self) -> None:
         """`feature = "test-utils"` is a feature, not a test cfg.
@@ -241,18 +258,66 @@ class TestCfgTestExclusion(TreeTest):
         self.assertEqual(sorted(self.enums()), ["Shipping"])
 
     def test_is_test_cfg_classifies_each_shape(self) -> None:
-        """Asserted directly, so a shape with no fixture is still pinned."""
+        """Asserted directly, so a shape with no fixture is still pinned.
+
+        The question is whether the item can exist with `test` off, not whether
+        the word appears: `all(test, …)` needs tests, `any(test, …)` merely
+        accepts them and ships under its other arm.
+        """
         for attribute, expected in (
             ("#[cfg(test)]", True),
             ('#[cfg(all(test, feature = "trading"))]', True),
-            ('#[cfg(any(test, feature = "x"))]', True),
+            ("#[cfg(all(test, any(unix, windows)))]", True),
+            ('#[cfg(any(test, feature = "x"))]', False),
             ("#[cfg(not(test))]", False),
             ('#[cfg(not(all(test, feature = "x")))]', False),
+            ('#[cfg(all(any(test, unix), feature = "x"))]', False),
             ('#[cfg(feature = "test-utils")]', False),
             ('#[cfg(feature = "trading")]', False),
+            # Blanked before parsing, so punctuation inside a feature name
+            # cannot be read as predicate structure.
+            ('#[cfg(feature = "a(test)b")]', False),
+            ('#[cfg(feature = "a,test")]', False),
         ):
             with self.subTest(attribute=attribute):
                 self.assertEqual(self.script.is_test_cfg(attribute), expected)
+
+    def test_a_comment_between_the_attribute_and_the_mod_does_not_disarm_it(
+        self,
+    ) -> None:
+        """Blank lines and comments there are ordinary formatting.
+
+        Reading the two as strictly adjacent let a single comment hand a
+        test-only enum back to the headline.
+        """
+        self.write(
+            "src/lib.rs",
+            wire_enum("Shipping", {"Live": "live"})
+            + "\n#[cfg(test)]\n// why these live here\n\nmod tests {\n"
+            + wire_enum("TestOnly", {"A": "a"})
+            + "}\n",
+        )
+
+        self.assertEqual(sorted(self.enums()), ["Shipping"])
+
+    def test_a_comment_before_a_test_file_module_does_not_disarm_it(self) -> None:
+        self.write(
+            "src/types/mod.rs",
+            "#[cfg(test)]\n// the macro's own behaviour\nmod wire_tests;\n",
+        )
+        self.write("src/types/wire_tests.rs", wire_enum("Side", {"Buy": "buy"}))
+        self.write("src/lib.rs", wire_enum("Shipping", {"Live": "live"}))
+
+        self.assertEqual(sorted(self.enums()), ["Shipping"])
+
+    def test_a_test_directory_module_takes_its_children_with_it(self) -> None:
+        """"Nothing in them ships" has to mean the whole directory."""
+        self.write("src/lib.rs", "#[cfg(test)]\nmod fixtures;\n")
+        self.write("src/fixtures/mod.rs", "mod helper;\n")
+        self.write("src/fixtures/helper.rs", wire_enum("TestOnlyDeep", {"A": "a"}))
+        self.write("src/real.rs", wire_enum("Shipping", {"Live": "live"}))
+
+        self.assertEqual(sorted(self.enums()), ["Shipping"])
 
     def test_the_skip_ends_when_the_test_module_closes(self) -> None:
         """A skip that never ends is an undercount, and reads as a clean run.
@@ -391,16 +456,30 @@ class TestCollisions(TreeTest):
         self.assertEqual(self.collisions(), [])
         self.assertEqual(sorted(self.enums()), ["OrderStatus"])
 
-    def test_repeated_one_line_valueless_enums_are_not_a_collision(self) -> None:
-        """Two of them in one file, which is what reaches the *declaration* path.
+    def test_a_valueless_enum_closing_beside_content_is_not_a_collision(self) -> None:
+        """Reaches the `carried` guard on the end-of-file path.
 
-        A single one only exercises the end-of-file flush; the second
-        declaration is what makes the guard on the first path observable.
+        The brace shares a line with a variant name, so it matches neither the
+        bare-closing-brace reset nor the same-line reset — `current` is still
+        set at end of file with nothing carried, which is the state the guard
+        is for.
+        """
+        self.write("src/a.rs", wire_enum("OrderStatus", {"New": "new"}))
+        self.write("src/b.rs", "pub enum OrderStatus {\n    Whatever }\n")
+
+        self.assertEqual(self.collisions(), [])
+        self.assertEqual(sorted(self.enums()), ["OrderStatus"])
+
+    def test_two_such_enums_are_not_a_collision_either(self) -> None:
+        """The same state, reached at the *declaration* path instead.
+
+        A second declaration arrives while the first is still open and empty.
         """
         self.write("src/a.rs", wire_enum("OrderStatus", {"New": "new"}))
         self.write(
             "src/b.rs",
-            "pub enum OrderStatus { Whatever }\npub enum OrderStatus { Another }\n",
+            "pub enum OrderStatus {\n    Whatever }\n"
+            "pub enum OrderStatus {\n    Another }\n",
         )
 
         self.assertEqual(self.collisions(), [])
@@ -503,6 +582,23 @@ class TestVariantParsing(TreeTest):
 
         # Not `["live", "sneaky"]`: the match arm is not one of its values.
         self.assertEqual(self.enums()["Shipping"], ["live"])
+
+    def test_an_empty_enum_does_not_adopt_later_match_arms(self) -> None:
+        """`pub enum Never {}` opens and closes on one line.
+
+        It never meets the closing-brace reset, so it stayed open and filed
+        every later `Ident => "wire",` in the file as one of its values — a
+        phantom enum with fabricated values, which would then be compared
+        against a schema of that name. rustfmt leaves the shape alone.
+        """
+        self.write(
+            "src/a.rs",
+            "pub enum Never {}\n\n"
+            "fn route(x: Thing) -> &str {\n    match x {\n"
+            '        Alpha => "alpha",\n        Beta => "beta",\n    }\n}\n',
+        )
+
+        self.assertEqual(self.enums(), {})
 
     def test_a_block_closed_on_one_line_still_declares_its_enum(self) -> None:
         """`    }}` never matches the closing-brace reset, so the block ends at EOF."""

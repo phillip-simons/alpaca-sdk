@@ -49,37 +49,53 @@ MOD_FILE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod (\w+)\s*;")
 MOD_INLINE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod (\w+)\s*\{")
 
 
-def _without_negations(predicate: str) -> str:
-    """The predicate with every `not(…)` group removed, nesting included.
+def _holds_without_test(predicate: str) -> bool:
+    """Whether a `cfg` predicate can still be true with `test` switched off.
 
-    Matched by counting parentheses rather than with a regex, because
-    `not(all(test, feature = "x"))` holds a pair the regex form stopped at —
-    leaving a bare `test` behind and marking a module that ships everywhere
-    *except* under test as test-only. That drops shipping code silently, the
-    direction this report treats as the worse error.
+    Evaluated rather than pattern-matched, because hunting for a bare `test`
+    token gets `any` exactly backwards. Under `all(test, …)` the item needs
+    tests and is test-only; under `any(test, feature = "x")` tests are merely
+    *sufficient* — it compiles under that feature too, and so it ships. Both
+    contain the same token.
+
+    Every atom but `test` reads as true: that is the permissive direction, and
+    it decides the ambiguous cases toward "this ships", which is the error this
+    report would rather make. Anything unparseable takes the same default.
     """
-    kept: list[str] = []
-    opener = re.compile(r"\bnot\s*\(")
+    tokens = [
+        token.strip()
+        for token in re.findall(r"(?:all|any|not)\s*\(|\(|\)|,|[^(),]+", predicate)
+        if token.strip()
+    ]
     at = 0
 
-    while at < len(predicate):
-        found = opener.match(predicate, at)
-        if not found:
-            kept.append(predicate[at])
-            at += 1
-            continue
-        depth, scan = 0, found.end() - 1
-        while scan < len(predicate):
-            if predicate[scan] == "(":
-                depth += 1
-            elif predicate[scan] == ")":
-                depth -= 1
-                if not depth:
-                    break
-            scan += 1
-        at = scan + 1
+    def parse() -> bool:
+        nonlocal at
+        token = tokens[at]
+        at += 1
+        if not token.endswith("("):
+            return token != "test"
 
-    return "".join(kept)
+        combinator = token[:-1].strip()
+        arguments: list[bool] = []
+        while tokens[at] != ")":
+            arguments.append(parse())
+            if tokens[at] == ",":
+                at += 1
+        at += 1
+
+        if combinator == "all":
+            return all(arguments)
+        if combinator == "any":
+            return any(arguments)
+        if combinator == "not":
+            return not arguments[0]
+        return True
+
+    try:
+        return parse()
+    except (IndexError, RecursionError):
+        return True
 
 
 def is_test_cfg(line: str) -> bool:
@@ -90,18 +106,21 @@ def is_test_cfg(line: str) -> bool:
     `#[cfg(all(test, feature = "trading"))]`, which is just as test-only and was
     read as shipping code.
 
-    Two things must not match. A `feature = "test-utils"` is a feature that
-    happens to be spelled that way, so string literals are blanked before
-    looking — and `not(test)` means the item exists precisely when tests do not,
-    so those groups come out first. Excluding a shipping module would be the
-    worse error of the two: an overcount is visible in the headline, an
-    undercount is the silence this report exists to break.
+    The question is not whether `test` appears but whether the item can exist
+    without it — so `all(test, …)` is test-only while `any(test, …)`,
+    `not(test)` and a feature merely *called* `test-utils` all ship. String
+    literals are blanked first so that last one cannot be mistaken for the
+    keyword.
+
+    Excluding a shipping module is the worse error of the two: an overcount is
+    visible in the headline, an undercount is the silence this report exists to
+    break. Every ambiguity below resolves that way.
     """
     attribute = CFG_ATTRIBUTE.match(line)
     if not attribute:
         return False
     predicate = re.sub(r'"(?:[^"\\]|\\.)*"', '""', attribute.group("predicate"))
-    return re.search(r"\btest\b", _without_negations(predicate)) is not None
+    return not _holds_without_test(predicate)
 
 # Crate enums whose spec schema exists under a different name. Without these the
 # pair never meets: `shared` is an intersection of names, so an enum this crate
@@ -224,10 +243,19 @@ def test_only_files(src: pathlib.Path) -> set[pathlib.Path]:
 
     for rs in sorted(src.rglob("*.rs")):
         lines = rs.read_text().splitlines()
-        for previous, line in zip(lines, lines[1:]):
-            if not is_test_cfg(previous):
+        armed = False
+        for line in lines:
+            if is_test_cfg(line):
+                armed = True
                 continue
-            declaration = MOD_FILE.match(line)
+            # A comment or a blank line between the attribute and the `mod` is
+            # ordinary formatting, and reading them as adjacent-only let one
+            # comment put a test module back in the headline.
+            stripped = line.strip()
+            if not stripped or stripped.startswith(("//", "#[")):
+                continue
+            declaration = MOD_FILE.match(line) if armed else None
+            armed = False
             if not declaration:
                 continue
             name = declaration.group(1)
@@ -245,8 +273,14 @@ def test_only_files(src: pathlib.Path) -> set[pathlib.Path]:
                 here = rs.parent / rs.stem
                 candidates = (here / f"{name}.rs", here / name / "mod.rs")
             for candidate in candidates:
-                if candidate.is_file():
-                    excluded.add(candidate)
+                if not candidate.is_file():
+                    continue
+                excluded.add(candidate)
+                # A directory module takes its children with it. "Nothing in
+                # them ships" is the claim; excluding `mod.rs` alone would
+                # leave every sibling under it counted as the crate's.
+                if candidate.name == "mod.rs":
+                    excluded.update(candidate.parent.rglob("*.rs"))
 
     return excluded
 
@@ -303,7 +337,10 @@ def crate_enums(
                     pending_cfg_test = True
                 elif pending_cfg_test and MOD_INLINE.match(code):
                     skip_below, pending_cfg_test, current, carried = depth, False, None, 0
-                elif line.strip() and not line.lstrip().startswith("#["):
+                elif code.strip() and not code.lstrip().startswith("#["):
+                    # `code`, so a comment between the attribute and the `mod`
+                    # does not disarm the skip and hand a test enum back to the
+                    # headline.
                     pending_cfg_test = False
 
             if skip_below is None:
@@ -322,6 +359,14 @@ def crate_enums(
                         declared_in.setdefault(current, []).append(rs)
                     current, carried = declaration.group(1), 0
                     enums.setdefault(current, [])
+                    # A declaration that also closes on its own line — an empty
+                    # `pub enum Never {}`, which rustfmt leaves alone — never
+                    # meets the closing-brace reset below, so it would stay
+                    # open and adopt every later `Ident => "wire",` in the file
+                    # as one of its values: a phantom enum with fabricated
+                    # values, then compared against a same-named schema.
+                    if code.count("}") >= code.count("{"):
+                        current, carried = None, 0
                 elif current is not None:
                     variant = VARIANT.match(line)
                     if variant:
