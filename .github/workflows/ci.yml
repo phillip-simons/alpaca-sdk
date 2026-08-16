@@ -338,21 +338,6 @@ jobs:
 
           exit "$status"
 
-  # The single required status check.
-  #
-  # Branch protection names check *runs*, and a matrix job that is skipped
-  # cannot expand its own name: it reports once, literally, as
-  # `test (${{ matrix.os }})`. So requiring `test (ubuntu-latest)` and its two
-  # siblings means requiring three names that never arrive on a documentation
-  # change — the pull request sits blocked forever, which is the same deadlock
-  # the job-level skip was meant to avoid, arriving by a subtler route.
-  #
-  # Depending on every job and requiring only this one sidesteps all of it.
-  # Renaming a job, adding a platform to the matrix, or skipping the lot no
-  # longer touches the protection configuration.
-  #
-  # `always()` rather than `!cancelled()`: a cancelled run should report a
-  # failure here, not a skip that protection would accept.
   # `just enums-drift` cannot run here — it reads `specs/`, which is gitignored
   # and fetched over the network — but that is an argument about the *report*,
   # not about the parser underneath it. These tests build their own synthetic
@@ -371,6 +356,21 @@ jobs:
       # the scripts themselves make to a contributor.
       - run: python3 -m unittest discover -s scripts/tests -v
 
+  # The single required status check.
+  #
+  # Branch protection names check *runs*, and a matrix job that is skipped
+  # cannot expand its own name: it reports once, literally, as
+  # `test (${{ matrix.os }})`. So requiring `test (ubuntu-latest)` and its two
+  # siblings means requiring three names that never arrive on a documentation
+  # change — the pull request sits blocked forever, which is the same deadlock
+  # the job-level skip was meant to avoid, arriving by a subtler route.
+  #
+  # Depending on every job and requiring only this one sidesteps all of it.
+  # Renaming a job, adding a platform to the matrix, or skipping the lot no
+  # longer touches the protection configuration.
+  #
+  # `always()` rather than `!cancelled()`: a cancelled run should report a
+  # failure here, not a skip that protection would accept.
   gate:
     name: all checks
     needs: [changes, fmt, clippy, test, features, msrv, deny, docs, coverage-doc, secret-scan, scripts]

@@ -96,11 +96,14 @@ class TreeTest(unittest.TestCase):
             )
             + wire_enum("TaxIdType", {"ArgCuit": "ARG_AR_CUIT"})
             + wire_enum("Exchange", {"Nyse": "N"})
+            + wire_enum("OrderClass", {"Simple": "simple"})
         )
 
     def guarded_spec(self) -> str:
-        return schema("TradeUpdateEventType", ["fill"]) + schema(
-            "TaxIdType", ["ARG_AG_CUIT"]
+        return (
+            schema("TradeUpdateEventType", ["fill"])
+            + schema("TaxIdType", ["ARG_AG_CUIT"])
+            + schema("OrderClass", ["simple"])
         )
 
     def run_main(self) -> tuple[int, str, str]:
@@ -142,6 +145,58 @@ class TestCfgTestExclusion(TreeTest):
             wire_enum("Shipping", {"Live": "live"})
             + "\n#[cfg(test)]\nmod tests {\n"
             + wire_enum("TestOnly", {"A": "a"})
+            + "}\n",
+        )
+
+        self.assertEqual(sorted(self.enums()), ["Shipping"])
+
+    def test_a_compound_cfg_is_still_test_only(self) -> None:
+        """`serde_util.rs` guards its tests with `all(test, feature = …)`.
+
+        Matching the bare `#[cfg(test)]` and nothing else left the exclusion
+        half-closed against a form already in this crate.
+        """
+        self.write(
+            "src/lib.rs",
+            wire_enum("Shipping", {"Live": "live"})
+            + '\n#[cfg(all(test, feature = "trading"))]\nmod tests {\n'
+            + wire_enum("TestOnly", {"A": "a"})
+            + "}\n",
+        )
+
+        self.assertEqual(sorted(self.enums()), ["Shipping"])
+
+    def test_a_compound_cfg_on_a_file_module_is_still_test_only(self) -> None:
+        self.write(
+            "src/types/mod.rs",
+            '#[cfg(any(test, feature = "trading"))]\nmod wire_tests;\n',
+        )
+        self.write("src/types/wire_tests.rs", wire_enum("Side", {"Buy": "buy"}))
+        self.write("src/lib.rs", wire_enum("Shipping", {"Live": "live"}))
+
+        self.assertEqual(sorted(self.enums()), ["Shipping"])
+
+    def test_a_feature_merely_named_test_is_not_excluded(self) -> None:
+        """`feature = "test-utils"` is a feature, not a test cfg.
+
+        Excluding a shipping module is the worse of the two errors: an
+        overcount shows up in the headline, an undercount is silence.
+        """
+        self.write(
+            "src/lib.rs",
+            '#[cfg(feature = "test-utils")]\nmod helpers {\n'
+            + wire_enum("Shipping", {"Live": "live"})
+            + "}\n",
+        )
+
+        self.assertEqual(sorted(self.enums()), ["Shipping"])
+
+    def test_not_test_is_not_excluded(self) -> None:
+        """`not(test)` compiles precisely when tests do not."""
+        self.write(
+            "src/lib.rs",
+            "#[cfg(not(test))]\nmod shipping {\n"
+            + wire_enum("Shipping", {"Live": "live"})
             + "}\n",
         )
 
@@ -373,7 +428,8 @@ class TestStalenessGuards(TreeTest):
             "src/lib.rs",
             wire_enum("TradeEvent", {"Held": "held", "Fill": "fill"})
             + wire_enum("TaxIdType", {"ArgCuit": "ARG_AR_CUIT"})
-            + wire_enum("Exchange", {"Nyse": "N"}),
+            + wire_enum("Exchange", {"Nyse": "N"})
+            + wire_enum("OrderClass", {"Simple": "simple"}),
         )
 
         code, _, err = self.run_main()
@@ -391,7 +447,8 @@ class TestStalenessGuards(TreeTest):
                 {"Restated": "restated", "Held": "held", "Fill": "fill"},
             )
             + wire_enum("TaxIdType", {"Other": "OTHER"})
-            + wire_enum("Exchange", {"Nyse": "N"}),
+            + wire_enum("Exchange", {"Nyse": "N"})
+            + wire_enum("OrderClass", {"Simple": "simple"}),
         )
 
         code, _, err = self.run_main()
@@ -402,6 +459,19 @@ class TestStalenessGuards(TreeTest):
     def test_a_not_drift_key_that_names_no_enum_fails(self) -> None:
         """Its exemption is from a semantic guard, not an existence check."""
         self.script.NOT_DRIFT["Renamed"] = "a reason"
+
+        code, _, err = self.run_main()
+
+        self.assertEqual(code, 1)
+        self.assertIn("Renamed", err)
+
+    def test_a_decided_key_that_names_no_enum_fails(self) -> None:
+        """DECIDED suppresses a gap, which is the finding worth having.
+
+        Only the key is checkable: the value names something the crate
+        deliberately does not carry, so its absence is the entry working.
+        """
+        self.script.DECIDED[("Renamed", "value")] = "a reason"
 
         code, _, err = self.run_main()
 
@@ -463,14 +533,62 @@ class TestReportShape(TreeTest):
         self.assertEqual(code, 0)
         self.assertIn("carries no value list", out)
 
-    def test_the_buckets_reconcile_against_the_compared_count(self) -> None:
-        self.write("src/lib.rs", self.base)
-        self.write_spec("trading.yaml", self.guarded_spec())
+    def test_the_printed_buckets_are_the_actual_bucket_sizes(self) -> None:
+        """Asserted as numbers, not as the presence of the word "compared".
+
+        Four enums reach a comparison. `OrderClass` matches value for value;
+        `TradeEvent` differs only by the two `CRATE_ONLY` values, so it is
+        excepted rather than exact; `TaxIdType` has both a gap and a surplus
+        and `Colour` a surplus, so both are flagged and the union counts them
+        once each. `Exchange` has no schema here and is not compared at all.
+        """
+        self.write(
+            "src/lib.rs", self.base + wire_enum("Colour", {"Red": "red", "Teal": "teal"})
+        )
+        self.write_spec(
+            "trading.yaml", self.guarded_spec() + schema("Colour", ["red"])
+        )
 
         code, out, _ = self.run_main()
 
         self.assertEqual(code, 0)
-        self.assertIn("compared", out)
+        self.assertIn(
+            "1 exact + 1 with exceptions + 0 against a merged vocabulary + "
+            "2 flagged = 4 compared",
+            out,
+        )
+
+
+class TestReconciliation(unittest.TestCase):
+    """The buckets have to account for every compared enum.
+
+    Tested on the helper rather than through a report, because no input can
+    currently make the report's buckets disagree — the branches partition the
+    compared set. A test that could only drive it through `main` would assert
+    nothing, which is what the first version of this test did.
+    """
+
+    def setUp(self) -> None:
+        self.script = load_script()
+
+    def test_matching_totals_produce_no_complaint(self) -> None:
+        self.assertIsNone(self.script.reconcile(28, 28))
+
+    def test_a_short_total_is_a_complaint(self) -> None:
+        complaint = self.script.reconcile(27, 28)
+
+        self.assertIsNotNone(complaint)
+        self.assertIn("27", complaint)
+        self.assertIn("28", complaint)
+
+    def test_a_long_total_is_a_complaint(self) -> None:
+        """Double-counting is as wrong as dropping one, and less obvious."""
+        self.assertIsNotNone(self.script.reconcile(29, 28))
+
+    def test_the_total_counts_every_bucket(self) -> None:
+        self.assertEqual(
+            self.script.bucket_total(["a"], ["b", "c"], [], {"d"}), 4
+        )
 
 
 if __name__ == "__main__":

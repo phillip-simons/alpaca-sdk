@@ -162,11 +162,13 @@ presented as a whole one:
   map carries the real reason. `TaxIdType`'s `ARG_AR_CUIT` sat under the same
   wrong sentence and now carries its own: a suspected typo, not a value Alpaca
   stopped documenting.
-- **The suppression maps go stale silently**, so `ALIASES`, `CRATE_ONLY`,
-  `DECIDED` and `UNRESOLVED` now fail the run or stop printing once the state
-  they describe no longer holds. `NOT_DRIFT` cannot be checked that way — its
-  claim is that two vocabularies are unrelated — but a `NOT_DRIFT` pair that
-  comes to match value for value now asks to be rechecked.
+- **The suppression maps go stale silently**, so `ALIASES`, `CRATE_ONLY` and
+  `UNRESOLVED` now fail the run or stop printing once the state they describe
+  no longer holds. `DECIDED` and `NOT_DRIFT` can only have their keys checked —
+  the first names a value the crate deliberately does not carry, and the
+  second's claim is that two vocabularies are unrelated, which no diff
+  confirms — so both fail on an enum name that has gone, and a `NOT_DRIFT` pair
+  that comes to match value for value asks to be rechecked.
 - **None of it had a test**, which is how four of the defects above reached a
   commit. `scripts/tests/test_enum_drift.py` covers each one, and it is in
   `just check` and CI even though `just enums-drift` is in neither. That is not

@@ -43,10 +43,33 @@ ENUM_DECL = re.compile(r"^\s*pub enum (\w+) \{", re.M)
 # and as nothing at all if it did not.
 VARIANT = re.compile(r'^\s*(\w+) => "([^"]*)",?\s*$')
 
-# `#[cfg(test)]` on the line before a `mod` — the two shapes it can guard.
-CFG_TEST = re.compile(r"^\s*#\[cfg\(test\)\]\s*$")
+# A `cfg` attribute on the line before a `mod` — the two shapes it can guard.
+CFG_ATTRIBUTE = re.compile(r"^\s*#\[cfg\((?P<predicate>.*)\)\]\s*$")
 MOD_FILE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod (\w+)\s*;")
 MOD_INLINE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod (\w+)\s*\{")
+
+
+def is_test_cfg(line: str) -> bool:
+    """Whether a `cfg` attribute compiles its item for tests only.
+
+    Matching the literal `#[cfg(test)]` and nothing else left the exclusion
+    half-closed: `types/serde_util.rs` guards its tests with
+    `#[cfg(all(test, feature = "trading"))]`, which is just as test-only and was
+    read as shipping code.
+
+    Two things must not match. A `feature = "test-utils"` is a feature that
+    happens to be spelled that way, so string literals are blanked before
+    looking — and `not(test)` means the item exists precisely when tests do not,
+    so those groups come out first. Excluding a shipping module would be the
+    worse error of the two: an overcount is visible in the headline, an
+    undercount is the silence this report exists to break.
+    """
+    attribute = CFG_ATTRIBUTE.match(line)
+    if not attribute:
+        return False
+    predicate = re.sub(r'"(?:[^"\\]|\\.)*"', '""', attribute.group("predicate"))
+    predicate = re.sub(r"\bnot\s*\([^()]*\)", "", predicate)
+    return re.search(r"\btest\b", predicate) is not None
 
 # Crate enums whose spec schema exists under a different name. Without these the
 # pair never meets: `shared` is an intersection of names, so an enum this crate
@@ -170,7 +193,7 @@ def test_only_files(src: pathlib.Path) -> set[pathlib.Path]:
     for rs in sorted(src.rglob("*.rs")):
         lines = rs.read_text().splitlines()
         for previous, line in zip(lines, lines[1:]):
-            if not CFG_TEST.match(previous):
+            if not is_test_cfg(previous):
                 continue
             declaration = MOD_FILE.match(line)
             if not declaration:
@@ -244,7 +267,7 @@ def crate_enums(
             code = _code_only(line)
 
             if skip_below is None:
-                if CFG_TEST.match(line):
+                if is_test_cfg(line):
                     pending_cfg_test = True
                 elif pending_cfg_test and MOD_INLINE.match(code):
                     skip_below, pending_cfg_test, current, carried = depth, False, None, 0
@@ -405,6 +428,32 @@ def spec_enums(
     )
 
 
+def bucket_total(*buckets: "list[str] | set[str]") -> int:
+    """How many enums the buckets below account for between them."""
+    return sum(len(bucket) for bucket in buckets)
+
+
+def reconcile(buckets: int, compared: int) -> str | None:
+    """The complaint if the buckets do not account for every compared enum.
+
+    Every compared enum lands in exactly one bucket, so they have to add back
+    up to the headline. A verdict that quietly stopped being counted is
+    precisely how this report came to describe less than it appeared to, and a
+    reconciliation done by hand in a plan file goes stale the first time
+    somebody touches these branches.
+
+    Split out from `main` so it can be tested. As the branches stand this
+    cannot fire — which is exactly why it needs a test that does not depend on
+    being able to provoke it through the report.
+    """
+    if buckets == compared:
+        return None
+    return (
+        f"the buckets total {buckets} but {compared} enums were compared "
+        f"— one is being counted twice or not at all"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--specs", type=pathlib.Path, default=pathlib.Path("specs"))
@@ -469,6 +518,19 @@ def main() -> int:
             print(
                 f"CRATE_ONLY explains {enum} {value!r}, which this crate no "
                 f"longer carries — drop the entry",
+                file=sys.stderr,
+            )
+            return 1
+
+    # DECIDED suppresses a gap, and a gap is the finding this report exists to
+    # produce, so an entry naming an enum that no longer exists is the quietest
+    # possible way to keep suppressing one. Only the key is checkable here: the
+    # value legitimately describes something the crate does *not* carry.
+    for enum, _ in sorted(DECIDED):
+        if enum not in crate:
+            print(
+                f"DECIDED names {enum}, which is not a wire_enum! in this "
+                f"crate — it was probably renamed; update the key or drop it",
                 file=sys.stderr,
             )
             return 1
@@ -738,18 +800,17 @@ def main() -> int:
     # done by hand in a plan file goes stale the first time a branch touches
     # these branches.
     flagged = set(missing) | set(extra)
-    buckets = len(agree) + len(excepted) + len(against_merged) + len(flagged)
     print(
         f"\n{len(agree)} exact + {len(excepted)} with exceptions + "
         f"{len(against_merged)} against a merged vocabulary + {len(flagged)} "
-        f"flagged = {buckets} compared"
+        f"flagged = {bucket_total(agree, excepted, against_merged, flagged)} "
+        f"compared"
     )
-    if buckets != len(compared):
-        print(
-            f"the buckets total {buckets} but {len(compared)} enums were "
-            f"compared — one is being counted twice or not at all",
-            file=sys.stderr,
-        )
+    complaint = reconcile(
+        bucket_total(agree, excepted, against_merged, flagged), len(compared)
+    )
+    if complaint:
+        print(complaint, file=sys.stderr)
         return 1
 
     return 0
