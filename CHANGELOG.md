@@ -167,6 +167,14 @@ presented as a whole one:
   they describe no longer holds. `NOT_DRIFT` cannot be checked that way — its
   claim is that two vocabularies are unrelated — but a `NOT_DRIFT` pair that
   comes to match value for value now asks to be rechecked.
+- **None of it had a test**, which is how four of the defects above reached a
+  commit. `scripts/tests/test_enum_drift.py` covers each one, and it is in
+  `just check` and CI even though `just enums-drift` is in neither. That is not
+  a contradiction: running the report needs Alpaca's `specs/`, gitignored and
+  fetched over the network, while testing the parser needs a synthetic tree the
+  tests write for themselves. The logic deciding which enums the report can see
+  at all does not have to stay unverified because the report does. Stdlib
+  `unittest`, so the crate's gate gains no Python dependency.
 
 ### The semver call
 

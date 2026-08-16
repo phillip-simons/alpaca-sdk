@@ -30,7 +30,7 @@ default: check
 # rather than a broken `main`.
 #
 # The gate. Run before every commit.
-check: fmt-check clippy doc test
+check: fmt-check clippy doc test test-scripts
 
 # Rewrite formatting in place.
 fmt:
@@ -79,6 +79,19 @@ test:
 # Run a subset by name, e.g. `just test-one mleg` or `just test-one decimal`.
 test-one *args:
     cargo test --all-features {{ args }}
+
+# Test the Python under `scripts/`.
+#
+# In `check` even though `enums-drift` is not, and the difference is the point.
+# Running the *report* needs `specs/`, gitignored and fetched over the network.
+# Testing the *parser* needs a synthetic tree these tests write themselves, so
+# it costs nothing and needs nothing. `enum_drift.py` decides which of the
+# crate's enums are looked at at all, and four separate defects in that logic
+# reached a commit before it had any tests.
+#
+# `unittest`, not pytest: no Python dependency belongs in a Rust crate's gate.
+test-scripts:
+    python3 -m unittest discover -s scripts/tests
 
 # Auto-fix what is mechanically fixable, then show what is left.
 fix:
