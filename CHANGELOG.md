@@ -95,9 +95,26 @@ asking for it.
   `GetAggregatePositionsRequest::symbols`, `GetSettlementsRequest::statuses`,
   `CorporateActionEventsRequest::types`, `NewsRequest::symbols`,
   `CorporateActionsRequest::{symbols, types}` and
-  `UpdateWatchlistRequest::symbols` — which accepts everything it accepted
-  before and arrays besides. Nothing narrowed, and `cargo semver-checks` agrees
-  there is no break.
+  `UpdateWatchlistRequest::symbols` — so an array or a boxed slice works where
+  only a `Vec` did before.
+
+  **Those nine can break a call site that relies on inference**, even though
+  nothing narrowed and `cargo semver-checks` reports no break — it models types,
+  not inference. An argument whose type was previously deduced *from* the
+  parameter now has nothing to deduce it from:
+
+  ```rust
+  // Compiled on 0.1.0, needs a type annotation now:
+  request.symbols(boxed_slice.into())
+  request.symbols(Default::default())
+
+  // Both fine:
+  request.symbols(vec!["AAPL".to_owned()])
+  request.symbols(Vec::<String>::new())
+  ```
+
+  Written down here because this is the class of change `cargo-semver-checks`
+  cannot see and a `0.1.1` reaches you without your asking.
 
 ### Changed
 

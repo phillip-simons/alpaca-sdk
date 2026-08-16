@@ -86,16 +86,27 @@
 //! stated on the method is a different thing from an incoherent pair the API
 //! silently blesses.
 //!
-//! **Mutual exclusion earns a skip; ordering does not.** `start` and `end` keep
-//! their setters on every type that has them, including the four that also
-//! offer a fallible `between(start, end)` — `GetLocatesRequest`,
-//! `GetFpslLoansRequest`, `GetJitBalancesRequest` and
-//! `GetMarketCalendarRequest`. Both fields set is the ordinary case rather than
-//! the broken one, only the ordering can be wrong, and a one-sided window is
-//! something `between` cannot express at all. `TimeseriesRequest` has shipped
-//! unchecked `start`/`end` since 0.1.0, so this is the existing shape of the
-//! crate and not a new hole; `between` remains the checked path for callers who
-//! have both values at once.
+//! **Mutual exclusion the type already checks does not earn a skip.** This is
+//! the qualifier that makes the rule usable, and leaving it off gets the next
+//! type wrong. `GetAccountActivitiesRequest`'s `category` and `activity_types`
+//! are as mutually exclusive as `qty` and `notional` — the reference says
+//! "Cannot be used with `activity_types` parameter" — and both keep their
+//! setters, because `GetAccountActivitiesRequest::validate` rejects the pair
+//! and the client calls it before sending. What earns a skip is exclusivity
+//! *nothing catches*: `OrderRequest::validate` has no opinion on `qty` beside
+//! `notional`, and never needed one, because `OrderAmount` meant the state
+//! could not be built. A setter per field removed the guard without replacing
+//! it.
+//!
+//! **Ordering does not earn a skip.** `start` and `end` keep their setters on
+//! every type that has them, including the four that also offer a fallible
+//! `between(start, end)` — `GetLocatesRequest`, `GetFpslLoansRequest`,
+//! `GetJitBalancesRequest` and `GetMarketCalendarRequest`. Both fields set is
+//! the ordinary case rather than the broken one, only the ordering can be
+//! wrong, and a one-sided window is something `between` cannot express at all.
+//! `TimeseriesRequest` has shipped unchecked `start`/`end` since 0.1.0, so this
+//! is the existing shape of the crate and not a new hole; `between` remains the
+//! checked path for callers who have both values at once.
 //!
 //! # Documentation
 //!

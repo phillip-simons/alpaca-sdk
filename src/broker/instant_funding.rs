@@ -207,7 +207,6 @@ pub struct InstantFundingReport {
 pub struct GetInstantFundingRequest {
     /// Only requests in this state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(doc = "Only requests in this state.")]
     pub status: Option<InstantFundingStatus>,
     /// Only requests booked on this business day.
     #[serde(default, skip_serializing_if = "Option::is_none")]

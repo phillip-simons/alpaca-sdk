@@ -83,12 +83,15 @@ FIELD_START = re.compile(r"^    pub (\w+):")
 # A rejoined `pub field: Option<T>,`. Only optional fields: a required field is
 # a constructor argument, and the derive leaves it alone.
 #
-# The path prefix is optional because `option_inner` in the derive matches on the
-# last segment, so `std::option::Option<u32>` is an optional field to the
-# compiler. A pattern that insisted on the bare spelling disagreed with the
-# derive about what this script is counting, in the direction where the field
-# reads as required and the type stops being checked at all.
-OPTION_FIELD = re.compile(r"^pub (\w+): (?:\w+::)*Option<.+>,$")
+# The path prefix is optional, leading `::` included, because `option_inner` in
+# the derive matches on the last segment and only refuses a `qself` — so
+# `std::option::Option<u32>` and `::core::option::Option<u32>` are both optional
+# fields to the compiler. A pattern that insisted on the bare spelling disagreed
+# with the derive about what this script is counting, in the direction where the
+# field reads as required and the type stops being checked at all. The leading
+# `::` was a second instance of the same bug, found after the first was fixed:
+# match what the derive matches, not what the source usually looks like.
+OPTION_FIELD = re.compile(r"^pub (\w+): (?:::)?(?:\w+::)*Option<.+>,$")
 
 # A trailing `// …` on a field, stripped before the field is classified. Without
 # this the declaration no longer ends in `,`, so it matches nothing, and a type

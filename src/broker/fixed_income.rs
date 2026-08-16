@@ -406,7 +406,7 @@ pub struct GetUsCorporatesRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
-    #[setters(into, doc = "Only these CUSIPs.")]
+    #[setters(into)]
     pub cusips: Option<Vec<String>>,
     /// Only these issuer tickers.
     #[serde(
@@ -414,7 +414,7 @@ pub struct GetUsCorporatesRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
-    #[setters(into, doc = "Only these issuer tickers.")]
+    #[setters(into)]
     pub tickers: Option<Vec<String>>,
 }
 
@@ -432,7 +432,6 @@ impl GetUsCorporatesRequest {
 pub struct GetUsTreasuriesRequest {
     /// Only this kind of instrument.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(doc = "Only this kind of instrument.")]
     pub subtype: Option<TreasurySubtype>,
     /// Only instruments in this state.
     #[serde(default, skip_serializing_if = "Option::is_none")]

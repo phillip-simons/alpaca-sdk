@@ -124,11 +124,10 @@ pub struct IpoOfferingResponse {
 pub struct GetIpoOfferingsRequest {
     /// Only offerings in this state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(doc = "Only offerings in this state.")]
     pub availability: Option<IpoAvailability>,
     /// Only this ticker.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(into, doc = "Only this ticker.")]
+    #[setters(into)]
     pub ticker: Option<String>,
     /// How many to return.
     #[serde(default, skip_serializing_if = "Option::is_none")]

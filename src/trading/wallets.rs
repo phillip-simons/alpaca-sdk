@@ -190,11 +190,10 @@ pub struct TransferFeeEstimate {
 pub struct GetCryptoWalletsRequest {
     /// Only wallets for this asset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(into, doc = "Only wallets for this asset.")]
+    #[setters(into)]
     pub asset: Option<String>,
     /// Only wallets on this chain.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(doc = "Only wallets on this chain.")]
     pub chain: Option<CryptoChain>,
     /// Only wallets on this network.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -1008,11 +1008,11 @@ pub struct GetCorporateAnnouncementsRequest {
     pub until: NaiveDate,
     /// Only announcements for this symbol.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(into, doc = "Only announcements for this symbol.")]
+    #[setters(into)]
     pub symbol: Option<String>,
     /// Only announcements for this CUSIP.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(into, doc = "Only announcements for this CUSIP.")]
+    #[setters(into)]
     pub cusip: Option<String>,
     /// Which date field `since` and `until` filter on.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -162,7 +162,6 @@ impl RequestOptionsApprovalRequest {
 pub struct GetOptionsApprovalsRequest {
     /// Only this account.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(doc = "Only this account.")]
     pub account_id: Option<Uuid>,
     /// Only requests for this level.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -120,7 +120,6 @@ pub struct FpslAnalytics {
 pub struct GetFpslLoansRequest {
     /// Only loans from this account.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(doc = "Only loans from this account.")]
     pub account_id: Option<Uuid>,
     /// The first day.
     #[serde(default, skip_serializing_if = "Option::is_none")]

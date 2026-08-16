@@ -200,11 +200,9 @@ impl MintTokenRequest {
 pub struct GetTokenizationRequestsRequest {
     /// Only mints, or only redemptions.
     #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
-    #[setters(doc = "Only mints, or only redemptions.")]
     pub request_type: Option<TokenizationType>,
     /// Only requests in this state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(doc = "Only requests in this state.")]
     pub status: Option<TokenizationStatus>,
     /// Only requests for this position.
     #[serde(default, skip_serializing_if = "Option::is_none")]

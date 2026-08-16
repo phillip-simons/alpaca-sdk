@@ -168,11 +168,10 @@ pub struct LocateQuotes {
 pub struct GetLocatesRequest {
     /// Only locates in this state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(doc = "Only locates in this state.")]
     pub status: Option<LocateStatus>,
     /// Only locates for this symbol.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(into, doc = "Only locates for this symbol.")]
+    #[setters(into)]
     pub symbol: Option<String>,
     /// Locates on or after this trading date.
     #[serde(default, skip_serializing_if = "Option::is_none")]

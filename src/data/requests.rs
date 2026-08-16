@@ -674,7 +674,7 @@ pub struct NewsRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
-    #[setters(into, doc = "Only articles mentioning these symbols.")]
+    #[setters(into)]
     pub symbols: Option<Vec<String>>,
     /// Maximum number of articles across all pages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -710,7 +710,7 @@ pub struct CorporateActionsRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
-    #[setters(into, doc = "Only actions for these symbols.")]
+    #[setters(into)]
     pub symbols: Option<Vec<String>>,
     /// Only actions for these CUSIPs.
     #[serde(
@@ -726,7 +726,7 @@ pub struct CorporateActionsRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
-    #[setters(into, doc = "Only actions of these kinds.")]
+    #[setters(into)]
     pub types: Option<Vec<CorporateActionsType>>,
     /// The earliest date to return.
     #[serde(default, skip_serializing_if = "Option::is_none")]

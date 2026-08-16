@@ -196,7 +196,6 @@ pub struct GetEodPositionsRequest {
     pub asset: Option<String>,
     /// The close to report as of.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(doc = "The close to report as of.")]
     pub asof: Option<NaiveDate>,
     /// How many to return.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -230,7 +229,7 @@ pub struct GetAggregatePositionsRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
-    #[setters(into, doc = "Only these symbols.")]
+    #[setters(into)]
     pub symbols: Option<Vec<String>>,
     /// Whether to include firm accounts in the aggregate.
     ///
@@ -262,7 +261,6 @@ impl GetAggregatePositionsRequest {
 pub struct GetCashInterestRequest {
     /// Only this account.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(doc = "Only this account.")]
     pub account_id: Option<Uuid>,
     /// One day.
     #[serde(default, skip_serializing_if = "Option::is_none")]

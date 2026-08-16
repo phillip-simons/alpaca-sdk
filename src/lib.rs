@@ -13,10 +13,13 @@
 //! [docs.alpaca.markets]: https://docs.alpaca.markets/us/reference/
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
-// The README is included so that its five examples compile as doctests. They
-// are the crate's front door and nothing was checking them, so five batches of
-// breaking changes went past without anything noticing whether they still
-// built. They did — but only because nobody had needed to find out.
+// The README is included so that its examples compile as doctests. They are the
+// crate's front door and nothing was checking them, so five batches of breaking
+// changes went past without anything noticing whether they still built. They
+// did — but only because nobody had needed to find out.
+//
+// Not a count: there were five, there are six, and a number here is one more
+// thing to get wrong every time the front door changes.
 #![doc = include_str!("../README.md")]
 
 // `reqwest` is depended on with `default-features = false`, and none of
