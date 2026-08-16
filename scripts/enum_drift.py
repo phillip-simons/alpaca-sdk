@@ -116,6 +116,23 @@ UNRESOLVED: dict[tuple[str, str], str] = {
 }
 
 
+class BraceImbalance(Exception):
+    """A file whose braces did not balance once literals were blanked.
+
+    Raised rather than warned about: the brace count drives the `#[cfg(test)]`
+    exclusion, so a file this happens in is one whose test enums may be being
+    counted as the crate's, and a headline nobody can trust is worse than no
+    headline.
+    """
+
+    def __init__(self, path: pathlib.Path, depth: int) -> None:
+        super().__init__(
+            f"{path}: braces do not balance (ended at depth {depth}). A raw "
+            f"string spanning several lines is the likely cause; the "
+            f"`#[cfg(test)]` exclusion cannot be trusted in this file."
+        )
+
+
 def _code_only(line: str) -> str:
     """The line with string and char literals blanked and any comment cut.
 
@@ -123,7 +140,14 @@ def _code_only(line: str) -> str:
     `format!("{}", …)` and `assert!(matches!(x, Y { .. }))`, and a brace inside
     a literal would close the skipped region early — which would start counting
     test declarations again, quietly, exactly the way this whole report fails.
+
+    Raw strings first, and for the same reason: `r#"{"a": "}"}"#` survives the
+    ordinary-string pass as unbalanced braces, and `decimal.rs`, `sse.rs` and
+    `error.rs` all put raw strings inside `#[cfg(test)]` blocks. One spanning
+    several lines still defeats this, which is what the balance check at the end
+    of `crate_enums` is for.
     """
+    line = re.sub(r'r(#*)".*?"\1', '""', line)
     line = re.sub(r'"(?:[^"\\]|\\.)*"', '""', line)
     line = re.sub(r"'(?:[^'\\]|\\.)'", "''", line)
     return re.sub(r"//.*$", "", line)
@@ -152,14 +176,20 @@ def test_only_files(src: pathlib.Path) -> set[pathlib.Path]:
             if not declaration:
                 continue
             name = declaration.group(1)
-            # Both module layouts: `foo/mod.rs` declaring a sibling, and
-            # `foo.rs` declaring a child under `foo/`.
-            for candidate in (
-                rs.parent / f"{name}.rs",
-                rs.parent / name / "mod.rs",
-                rs.parent / rs.stem / f"{name}.rs",
-                rs.parent / rs.stem / name / "mod.rs",
-            ):
+            # Exactly where Rust would look, and nowhere else. A crate root or
+            # a `mod.rs` declares siblings; any other file declares children
+            # under a directory named after it. Trying all four regardless
+            # meant `src/foo.rs` saying `mod wallets;` — which resolves to
+            # `src/foo/wallets.rs` — also excluded a real, shipping
+            # `src/wallets.rs`, dropping its enums with no diagnostic and
+            # exit 0. Silently reading less of the crate than it claims to is
+            # the whole defect this report was rewritten to stop having.
+            if rs.name in {"mod.rs", "lib.rs", "main.rs"}:
+                candidates = (rs.parent / f"{name}.rs", rs.parent / name / "mod.rs")
+            else:
+                here = rs.parent / rs.stem
+                candidates = (here / f"{name}.rs", here / name / "mod.rs")
+            for candidate in candidates:
                 if candidate.is_file():
                     excluded.add(candidate)
 
@@ -254,6 +284,16 @@ def crate_enums(
         # A block left open at end of file still declared what it declared.
         if current is not None and carried:
             declared_in.setdefault(current, []).append(rs)
+
+        # Every `.rs` file balances its braces, so a non-zero depth here means
+        # the blanking above missed a literal — a raw string spanning lines is
+        # the way left. That matters more than it looks: `depth` is what ends a
+        # `#[cfg(test)]` skip, so a miscount reopens the region early and starts
+        # counting test enums as the crate's. Refusing to answer beats answering
+        # from a parse known to be wrong, which is the failure this report is
+        # named after.
+        if depth != 0:
+            raise BraceImbalance(rs, depth)
 
     # No same-file exemption: two declarations in one file, in separate inline
     # modules or behind opposing `cfg`s, merge just as invisibly as two across
@@ -379,7 +419,11 @@ def main() -> int:
         print(f"{args.src} is missing — run from the repository root", file=sys.stderr)
         return 1
 
-    crate, collisions = crate_enums(args.src)
+    try:
+        crate, collisions = crate_enums(args.src)
+    except BraceImbalance as imbalance:
+        print(imbalance, file=sys.stderr)
+        return 1
     spec, merged_schemas, declared_schemas = spec_enums(args.specs)
 
     # An alias that does not resolve on both sides silently restores the very
@@ -396,11 +440,26 @@ def main() -> int:
             )
             return 1
         if schema not in spec:
-            print(
-                f"{enum} is aliased to {schema}, which no spec defines "
-                f"— fix the alias or drop it",
-                file=sys.stderr,
-            )
+            # Two different states, and telling them apart decides what a
+            # maintainer should do. A schema that exists but documents its
+            # values in prose is not a broken alias, and "drop it" is the one
+            # instruction that would restore the original blindness — dropping
+            # the TradeEvent pair is precisely how that enum went unchecked for
+            # a release.
+            if schema in declared_schemas:
+                print(
+                    f"{enum} is aliased to {schema}, which exists but carries "
+                    f"no value list this report can read — the pairing is "
+                    f"right, so keep it; the comparison has to be done by hand "
+                    f"until the parser can follow a property",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"{enum} is aliased to {schema}, which no spec defines "
+                    f"— fix the alias or drop it",
+                    file=sys.stderr,
+                )
             return 1
 
     # A CRATE_ONLY entry suppresses a value from the surplus list, so a stale one
