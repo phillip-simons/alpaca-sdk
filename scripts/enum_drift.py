@@ -49,6 +49,39 @@ MOD_FILE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod (\w+)\s*;")
 MOD_INLINE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod (\w+)\s*\{")
 
 
+def _without_negations(predicate: str) -> str:
+    """The predicate with every `not(…)` group removed, nesting included.
+
+    Matched by counting parentheses rather than with a regex, because
+    `not(all(test, feature = "x"))` holds a pair the regex form stopped at —
+    leaving a bare `test` behind and marking a module that ships everywhere
+    *except* under test as test-only. That drops shipping code silently, the
+    direction this report treats as the worse error.
+    """
+    kept: list[str] = []
+    opener = re.compile(r"\bnot\s*\(")
+    at = 0
+
+    while at < len(predicate):
+        found = opener.match(predicate, at)
+        if not found:
+            kept.append(predicate[at])
+            at += 1
+            continue
+        depth, scan = 0, found.end() - 1
+        while scan < len(predicate):
+            if predicate[scan] == "(":
+                depth += 1
+            elif predicate[scan] == ")":
+                depth -= 1
+                if not depth:
+                    break
+            scan += 1
+        at = scan + 1
+
+    return "".join(kept)
+
+
 def is_test_cfg(line: str) -> bool:
     """Whether a `cfg` attribute compiles its item for tests only.
 
@@ -68,8 +101,7 @@ def is_test_cfg(line: str) -> bool:
     if not attribute:
         return False
     predicate = re.sub(r'"(?:[^"\\]|\\.)*"', '""', attribute.group("predicate"))
-    predicate = re.sub(r"\bnot\s*\([^()]*\)", "", predicate)
-    return re.search(r"\btest\b", predicate) is not None
+    return re.search(r"\btest\b", _without_negations(predicate)) is not None
 
 # Crate enums whose spec schema exists under a different name. Without these the
 # pair never meets: `shared` is an intersection of names, so an enum this crate

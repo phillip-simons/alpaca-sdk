@@ -22,6 +22,7 @@ import contextlib
 import importlib.util
 import io
 import pathlib
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -202,6 +203,35 @@ class TestCfgTestExclusion(TreeTest):
 
         self.assertEqual(sorted(self.enums()), ["Shipping"])
 
+    def test_a_nested_negation_is_not_excluded(self) -> None:
+        """`not(all(test, …))` holds a paren pair a flat regex stopped at.
+
+        It left a bare `test` behind and marked a module that ships everywhere
+        *except* under test as test-only — dropping shipping code silently.
+        """
+        self.write(
+            "src/lib.rs",
+            '#[cfg(not(all(test, feature = "x")))]\nmod shipping {\n'
+            + wire_enum("Shipping", {"Live": "live"})
+            + "}\n",
+        )
+
+        self.assertEqual(sorted(self.enums()), ["Shipping"])
+
+    def test_is_test_cfg_classifies_each_shape(self) -> None:
+        """Asserted directly, so a shape with no fixture is still pinned."""
+        for attribute, expected in (
+            ("#[cfg(test)]", True),
+            ('#[cfg(all(test, feature = "trading"))]', True),
+            ('#[cfg(any(test, feature = "x"))]', True),
+            ("#[cfg(not(test))]", False),
+            ('#[cfg(not(all(test, feature = "x")))]', False),
+            ('#[cfg(feature = "test-utils")]', False),
+            ('#[cfg(feature = "trading")]', False),
+        ):
+            with self.subTest(attribute=attribute):
+                self.assertEqual(self.script.is_test_cfg(attribute), expected)
+
     def test_a_cfg_test_on_something_else_does_not_reach_a_later_mod(self) -> None:
         """The attribute applies to the next item, not to the next `mod`.
 
@@ -309,6 +339,25 @@ class TestCollisions(TreeTest):
         self.assertEqual(self.collisions(), [])
         self.assertEqual(sorted(self.enums()), ["OrderStatus"])
 
+    def test_an_ordinary_pub_enum_is_not_in_the_report_at_all(self) -> None:
+        """A `pub enum` with no `Variant => "wire"` arms is not a wire enum.
+
+        Deliberately under a name no `wire_enum!` shares: where the two collide
+        the filter's effect is invisible, since the name is in the report
+        either way. Without it the real crate's headline reads 137 rather than
+        118, and the uncompared catalogue fills with types that never cross the
+        wire — several of which share a name with a real spec schema, so one
+        gaining an `enum:` list would report a non-wire type as missing every
+        value Alpaca documents.
+        """
+        self.write("src/a.rs", wire_enum("Shipping", {"Live": "live"}))
+        self.write(
+            "src/b.rs",
+            "pub enum Credentials {\n    Key(String),\n    None,\n}\n",
+        )
+
+        self.assertEqual(sorted(self.enums()), ["Shipping"])
+
     def test_two_declarations_in_one_file_still_collide(self) -> None:
         """No same-file exemption: they merge just as invisibly."""
         self.write(
@@ -348,6 +397,35 @@ class TestCollisions(TreeTest):
 
 
 class TestVariantParsing(TreeTest):
+    def test_a_brace_in_an_ordinary_string_does_not_break_the_count(self) -> None:
+        """The plain-string sibling of the raw-string case.
+
+        This one fails loudly rather than miscounting — an unbalanced depth
+        raises — but the exclusion is only as good as the blanking under it.
+        """
+        self.write(
+            "src/lib.rs",
+            wire_enum("Shipping", {"Live": "live"})
+            + '\n#[cfg(test)]\nmod tests {\n    let s = "a lone { brace";\n'
+            + wire_enum("TestOnly", {"A": "a"})
+            + "}\n",
+        )
+
+        self.assertEqual(sorted(self.enums()), ["Shipping"])
+
+    def test_a_block_closed_on_one_line_still_declares_its_enum(self) -> None:
+        """`    }}` never matches the closing-brace reset, so the block ends at EOF."""
+        self.write(
+            "src/a.rs",
+            'wire_enum! {\n    pub enum Shared {\n        A => "a",\n    }}\n',
+        )
+        self.write(
+            "src/b.rs",
+            'wire_enum! {\n    pub enum Shared {\n        B => "b",\n    }}\n',
+        )
+
+        self.assertEqual([name for name, _ in self.collisions()], ["Shared"])
+
     def test_a_final_variant_without_a_comma_is_read(self) -> None:
         """`wire_enum!` ends its list with `),+ $(,)?`, so the comma is optional.
 
@@ -620,18 +698,26 @@ class TestNotesStopPrinting(TreeTest):
         self.assertIn("ARG_AR_CUIT is not a de-documented value", out)
 
     def test_an_unresolved_note_stops_once_the_spec_adopts_the_spelling(self) -> None:
-        """Then the pair is resolved and there is nothing left to explain."""
+        """Then the pair is resolved and there is nothing left to explain.
+
+        The enum keeps a *different* gap, so it still reaches the missing list
+        and the note still has somewhere to print. Dropping the gap instead
+        would take the whole entry out of the report and the guard would go
+        unexercised — the note would be absent either way.
+        """
         self.write("src/lib.rs", self.satisfy_guards())
         self.write_spec(
             "trading.yaml",
             schema("TradeUpdateEventType", ["fill"])
-            + schema("TaxIdType", ["ARG_AR_CUIT"])
+            + schema("TaxIdType", ["ARG_AR_CUIT", "SOMETHING_ELSE"])
             + schema("OrderClass", ["simple"]),
         )
 
         code, out, _ = self.run_main()
 
         self.assertEqual(code, 0)
+        # Still reported, so the note had a gap to attach itself to.
+        self.assertIn("SOMETHING_ELSE", out)
         self.assertNotIn("note: the crate carries", out)
         self.assertNotIn("is not a de-documented value", out)
 
@@ -667,6 +753,25 @@ class TestReportShape(TreeTest):
         self.assertIn("Colour  <- merged vocabulary; surplus not checked", out)
         # The untrustworthy half is suppressed, not reported as a finding.
         self.assertNotIn("teal", out)
+
+    def test_an_empty_string_gap_is_named_rather_than_printed_bare(self) -> None:
+        """Alpaca documents `simple (or "")` for OrderClass, so it is a real value.
+
+        Printed bare it looks like a blank line rather than a finding. Under a
+        different enum here, because `DECIDED` suppresses the `OrderClass` one
+        before it reaches the missing list.
+        """
+        self.write("src/lib.rs", self.base + wire_enum("Shape", {"Round": "round"}))
+        self.write_spec(
+            "trading.yaml",
+            self.guarded_spec()
+            + '    Shape:\n      enum:\n        - round\n        - ""\n',
+        )
+
+        code, out, _ = self.run_main()
+
+        self.assertEqual(code, 0)
+        self.assertIn('"" (the empty string)', out)
 
     def test_an_unreadable_schema_is_not_called_missing(self) -> None:
         """"Add the pair to ALIASES" is a no-op when the name already matches."""
@@ -706,6 +811,53 @@ class TestReportShape(TreeTest):
             "2 flagged = 4 compared",
             out,
         )
+
+
+class TestTheRunner(unittest.TestCase):
+    """The guard that exists because `unittest discover` passes on nothing.
+
+    Tested by running it, since its whole subject is what the exit code says
+    when there is nothing to say.
+    """
+
+    RUNNER = pathlib.Path(__file__).resolve().parent / "run.py"
+
+    def test_an_empty_directory_is_a_failure_not_a_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as empty:
+            copied = pathlib.Path(empty) / "run.py"
+            copied.write_bytes(self.RUNNER.read_bytes())
+
+            finished = subprocess.run(
+                [sys.executable, str(copied)], capture_output=True, text=True
+            )
+
+        self.assertEqual(finished.returncode, 1)
+        self.assertIn("no tests discovered", finished.stderr)
+
+    def test_a_directory_with_tests_in_it_runs_them(self) -> None:
+        """Deliberately a throwaway suite, not the real one.
+
+        Pointing the runner at this directory would have it discover the test
+        you are reading and recurse.
+        """
+        with tempfile.TemporaryDirectory() as somewhere:
+            here = pathlib.Path(somewhere)
+            (here / "run.py").write_bytes(self.RUNNER.read_bytes())
+            (here / "test_stub.py").write_text(
+                "import unittest\n\n\n"
+                "class Stub(unittest.TestCase):\n"
+                "    def test_passes(self):\n"
+                "        self.assertTrue(True)\n"
+            )
+
+            finished = subprocess.run(
+                [sys.executable, str(here / "run.py")],
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(finished.returncode, 0, finished.stderr)
+        self.assertIn("Ran 1 test", finished.stderr)
 
 
 class TestMissingDirectories(TreeTest):
