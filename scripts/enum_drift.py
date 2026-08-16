@@ -379,6 +379,17 @@ def spec_enums(
                 declared.add(name)
                 continue
 
+            # Any other key at schema depth ends the current schema, even one
+            # this pattern cannot read — a hyphen or a dot in the name, or an
+            # inline `Foo: {}`. Leaving `name` pointing at the previous schema
+            # would file the next `enum:` under the wrong one, which is worse
+            # than not reading it: a value list attributed to a neighbour can
+            # manufacture a disagreement that does not exist. The vendored
+            # specs have no such key today; this is so that stays harmless.
+            if re.match(r"^    \S", line):
+                name, collecting = None, False
+                continue
+
             if name and re.match(r"^      enum:\s*$", line):
                 collecting = True
                 occurrences.setdefault(name, []).append((spec.name, set()))

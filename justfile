@@ -90,8 +90,11 @@ test-one *args:
 # reached a commit before it had any tests.
 #
 # `unittest`, not pytest: no Python dependency belongs in a Rust crate's gate.
+#
+# Through `run.py` rather than `unittest discover` directly, because discover
+# exits 0 having found nothing. See the module docstring.
 test-scripts:
-    python3 -m unittest discover -s scripts/tests
+    python3 scripts/tests/run.py
 
 # Auto-fix what is mechanically fixable, then show what is left.
 fix:

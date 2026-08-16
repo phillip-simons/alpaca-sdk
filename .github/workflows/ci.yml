@@ -354,7 +354,11 @@ jobs:
       # No `setup-python`, and no requirements file: the suite is stdlib
       # `unittest` on the runner's own interpreter, which is the same promise
       # the scripts themselves make to a contributor.
-      - run: python3 -m unittest discover -s scripts/tests -v
+      #
+      # `run.py`, not `unittest discover`: discover exits 0 when it finds
+      # nothing, so a renamed file would leave this job green having run none
+      # of the suite.
+      - run: python3 scripts/tests/run.py
 
   # The single required status check.
   #

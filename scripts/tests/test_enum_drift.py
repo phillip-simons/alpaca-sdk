@@ -202,6 +202,22 @@ class TestCfgTestExclusion(TreeTest):
 
         self.assertEqual(sorted(self.enums()), ["Shipping"])
 
+    def test_a_cfg_test_on_something_else_does_not_reach_a_later_mod(self) -> None:
+        """The attribute applies to the next item, not to the next `mod`.
+
+        Without a reset, a `#[cfg(test)]` on any other item would arm the skip
+        and swallow whatever module came next — an undercount, the direction
+        this script treats as the worse error.
+        """
+        self.write(
+            "src/lib.rs",
+            "#[cfg(test)]\nfn helper() {}\n\nmod shipping {\n"
+            + wire_enum("Shipping", {"Live": "live"})
+            + "}\n",
+        )
+
+        self.assertEqual(sorted(self.enums()), ["Shipping"])
+
     def test_a_sibling_is_not_excluded_by_a_child_test_module(self) -> None:
         """`src/foo.rs` declaring `mod wallets;` means `src/foo/wallets.rs`.
 
@@ -302,6 +318,34 @@ class TestCollisions(TreeTest):
 
         self.assertEqual([name for name, _ in self.collisions()], ["Shared"])
 
+    def test_a_collided_enum_gets_no_verdict_in_the_report(self) -> None:
+        """The branch's central decision, asserted where a reader would see it.
+
+        Each declaration fills the other's gaps, so comparing the union answers
+        a question nobody asked: the reproduction on this branch was deleting a
+        value from one `TransferDirection` and watching it still report as
+        agreeing exactly. Checking this at `crate_enums` alone left every
+        mutation of the *reporting* path green.
+        """
+        self.write("src/lib.rs", self.satisfy_guards())
+        self.write("src/a.rs", wire_enum("Shared", {"A": "a"}))
+        self.write("src/b.rs", wire_enum("Shared", {"B": "b"}))
+        self.write_spec(
+            "trading.yaml", self.guarded_spec() + schema("Shared", ["a", "b"])
+        )
+
+        code, out, _ = self.run_main()
+
+        self.assertEqual(code, 0)
+        # Named as skipped, and named nowhere that implies a verdict.
+        self.assertIn("Declared more than once", out)
+        self.assertIn("1 of them", out)
+        self.assertNotIn("Shared,", out)
+        self.assertNotIn(" Shared\n", out)
+        for verdict in ("agree exactly: ", "agree apart from"):
+            line = next((l for l in out.splitlines() if verdict in l), "")
+            self.assertNotIn("Shared", line)
+
 
 class TestVariantParsing(TreeTest):
     def test_a_final_variant_without_a_comma_is_read(self) -> None:
@@ -359,6 +403,25 @@ class TestSpecMerging(TreeTest):
         found, _, _ = self.script.spec_enums(self.root / "specs")
 
         self.assertEqual(found["OrderSide"], {"buy", "sell", "short"})
+
+    def test_an_unreadable_schema_key_does_not_capture_the_next_value_list(
+        self,
+    ) -> None:
+        """A key this parser cannot name must not lend its `enum:` to a neighbour.
+
+        Attributing a value list to the wrong schema is worse than skipping it:
+        it can manufacture a disagreement that does not exist.
+        """
+        self.write_spec(
+            "broker.yaml",
+            schema("Colour", ["red"])
+            + "    Odd-Name:\n      enum:\n        - green\n        - blue\n",
+        )
+
+        found, merged, _ = self.script.spec_enums(self.root / "specs")
+
+        self.assertEqual(found["Colour"], {"red"})
+        self.assertEqual(merged, {})
 
     def test_a_schema_without_a_value_list_is_still_declared(self) -> None:
         """The distinction that keeps the coverage claim honest.
@@ -490,6 +553,89 @@ class TestStalenessGuards(TreeTest):
         self.assertIn("recheck", out)
 
 
+class TestNotesStopPrinting(TreeTest):
+    """The quieter half of the staleness contract.
+
+    A guard that fails the run is easy to notice. These entries instead stop
+    printing once the state they describe no longer holds — and a note that
+    keeps printing asserts, on every run, something that has stopped being
+    true.
+    """
+
+    def test_a_crate_only_note_prints_while_the_value_is_still_surplus(self) -> None:
+        self.write("src/lib.rs", self.satisfy_guards())
+        self.write_spec("trading.yaml", self.guarded_spec())
+
+        code, out, _ = self.run_main()
+
+        self.assertEqual(code, 0)
+        self.assertIn("TradeEvent restated: carried deliberately", out)
+
+    def test_a_crate_only_note_stops_once_the_spec_lists_the_value(self) -> None:
+        """Alpaca documenting `restated` ends the disagreement the note describes."""
+        self.write("src/lib.rs", self.satisfy_guards())
+        self.write_spec(
+            "trading.yaml",
+            schema("TradeUpdateEventType", ["fill", "restated"])
+            + schema("TaxIdType", ["ARG_AG_CUIT"])
+            + schema("OrderClass", ["simple"]),
+        )
+
+        code, out, _ = self.run_main()
+
+        self.assertEqual(code, 0)
+        self.assertNotIn("restated: carried deliberately", out)
+
+    def test_a_decided_note_stops_once_the_crate_carries_the_value(self) -> None:
+        self.write(
+            "src/lib.rs",
+            wire_enum(
+                "TradeEvent",
+                {"Restated": "restated", "Held": "held", "Fill": "fill"},
+            )
+            + wire_enum("TaxIdType", {"ArgCuit": "ARG_AR_CUIT"})
+            + wire_enum("Exchange", {"Nyse": "N"})
+            + wire_enum("OrderClass", {"Simple": "simple", "Empty": ""}),
+        )
+        self.write_spec(
+            "trading.yaml",
+            schema("TradeUpdateEventType", ["fill"])
+            + schema("TaxIdType", ["ARG_AG_CUIT"])
+            + schema("OrderClass", ["simple", '""']),
+        )
+
+        code, out, _ = self.run_main()
+
+        self.assertEqual(code, 0)
+        self.assertNotIn("decided against", out)
+
+    def test_an_unresolved_note_prints_against_the_gap_it_explains(self) -> None:
+        self.write("src/lib.rs", self.satisfy_guards())
+        self.write_spec("trading.yaml", self.guarded_spec())
+
+        code, out, _ = self.run_main()
+
+        self.assertEqual(code, 0)
+        self.assertIn("note: the crate carries ARG_AR_CUIT", out)
+        self.assertIn("ARG_AR_CUIT is not a de-documented value", out)
+
+    def test_an_unresolved_note_stops_once_the_spec_adopts_the_spelling(self) -> None:
+        """Then the pair is resolved and there is nothing left to explain."""
+        self.write("src/lib.rs", self.satisfy_guards())
+        self.write_spec(
+            "trading.yaml",
+            schema("TradeUpdateEventType", ["fill"])
+            + schema("TaxIdType", ["ARG_AR_CUIT"])
+            + schema("OrderClass", ["simple"]),
+        )
+
+        code, out, _ = self.run_main()
+
+        self.assertEqual(code, 0)
+        self.assertNotIn("note: the crate carries", out)
+        self.assertNotIn("is not a de-documented value", out)
+
+
 class TestReportShape(TreeTest):
     """What the report says about its own coverage."""
 
@@ -515,7 +661,10 @@ class TestReportShape(TreeTest):
         code, out, _ = self.run_main()
 
         self.assertEqual(code, 0)
-        self.assertIn("merged vocabulary", out)
+        # The marker itself, not the substring "merged vocabulary" — that also
+        # occurs in the "N against a merged vocabulary" summary line, which is
+        # printed on every run and would satisfy the assertion regardless.
+        self.assertIn("Colour  <- merged vocabulary; surplus not checked", out)
         # The untrustworthy half is suppressed, not reported as a finding.
         self.assertNotIn("teal", out)
 
@@ -557,6 +706,28 @@ class TestReportShape(TreeTest):
             "2 flagged = 4 compared",
             out,
         )
+
+
+class TestMissingDirectories(TreeTest):
+    """Neither path is a crash, and neither is a silent pass."""
+
+    def test_a_missing_specs_directory_says_to_fetch_them(self) -> None:
+        self.write("src/lib.rs", self.satisfy_guards())
+        (self.root / "specs").rmdir()
+
+        code, _, err = self.run_main()
+
+        self.assertEqual(code, 1)
+        self.assertIn("just specs", err)
+
+    def test_a_missing_src_directory_says_where_to_run_from(self) -> None:
+        self.write_spec("trading.yaml", self.guarded_spec())
+        (self.root / "src").rmdir()
+
+        code, _, err = self.run_main()
+
+        self.assertEqual(code, 1)
+        self.assertIn("repository root", err)
 
 
 class TestReconciliation(unittest.TestCase):
