@@ -17,6 +17,69 @@ break. Read "The semver call" below before upgrading anyway: one behaviour
 change here is invisible to the compiler, and a `0.1.1` arrives without you
 asking for it.
 
+### Added
+
+- **A setter for every optional field on every request type** — 473 of them,
+  across 119 types. `GetOrdersRequest` had fourteen filters and a setter for
+  none of them; `OrderRequest` had twelve; `UpdatableIdentity` had twenty-one.
+
+  ```rust
+  let orders = client
+      .get_orders(
+          GetOrdersRequest::default()
+              .status(QueryOrderStatus::Open)
+              .limit(50)
+              .symbols(vec!["AAPL".to_owned()]),
+      )
+      .await?;
+  ```
+
+  **The assignment form still works, and always will.** These types are
+  `#[non_exhaustive]` with public fields, so nothing was ever unbuildable:
+
+  ```rust
+  let mut request = GetOrdersRequest::default();
+  request.status = Some(QueryOrderStatus::Open);
+  request.limit = Some(50);
+  ```
+
+  Both build the same request — `tests/integration/request_construction.rs`
+  asserts the two serialize identically, because a second way to build a
+  request is only worth having if it is the same request.
+
+  `String` and `Vec<T>` fields take `impl Into<T>`, so `.subtag("desk-7")` works
+  without a `to_owned()`. Everything else takes its type exactly.
+
+  Five fields have no setter and cannot. `GetEventsRequest::since`,
+  `EventStreamRequest::since` and `EstimateOrderRequest::notional` each have a
+  *constructor* of that name already, and two `pub fn` of one name cannot
+  coexist in one impl. `CreateRecipientBankRequest::routing_code` and
+  `routing_code_type` are set together by `routing_code(code, code_type)`, which
+  is the point — a routing code without its scheme is ambiguous. Assignment
+  remains the way to reach those five.
+
+  Purely additive. No signature changed: the 78 setters that already existed
+  were written by hand and are now generated, with the same names, the same
+  parameter types and their own documentation carried over.
+
+### Changed
+
+- **`alpaca-sdk` is now a workspace, and publishes a second crate** —
+  `alpaca-sdk-macros`, holding the `Setters` derive above. A procedural macro
+  cannot live in the crate that uses it, which is the only reason it exists;
+  nothing in it is meant to be named directly, and `alpaca-sdk` pins it with `=`
+  so the two always resolve as the pair they were built as.
+
+  **This costs a caller nothing to compile.** `syn`, `quote` and `proc-macro2`
+  were already in the dependency tree by way of `serde`'s `derive` feature, so
+  cargo unifies them and the only new work is the macros crate's own
+  compilation.
+
+  The alternative was a declarative macro listing each field beside its struct,
+  which needs no second crate — and needs a script to check the list against the
+  struct, because it can fall behind silently. Reading the real fields deletes
+  that class of drift rather than reporting on it.
+
 ### Fixed
 
 - **`TradeEvent` named twelve of the twenty-one documented `trade_updates`

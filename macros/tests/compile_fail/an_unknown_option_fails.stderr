@@ -1,0 +1,5 @@
+error: unknown `setters` option — expected `into`, `skip = "…"` or `doc = "…"`
+ --> tests/compile_fail/an_unknown_option_fails.rs:6:15
+  |
+6 |     #[setters(rename = "max")]
+  |               ^^^^^^

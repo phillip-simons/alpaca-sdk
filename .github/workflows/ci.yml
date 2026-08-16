@@ -40,6 +40,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       coverage_doc: ${{ steps.filter.outputs.coverage_doc }}
       scripts: ${{ steps.filter.outputs.scripts }}
+      setters: ${{ steps.filter.outputs.setters }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -51,6 +52,10 @@ jobs:
               # `fixtures/` counts: the tests read those payloads at runtime.
               # This file counts too — a change to CI should prove itself.
               - 'src/**'
+              # The derive crate. Its output is compiled into every request
+              # type, so a change here is a change to the library even though
+              # nothing under `src/` moved.
+              - 'macros/**'
               - 'tests/**'
               - 'examples/**'
               - 'fixtures/**'
@@ -74,6 +79,20 @@ jobs:
               # break them — and if one ever could, that is a test reaching out
               # of its fixture rather than a reason to widen the filter.
               - 'scripts/**'
+              - '.github/workflows/ci.yml'
+            setters:
+              # Which request types must derive `Setters`. Narrower than `code`
+              # on purpose: `tests/`, `fixtures/` and `examples/` cannot add a
+              # request type, and `macros/` cannot either — a change there
+              # alters what the derive *generates*, which is the compiler's
+              # question and not this report's.
+              #
+              # Distinct from `scripts` above: that one asks whether the Python
+              # still passes its own tests, this one whether `src/` still
+              # satisfies the rule the Python enforces. A change to either can
+              # break the other's answer.
+              - 'src/**'
+              - 'scripts/setters.py'
               - '.github/workflows/ci.yml'
 
   fmt:
@@ -101,7 +120,9 @@ jobs:
           toolchain: stable
           components: clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-      - run: cargo clippy --all-targets --all-features
+      # `--workspace`: `alpaca-sdk-macros` is a second package, and without it
+      # cargo lints the root package alone.
+      - run: cargo clippy --workspace --all-targets --all-features
 
   test:
     name: test (${{ matrix.os }})
@@ -130,7 +151,7 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-      - run: cargo test --all-features
+      - run: cargo test --workspace --all-features
 
   features:
     name: feature combinations
@@ -284,6 +305,30 @@ jobs:
           echo "COVERAGE.md matches what the generator produces from the specs"
           echo "(reference annotations are not checked here — see the comment above)"
 
+  setters:
+    name: every request type derives Setters
+    needs: changes
+    if: needs.changes.outputs.setters == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # No Rust toolchain, and no `just`: `scripts/setters.py` reads `src/` as
+      # text, the same way `scripts/coverage.py` does. The job is a few hundred
+      # milliseconds.
+      #
+      # This is a gate rather than a report, which `just parameters` and `just
+      # enums-drift` deliberately are not. Those two compare this crate against
+      # Alpaca, where a difference may be Alpaca's to resolve and failing on it
+      # would block a pull request on someone else's schedule. This one checks a
+      # rule the repository sets for itself, and the fix is adding one word to a
+      # derive list.
+      #
+      # What it does *not* check is whether each field has a setter.
+      # `#[derive(Setters)]` reads the real field list, so a type that derives
+      # it cannot have a field without one — that half is the compiler's, and it
+      # stays true for a field added by someone who has never seen this file.
+      - run: python3 scripts/setters.py
+
   secret-scan:
     name: no credentials in the tree
     # No `changes` gate and no `if`. Every other job is allowed to skip on a
@@ -377,7 +422,21 @@ jobs:
   # failure here, not a skip that protection would accept.
   gate:
     name: all checks
-    needs: [changes, fmt, clippy, test, features, msrv, deny, docs, coverage-doc, secret-scan, scripts]
+    needs:
+      [
+        changes,
+        fmt,
+        clippy,
+        test,
+        features,
+        msrv,
+        deny,
+        docs,
+        coverage-doc,
+        scripts,
+        setters,
+        secret-scan,
+      ]
     if: always()
     runs-on: ubuntu-latest
     steps:

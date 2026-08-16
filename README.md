@@ -175,7 +175,21 @@ The decisions a caller actually runs into, and why each one is the way it is.
   `get_all_x` walks every page, with an optional cap.
 - **Request structs are `#[non_exhaustive]`.** Build one with the constructor
   the type provides — `new`, `default`, or a named one like the
-  `OrderRequest::limit` in the example above — and assign fields:
+  `OrderRequest::limit` in the example above — then chain a setter per optional
+  field. Every one of them has one.
+
+  ```rust,no_run
+  use alpaca_sdk::trading::{GetOrdersRequest, QueryOrderStatus};
+
+  let filter = GetOrdersRequest::default()
+      .status(QueryOrderStatus::Open)
+      .limit(50)
+      .symbols(vec!["AAPL".to_owned()]);
+  ```
+
+  The fields are public, so assigning them still works and always will — it is
+  the fallback rather than the idiom, and it is how you reach the handful of
+  fields whose name a constructor already holds:
 
   ```rust,no_run
   use alpaca_sdk::trading::GetOrdersRequest;

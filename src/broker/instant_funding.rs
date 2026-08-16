@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::broker::settlements::TransmitterInfo;
+use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -201,11 +202,12 @@ pub struct InstantFundingReport {
 }
 
 /// Filters for listing instant funding requests.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetInstantFundingRequest {
     /// Only requests in this state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Only requests in this state.")]
     pub status: Option<InstantFundingStatus>,
     /// Only requests booked on this business day.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -235,13 +237,6 @@ impl GetInstantFundingRequest {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Only requests in this state.
-    #[must_use]
-    pub fn status(mut self, status: InstantFundingStatus) -> Self {
-        self.status = Some(status);
-        self
     }
 
     /// Sorts the results.
@@ -320,13 +315,14 @@ impl SettlementTransfer {
 }
 
 /// A request to settle one or more advances.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateInstantFundingSettlementRequest {
     /// The advances to settle.
     pub transfers: Vec<SettlementTransfer>,
     /// Free-form notes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub additional_info: Option<String>,
 }
 
@@ -356,11 +352,12 @@ impl CreateInstantFundingSettlementRequest {
 }
 
 /// Filters for the instant funding report.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetInstantFundingReportRequest {
     /// Which report to run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub report_type: Option<String>,
     /// The business day to report on.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -1,0 +1,5 @@
+error: `into` and `skip` contradict each other: the field either takes a setter or it does not
+ --> tests/compile_fail/into_with_skip_fails.rs:6:15
+  |
+6 |     #[setters(into, skip = "a constructor holds the name")]
+  |               ^^^^

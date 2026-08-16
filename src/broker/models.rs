@@ -23,9 +23,10 @@ use crate::broker::enums::{
 };
 use crate::trading::AccountStatus;
 use crate::types::serde_util::empty_string_as_none;
+use crate::types::setters::Setters;
 
 /// How to reach the account holder.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct Contact {
     /// Primary email address.
@@ -36,6 +37,7 @@ pub struct Contact {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub phone_number: Option<String>,
     /// Street address lines.
     #[serde(
@@ -49,6 +51,7 @@ pub struct Contact {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub unit: Option<String>,
     /// City.
     #[serde(
@@ -56,6 +59,7 @@ pub struct Contact {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub city: Option<String>,
     /// State or province.
     #[serde(
@@ -63,6 +67,7 @@ pub struct Contact {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub state: Option<String>,
     /// Postal code.
     #[serde(
@@ -70,6 +75,7 @@ pub struct Contact {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub postal_code: Option<String>,
     /// Country.
     #[serde(
@@ -77,11 +83,12 @@ pub struct Contact {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub country: Option<String>,
 }
 
 /// Who the account holder is.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct Identity {
     /// Given name.
@@ -92,6 +99,7 @@ pub struct Identity {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub middle_name: Option<String>,
     /// Family name.
     pub family_name: String,
@@ -108,6 +116,7 @@ pub struct Identity {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub tax_id: Option<String>,
     /// Which national scheme the tax id belongs to.
     #[serde(
@@ -122,6 +131,7 @@ pub struct Identity {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub country_of_citizenship: Option<String>,
     /// Country of birth.
     #[serde(
@@ -129,6 +139,7 @@ pub struct Identity {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub country_of_birth: Option<String>,
     /// Country of tax residence.
     #[serde(
@@ -136,6 +147,7 @@ pub struct Identity {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub country_of_tax_residence: Option<String>,
     /// Where the account's funds come from.
     #[serde(
@@ -212,7 +224,7 @@ pub struct Identity {
 }
 
 /// Regulatory disclosures about the account holder.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct Disclosures {
     /// Whether the holder controls a public company.
@@ -253,6 +265,7 @@ pub struct Disclosures {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub employer_name: Option<String>,
     /// Employer address.
     #[serde(
@@ -260,6 +273,7 @@ pub struct Disclosures {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub employer_address: Option<String>,
     /// Employment position.
     #[serde(
@@ -267,11 +281,12 @@ pub struct Disclosures {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub employment_position: Option<String>,
 }
 
 /// An agreement the account holder signed.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct Agreement {
     /// Which agreement was signed.
@@ -284,6 +299,7 @@ pub struct Agreement {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub ip_address: Option<String>,
     /// The agreement revision.
     #[serde(
@@ -291,6 +307,7 @@ pub struct Agreement {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub revision: Option<String>,
 }
 
@@ -333,7 +350,7 @@ pub struct AccountDocument {
 }
 
 /// Someone to contact about the account other than the holder.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct TrustedContact {
     /// Given name.
@@ -342,6 +359,7 @@ pub struct TrustedContact {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub given_name: Option<String>,
     /// Family name.
     #[serde(
@@ -349,6 +367,7 @@ pub struct TrustedContact {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub family_name: Option<String>,
     /// Email address.
     #[serde(
@@ -356,6 +375,7 @@ pub struct TrustedContact {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub email_address: Option<String>,
     /// Phone number.
     #[serde(
@@ -363,6 +383,7 @@ pub struct TrustedContact {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub phone_number: Option<String>,
     /// Street address.
     #[serde(
@@ -370,6 +391,7 @@ pub struct TrustedContact {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub street_address: Option<String>,
     /// City.
     #[serde(
@@ -377,6 +399,7 @@ pub struct TrustedContact {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub city: Option<String>,
     /// State.
     #[serde(
@@ -384,6 +407,7 @@ pub struct TrustedContact {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub state: Option<String>,
     /// Postal code.
     #[serde(
@@ -391,6 +415,7 @@ pub struct TrustedContact {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub postal_code: Option<String>,
     /// Country.
     #[serde(
@@ -398,6 +423,7 @@ pub struct TrustedContact {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub country: Option<String>,
 }
 
@@ -405,7 +431,7 @@ pub struct TrustedContact {
 ///
 /// The per-check payloads vary by provider and are not modelled; they are kept
 /// as raw JSON rather than guessed at.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct KycResults {
     /// Checks that rejected.
@@ -419,9 +445,11 @@ pub struct KycResults {
     pub indeterminate: Option<Value>,
     /// Free-text detail.
     #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[setters(into)]
     pub additional_information: Option<String>,
     /// The overall verdict.
     #[serde(default, deserialize_with = "empty_string_as_none")]
+    #[setters(into)]
     pub summary: Option<String>,
 }
 
@@ -785,7 +813,7 @@ pub struct TradeDocument {
 /// and it has eleven required fields — so a constructor taking all of them would
 /// be a row of interchangeable `String`s, which is a worse hazard than the one
 /// the attribute prevents. A caller fills it in as a struct literal.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 pub struct W8BenDocument {
     /// The country the applicant is a citizen of.
     pub country_citizen: String,
@@ -811,39 +839,50 @@ pub struct W8BenDocument {
     pub timestamp: DateTime<Utc>,
     /// Any additional conditions claimed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub additional_conditions: Option<String>,
     /// The applicant's tax id in their home country.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub foreign_tax_id: Option<String>,
     /// Set when neither tax id is supplied.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ftin_not_required: Option<bool>,
     /// The type of income claimed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub income_type: Option<String>,
     /// Mailing address: city and state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub mailing_address_city_state: Option<String>,
     /// Mailing address: country.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub mailing_address_country: Option<String>,
     /// Mailing address: street.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub mailing_address_street: Option<String>,
     /// The treaty paragraph claimed under.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub paragraph_number: Option<String>,
     /// The withholding rate claimed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub percent_rate_withholding: Option<String>,
     /// A reference number for the form.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub reference_number: Option<String>,
     /// The applicant's country of residency.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub residency: Option<String>,
     /// The applicant's US tax id or SSN.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub tax_id_ssn: Option<String>,
 }
 
@@ -874,7 +913,7 @@ impl W8BenDocument {
 /// exactly as sent — editing a server's own numbers on the way in is worse than
 /// the inconsistency — and a `percent` assigned directly to the field is the
 /// caller's to round.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct Weight {
     /// Whether this line is cash or a security.
@@ -886,6 +925,7 @@ pub struct Weight {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub symbol: Option<String>,
     /// The share of the portfolio, as a percentage.
     ///
@@ -1007,7 +1047,7 @@ impl<'de> Deserialize<'de> for RebalancingSubType {
 }
 
 /// When a portfolio should be rebalanced.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct RebalancingCondition {
     /// Whether the trigger is drift or the calendar.
@@ -1028,6 +1068,7 @@ pub struct RebalancingCondition {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(into)]
     pub day: Option<String>,
 }
 
@@ -1778,7 +1819,7 @@ impl CIPWatchlist {
 /// 404 for the CIP routes, so no fixture exists and none of these models has
 /// ever met a real payload. They follow the broker spec. Treat a
 /// decode failure here as a bug report rather than a surprise.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CIPInfo {
     /// Alpaca's id for the record.

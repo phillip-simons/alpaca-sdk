@@ -14,6 +14,7 @@
 //! payloads exist to model these from, so [`BrokerEvent::json`] deserializes it
 //! into a type of the caller's choosing rather than into a guess.
 
+use crate::types::setters::Setters;
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -41,7 +42,7 @@ pub type BrokerEvent = crate::sse::Event;
 ///
 /// The derived `Serialize` uses the v2 spelling. The client does not use it —
 /// it builds the query itself, because it knows which stream it is calling.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetEventsRequest {
     /// Resume after this event id.
@@ -49,9 +50,12 @@ pub struct GetEventsRequest {
     /// Accepted by the account status, non-trading activity, and journal
     /// streams. The trade and funding streams take only the cursor pair.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub id: Option<String>,
     /// Only events on or after this date.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(skip = "`GetEventsRequest::since(NaiveDate)` is a constructor, \
+                      and two `pub fn` of one name cannot share an impl")]
     pub since: Option<NaiveDate>,
     /// Only events on or before this date.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -60,12 +64,14 @@ pub struct GetEventsRequest {
     ///
     /// Sent as `since_ulid` to the v1 streams and `since_id` to the v2 ones.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub since_id: Option<String>,
     /// Only events up to this ULID.
     ///
     /// Sent as `until_ulid` to the v1 streams and `until_id` to the v2 ones.
     /// Alpaca requires the lower bound whenever this is set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub until_id: Option<String>,
     /// Only activities sharing this sibling-relationship id.
     ///

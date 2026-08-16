@@ -15,6 +15,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -137,7 +138,7 @@ impl OAuthRequest {
 }
 
 /// Filters for looking up a registered client.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetOAuthClientRequest {
     /// Which flow the app intends to use.
@@ -145,9 +146,11 @@ pub struct GetOAuthClientRequest {
     pub response_type: Option<OAuthResponseType>,
     /// The redirect it intends to use.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub redirect_uri: Option<String>,
     /// The scope it intends to ask for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub scope: Option<String>,
 }
 

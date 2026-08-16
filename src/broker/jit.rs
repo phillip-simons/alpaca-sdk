@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::broker::settlements::{SettlementAssetClass, TransmitterInfo};
 use crate::types::SupportedCurrencies;
+use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -346,7 +347,7 @@ pub struct JitReportDownload {
 }
 
 /// Filters for a JIT report.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetJitReportRequest {
     /// Which report to run.
@@ -355,9 +356,11 @@ pub struct GetJitReportRequest {
     pub system_date: NaiveDate,
     /// Which book to report on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Restricts the report to one book.")]
     pub asset_class: Option<SettlementAssetClass>,
     /// Whether to serve the report or a link to it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Asks for a link rather than the report itself.")]
     pub response_type: Option<JitResponseType>,
 }
 
@@ -375,24 +378,10 @@ impl GetJitReportRequest {
             response_type: None,
         }
     }
-
-    /// Restricts the report to one book.
-    #[must_use]
-    pub fn asset_class(mut self, asset_class: SettlementAssetClass) -> Self {
-        self.asset_class = Some(asset_class);
-        self
-    }
-
-    /// Asks for a link rather than the report itself.
-    #[must_use]
-    pub fn response_type(mut self, response_type: JitResponseType) -> Self {
-        self.response_type = Some(response_type);
-        self
-    }
 }
 
 /// A window over a ledger's balances.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetJitBalancesRequest {
     /// The first day.
@@ -453,7 +442,7 @@ impl JitSettlementAccount {
 }
 
 /// A request to settle a day's JIT obligation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateJitSettlementRequest {
     /// The accounts to settle.
@@ -464,6 +453,7 @@ pub struct CreateJitSettlementRequest {
     pub currency: crate::types::SupportedCurrencies,
     /// Free-form notes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub additional_info: Option<String>,
 }
 

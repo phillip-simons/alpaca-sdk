@@ -1,0 +1,5 @@
+error: Setters needs named fields — a setter is named after the field it writes, and a tuple struct has no such name
+ --> tests/compile_fail/a_tuple_struct_fails.rs:4:19
+  |
+4 | pub struct Request(Option<u32>, Option<String>);
+  |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

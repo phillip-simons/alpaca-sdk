@@ -10,6 +10,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
+use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -118,20 +119,23 @@ pub struct IpoOfferingResponse {
 }
 
 /// Filters for listing offerings.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetIpoOfferingsRequest {
     /// Only offerings in this state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Only offerings in this state.")]
     pub availability: Option<IpoAvailability>,
     /// Only this ticker.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into, doc = "Only this ticker.")]
     pub ticker: Option<String>,
     /// How many to return.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
     /// The token from a previous page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub page_token: Option<String>,
 }
 
@@ -140,20 +144,6 @@ impl GetIpoOfferingsRequest {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Only offerings in this state.
-    #[must_use]
-    pub fn availability(mut self, availability: IpoAvailability) -> Self {
-        self.availability = Some(availability);
-        self
-    }
-
-    /// Only this ticker.
-    #[must_use]
-    pub fn ticker(mut self, ticker: impl Into<String>) -> Self {
-        self.ticker = Some(ticker.into());
-        self
     }
 }
 

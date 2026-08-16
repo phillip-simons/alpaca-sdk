@@ -29,8 +29,13 @@ default: check
 # push and pull request, and branch protection means a miss costs a fixup push
 # rather than a broken `main`.
 #
+# `setters` is in here and `parameters`/`enums-drift` are not, for the reason
+# given at that recipe: it needs no downloaded specs, runs in well under a
+# second, and reports a rule this repository can always satisfy rather than a
+# difference with Alpaca that it cannot.
+#
 # The gate. Run before every commit.
-check: fmt-check clippy doc test test-scripts
+check: fmt-check clippy doc test test-scripts setters
 
 # Rewrite formatting in place.
 fmt:
@@ -41,8 +46,13 @@ fmt-check:
     cargo fmt --all -- --check
 
 # Lint every target and feature, warnings denied.
+#
+# `--workspace` because this is a workspace now: `alpaca-sdk-macros` is a second
+# package, and without it cargo lints the root package alone. A proc-macro crate
+# is exactly the kind that wants linting — its output is invisible at the call
+# site, so a warning in it is a warning nobody sees.
 clippy:
-    cargo clippy --all-targets --all-features -- -D warnings
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 # Build the docs with rustdoc lints denied.
 doc:
@@ -74,7 +84,13 @@ doc-open:
 test:
     # Deliberately no `--all-targets`: adding it silently drops the Doc-tests
     # pass — the doctests still compile, and stop ever being run.
-    cargo test --all-features --locked
+    #
+    # `--workspace` picks up `alpaca-sdk-macros`, whose tests include the
+    # trybuild compile-fail cases. Those pin rustc's and syn's diagnostic
+    # wording, so a toolchain bump can redden them on a change that had nothing
+    # to do with it. Regenerate rather than hand-edit:
+    #     TRYBUILD=overwrite cargo test -p alpaca-sdk-macros --test compile_fail
+    cargo test --workspace --all-features --locked
 
 # Run a subset by name, e.g. `just test-one mleg` or `just test-one decimal`.
 test-one *args:
@@ -270,6 +286,27 @@ cov-open:
 parameters:
     python3 scripts/parameters.py
 
+# Which optional request fields a caller can only reach by assignment.
+#
+# `just parameters` asks whether the crate can send a documented parameter at
+# all; this asks whether it is pleasant to. Every request type is
+# `#[non_exhaustive]` with public fields, so a missing setter is never a compile
+# error, never a failing test, and never visible in the diff that adds the
+# field. `GetOrdersRequest` shipped 0.1.0 with fourteen filters and no setter
+# for any of them inside exactly that silence.
+#
+# A gate, unlike `parameters` and `enums-drift`, and it can be one because the
+# derive makes the fix a single word. Those two report a difference from an
+# outside source that may be Alpaca's to resolve; this one reports a rule this
+# repository sets for itself and can always satisfy.
+#
+# It does not check that each *field* has a setter — `#[derive(Setters)]` reads
+# the real field list, so that half is the compiler's, and stays true for a
+# field added by someone who never read the script. What is left is the question
+# a derive cannot ask about itself: which types should be deriving it.
+setters:
+    python3 scripts/setters.py
+
 
 # ---------------------------------------------------------------------------
 # Live API
@@ -300,6 +337,9 @@ live:
 # ---------------------------------------------------------------------------
 
 # List exactly what `cargo publish` would upload.
+#
+# The root package only. `alpaca-sdk-macros` is a separate tarball with three
+# files in it, and nothing about its contents has ever been in question.
 package:
     # Checks the `exclude` list in Cargo.toml before a release rather than
     # after. --allow-dirty because this is for inspection mid-change; the real
@@ -308,4 +348,10 @@ package:
 
 # Full pre-release verification, without publishing.
 publish-dry: ci semver
-    cargo publish --dry-run --locked
+    # `--workspace`, because publishing is now two crates. Cargo packages both,
+    # resolves `alpaca-sdk`'s dependency on the not-yet-published
+    # `alpaca-sdk-macros` out of a temporary registry it builds from the local
+    # tarball, verifies each, and orders the uploads. Publishing them one at a
+    # time in a script would need the macros crate to already be on crates.io
+    # before the SDK could even be verified.
+    cargo publish --workspace --dry-run --locked

@@ -10,6 +10,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -156,11 +157,12 @@ impl RequestOptionsApprovalRequest {
 }
 
 /// Filters for listing options approval requests.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetOptionsApprovalsRequest {
     /// Only this account.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Only this account.")]
     pub account_id: Option<Uuid>,
     /// Only requests for this level.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -176,6 +178,7 @@ pub struct GetOptionsApprovalsRequest {
     pub page_size: Option<u32>,
     /// The token from a previous page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub page_token: Option<String>,
 }
 
@@ -184,13 +187,6 @@ impl GetOptionsApprovalsRequest {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Only this account.
-    #[must_use]
-    pub fn account_id(mut self, account_id: Uuid) -> Self {
-        self.account_id = Some(account_id);
-        self
     }
 }
 
@@ -204,19 +200,21 @@ pub struct OnfidoToken {
 }
 
 /// Filters for an Onfido SDK token.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetOnfidoTokenRequest {
     /// The origin the SDK will run on, which Onfido checks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub referrer: Option<String>,
     /// Which platform the SDK is running on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub platform: Option<String>,
 }
 
 /// What Onfido's SDK concluded, reported back to Alpaca.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct UpdateOnfidoOutcomeRequest {
     /// The token the verification ran under.
@@ -225,6 +223,7 @@ pub struct UpdateOnfidoOutcomeRequest {
     pub outcome: String,
     /// Why, where there is a reason.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into, doc = "Adds a reason.")]
     pub reason: Option<String>,
 }
 
@@ -237,13 +236,6 @@ impl UpdateOnfidoOutcomeRequest {
             outcome: outcome.into(),
             reason: None,
         }
-    }
-
-    /// Adds a reason.
-    #[must_use]
-    pub fn reason(mut self, reason: impl Into<String>) -> Self {
-        self.reason = Some(reason.into());
-        self
     }
 }
 
@@ -323,11 +315,12 @@ pub struct TradingLimits {
 }
 
 /// A hypothetical order, to be costed rather than placed.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct EstimateOrderRequest {
     /// The symbol.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub symbol: Option<String>,
     /// How much to spend, rather than how many shares.
     #[serde(
@@ -335,6 +328,9 @@ pub struct EstimateOrderRequest {
         skip_serializing_if = "Option::is_none",
         with = "crate::types::option_decimal"
     )]
+    #[setters(skip = "`EstimateOrderRequest::notional(symbol, notional, side)` \
+                      is a constructor, and two `pub fn` of one name cannot \
+                      share an impl")]
     pub notional: Option<Decimal>,
     /// Which side.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -23,6 +23,7 @@ use crate::trading::enums::{
 };
 use crate::types::ContractType;
 use crate::types::serde_util::empty_string_as_none;
+use crate::types::setters::Setters;
 
 /// A tradable security.
 ///
@@ -742,7 +743,7 @@ pub struct TradeAccount {
 /// change what you mean to change, and send it back. A constructor would invite
 /// building one from nothing and silently resetting every setting it did not
 /// name.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct AccountConfiguration {
     /// Day Trade Buying Power check.
