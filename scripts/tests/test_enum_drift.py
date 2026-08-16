@@ -218,6 +218,28 @@ class TestCfgTestExclusion(TreeTest):
 
         self.assertEqual(sorted(self.enums()), ["Shipping"])
 
+    def test_a_visibility_qualified_test_module_is_excluded(self) -> None:
+        """`pub mod` and `pub(crate) mod` are accepted shapes; pin them."""
+        for declaration in ("pub mod", "pub(crate) mod"):
+            with self.subTest(declaration=declaration):
+                self.setUp()
+                self.write(
+                    "src/lib.rs",
+                    wire_enum("Shipping", {"Live": "live"})
+                    + f"\n#[cfg(test)]\n{declaration} tests {{\n"
+                    + wire_enum("TestOnly", {"A": "a"})
+                    + "}\n",
+                )
+
+                self.assertEqual(sorted(self.enums()), ["Shipping"])
+
+    def test_a_visibility_qualified_test_file_module_is_excluded(self) -> None:
+        self.write("src/types/mod.rs", "#[cfg(test)]\npub(crate) mod wire_tests;\n")
+        self.write("src/types/wire_tests.rs", wire_enum("Side", {"Buy": "buy"}))
+        self.write("src/lib.rs", wire_enum("Shipping", {"Live": "live"}))
+
+        self.assertEqual(sorted(self.enums()), ["Shipping"])
+
     def test_is_test_cfg_classifies_each_shape(self) -> None:
         """Asserted directly, so a shape with no fixture is still pinned."""
         for attribute, expected in (
@@ -231,6 +253,23 @@ class TestCfgTestExclusion(TreeTest):
         ):
             with self.subTest(attribute=attribute):
                 self.assertEqual(self.script.is_test_cfg(attribute), expected)
+
+    def test_the_skip_ends_when_the_test_module_closes(self) -> None:
+        """A skip that never ends is an undercount, and reads as a clean run.
+
+        The raw-string case pins that the region must not end *early*; this
+        pins that it ends at all. Not live only because test modules sit at
+        the end of a file by convention.
+        """
+        self.write(
+            "src/lib.rs",
+            "#[cfg(test)]\nmod tests {\n"
+            + wire_enum("TestOnly", {"A": "a"})
+            + "}\n\n"
+            + wire_enum("Shipping", {"Live": "live"}),
+        )
+
+        self.assertEqual(sorted(self.enums()), ["Shipping"])
 
     def test_a_cfg_test_on_something_else_does_not_reach_a_later_mod(self) -> None:
         """The attribute applies to the next item, not to the next `mod`.
@@ -339,6 +378,34 @@ class TestCollisions(TreeTest):
         self.assertEqual(self.collisions(), [])
         self.assertEqual(sorted(self.enums()), ["OrderStatus"])
 
+    def test_a_one_line_valueless_enum_is_not_a_collision(self) -> None:
+        """The multi-line decoy resets through the closing-brace path.
+
+        A one-line `pub enum Foo { Bar }` never reaches it, so it exercises the
+        `carried` guard on the end-of-file path instead — where a manufactured
+        collision would cost a real wire enum its verdict.
+        """
+        self.write("src/a.rs", wire_enum("OrderStatus", {"New": "new"}))
+        self.write("src/b.rs", "pub enum OrderStatus { Whatever }\n")
+
+        self.assertEqual(self.collisions(), [])
+        self.assertEqual(sorted(self.enums()), ["OrderStatus"])
+
+    def test_repeated_one_line_valueless_enums_are_not_a_collision(self) -> None:
+        """Two of them in one file, which is what reaches the *declaration* path.
+
+        A single one only exercises the end-of-file flush; the second
+        declaration is what makes the guard on the first path observable.
+        """
+        self.write("src/a.rs", wire_enum("OrderStatus", {"New": "new"}))
+        self.write(
+            "src/b.rs",
+            "pub enum OrderStatus { Whatever }\npub enum OrderStatus { Another }\n",
+        )
+
+        self.assertEqual(self.collisions(), [])
+        self.assertEqual(sorted(self.enums()), ["OrderStatus"])
+
     def test_an_ordinary_pub_enum_is_not_in_the_report_at_all(self) -> None:
         """A `pub enum` with no `Variant => "wire"` arms is not a wire enum.
 
@@ -412,6 +479,30 @@ class TestVariantParsing(TreeTest):
         )
 
         self.assertEqual(sorted(self.enums()), ["Shipping"])
+
+    def test_a_closing_brace_with_a_comment_still_closes_the_block(self) -> None:
+        """Otherwise every later `Ident => "wire",` is filed as one of its values.
+
+        An ordinary match arm elsewhere in the file has that shape.
+        """
+        self.write(
+            "src/a.rs",
+            """
+            wire_enum! {
+                pub enum Shipping {
+                    Live => "live",
+                } // closes the enum
+                fn route() {
+                    match x {
+                        Sneaky => "sneaky",
+                    }
+                }
+            }
+            """,
+        )
+
+        # Not `["live", "sneaky"]`: the match arm is not one of its values.
+        self.assertEqual(self.enums()["Shipping"], ["live"])
 
     def test_a_block_closed_on_one_line_still_declares_its_enum(self) -> None:
         """`    }}` never matches the closing-brace reset, so the block ends at EOF."""
@@ -721,6 +812,37 @@ class TestNotesStopPrinting(TreeTest):
         self.assertNotIn("note: the crate carries", out)
         self.assertNotIn("is not a de-documented value", out)
 
+    def test_the_surplus_side_note_stops_on_its_own_terms(self) -> None:
+        """The `extra` block's guard, which the missing-side test cannot reach.
+
+        Adopting the spelling empties the surplus too, so that test proves
+        nothing here. `TaxIdType` keeps a second, unrelated surplus value so
+        the block still prints and the note still has somewhere to go.
+        """
+        self.write(
+            "src/lib.rs",
+            wire_enum(
+                "TradeEvent",
+                {"Restated": "restated", "Held": "held", "Fill": "fill"},
+            )
+            + wire_enum("TaxIdType", {"ArgCuit": "ARG_AR_CUIT", "Other": "OTHER"})
+            + wire_enum("Exchange", {"Nyse": "N"})
+            + wire_enum("OrderClass", {"Simple": "simple"}),
+        )
+        self.write_spec(
+            "trading.yaml",
+            schema("TradeUpdateEventType", ["fill"])
+            + schema("TaxIdType", ["ARG_AR_CUIT"])
+            + schema("OrderClass", ["simple"]),
+        )
+
+        code, out, _ = self.run_main()
+
+        self.assertEqual(code, 0)
+        # The block prints, for the value that really is still surplus.
+        self.assertIn("TaxIdType: OTHER", out)
+        self.assertNotIn("is not a de-documented value", out)
+
 
 class TestReportShape(TreeTest):
     """What the report says about its own coverage."""
@@ -754,6 +876,31 @@ class TestReportShape(TreeTest):
         # The untrustworthy half is suppressed, not reported as a finding.
         self.assertNotIn("teal", out)
 
+    def test_a_decided_value_is_suppressed_from_the_gap_list(self) -> None:
+        """The map's entire purpose, and the fixture had been hiding it.
+
+        `guarded_spec` gives `OrderClass` exactly what the crate carries, so no
+        `DECIDED` value was ever both in the spec and absent from the crate —
+        the one state the suppression exists for. With the empty string in the
+        schema, `OrderClass` must stay out of the gap list and be counted as
+        agreeing apart from values recorded below.
+        """
+        self.write("src/lib.rs", self.base)
+        self.write_spec(
+            "trading.yaml",
+            schema("TradeUpdateEventType", ["fill"])
+            + schema("TaxIdType", ["ARG_AG_CUIT"])
+            + '    OrderClass:\n      enum:\n        - simple\n        - ""\n',
+        )
+
+        code, out, _ = self.run_main()
+
+        self.assertEqual(code, 0)
+        self.assertIn("agree apart from values recorded below: OrderClass", out)
+        self.assertIn('OrderClass "": decided against', out)
+        gaps = out.split("In the spec, not in the crate")[-1]
+        self.assertNotIn("OrderClass", gaps)
+
     def test_an_empty_string_gap_is_named_rather_than_printed_bare(self) -> None:
         """Alpaca documents `simple (or "")` for OrderClass, so it is a real value.
 
@@ -785,7 +932,47 @@ class TestReportShape(TreeTest):
         code, out, _ = self.run_main()
 
         self.assertEqual(code, 0)
-        self.assertIn("carries no value list", out)
+        self.assertIn("1 has a schema of that", out)
+        self.assertIn("no value list this report can read", out)
+        self.assertIn("CIPProvider (1 values)", out)
+
+    def test_an_enum_with_no_schema_is_catalogued_and_counted(self) -> None:
+        """The larger half of the coverage statement, and it had no assertion.
+
+        "The report now lists what it could not check" is the headline claim;
+        the block making it was deletable with the suite still green.
+        """
+        self.write(
+            "src/lib.rs",
+            self.base
+            + wire_enum("Unknowable", {"A": "a", "B": "b"})
+            + wire_enum("AlsoUnknowable", {"C": "c"}),
+        )
+        self.write_spec("trading.yaml", self.guarded_spec())
+
+        code, out, _ = self.run_main()
+
+        self.assertEqual(code, 0)
+        self.assertIn("3 with no spec schema found", out)
+        self.assertIn("Unknowable (2 values)", out)
+        self.assertIn("AlsoUnknowable (1 values)", out)
+        self.assertIn("Exchange (1 values)", out)
+
+    def test_a_collided_name_is_counted_by_distinct_values(self) -> None:
+        """Both declarations accumulate under one key, so a raw length doubles.
+
+        A wrong count, in a report whose subject is counts being wrong.
+        """
+        self.write("src/lib.rs", self.base)
+        self.write("src/a.rs", wire_enum("Shared", {"A": "a", "B": "b"}))
+        self.write("src/b.rs", wire_enum("Shared", {"A2": "a", "C": "c"}))
+        self.write_spec("trading.yaml", self.guarded_spec())
+
+        code, out, _ = self.run_main()
+
+        self.assertEqual(code, 0)
+        # Three distinct wire values across the two declarations, not four.
+        self.assertIn("Shared (3 values) — and declared more than once", out)
 
     def test_the_printed_buckets_are_the_actual_bucket_sizes(self) -> None:
         """Asserted as numbers, not as the presence of the word "compared".

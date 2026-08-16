@@ -327,7 +327,11 @@ def crate_enums(
                     if variant:
                         enums[current].append(variant.group(2))
                         carried += 1
-                    elif re.match(r"^\s*\}\s*$", line):
+                    # `code`, not `line`: a closing brace with a trailing
+                    # comment would otherwise leave the block open, and every
+                    # later `Ident => "wire",` in the file — an ordinary match
+                    # arm, say — would be filed as one of its values.
+                    elif re.match(r"^\s*\}\s*$", code):
                         if carried:
                             declared_in.setdefault(current, []).append(rs)
                         current, carried = None, 0
@@ -821,19 +825,23 @@ def main() -> int:
             print(f"  {name} ({len(set(crate[name]))} values){dup}")
 
     if absent:
-        print("\nNo spec schema found — this report says nothing about these.")
-        print("Not a clean bill of health: an enum here is unverified, not")
-        print("verified-and-agreeing. If one of these does have a schema under")
-        print("another name, add the pair to ALIASES and it starts being checked.\n")
+        # Counted, like the compared side. A reader should not have to tally
+        # the list to learn how much of the crate this report is silent about,
+        # and the CHANGELOG quotes numbers the report itself would not state.
+        print(f"\n{len(absent)} with no spec schema found — this report says")
+        print("nothing about these. Not a clean bill of health: an enum here is")
+        print("unverified, not verified-and-agreeing. If one does have a schema")
+        print("under another name, an ALIASES pair starts it being checked.\n")
         catalogue(absent)
 
     if unreadable:
-        print("\nA schema of this name exists, but carries no value list this")
-        print("report can read — the values are in its `description` prose, or")
-        print("on one of its properties. Also unverified, and aliasing will not")
-        print("help: the name already matches. Closing one of these means")
-        print("comparing it by hand, or teaching the parser to follow a")
-        print("property.\n")
+        one = len(unreadable) == 1
+        print(f"\n{len(unreadable)} {'has' if one else 'have'} a schema of that")
+        print("name carrying no value list this report can read — the values")
+        print("are in its `description` prose, or on one of its properties.")
+        print("Also unverified, and aliasing will not help: the name already")
+        print("matches. Closing one means comparing it by hand, or teaching")
+        print("the parser to follow a property.\n")
         catalogue(unreadable)
 
     # Every compared enum lands in exactly one bucket, so they have to add back
