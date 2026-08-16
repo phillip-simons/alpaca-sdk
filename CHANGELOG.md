@@ -21,7 +21,8 @@ asking for it.
 
 - **A setter for every optional field on every request type** — 473 of them,
   across 119 types. `GetOrdersRequest` had fourteen filters and a setter for
-  none of them; `OrderRequest` had twelve; `UpdatableIdentity` had twenty-one.
+  none of them; `UpdatableIdentity` had twenty-one and none; `OrderRequest` had
+  fifteen optional fields and setters for three of them.
 
   ```rust
   let orders = client
@@ -50,17 +51,34 @@ asking for it.
   `String` and `Vec<T>` fields take `impl Into<T>`, so `.subtag("desk-7")` works
   without a `to_owned()`. Everything else takes its type exactly.
 
-  Five fields have no setter and cannot. `GetEventsRequest::since`,
-  `EventStreamRequest::since` and `EstimateOrderRequest::notional` each have a
-  *constructor* of that name already, and two `pub fn` of one name cannot
-  coexist in one impl. `CreateRecipientBankRequest::routing_code` and
-  `routing_code_type` are set together by `routing_code(code, code_type)`, which
-  is the point — a routing code without its scheme is ambiguous. Assignment
-  remains the way to reach those five.
+  Eleven fields have no setter, deliberately, and assignment remains the way to
+  reach them. Three because a *constructor* already holds the name and two
+  `pub fn` of one name cannot coexist in one impl:
+  `GetEventsRequest::since`, `EventStreamRequest::since` and
+  `EstimateOrderRequest::notional`.
 
-  Purely additive. No signature changed: the 78 setters that already existed
-  were written by hand and are now generated, with the same names, the same
-  parameter types and their own documentation carried over.
+  The other eight because one setter writes them as a group, and offering one
+  per field would make an incoherent request easy to build by accident.
+  `OrderRequest`'s `qty` and `notional` are `OrderAmount`, which exists so that
+  "both at once" cannot be expressed — and `OrderRequest::validate` does not
+  reject it, precisely because the type made it unreachable. Its `order_class`,
+  `take_profit`, `stop_loss` and `legs` belong to `bracket`, `oco`,
+  `oto_take_profit`, `oto_stop_loss` and `multi_leg`; an exit leg with no order
+  class passes `validate` and is not a bracket, it is a plain order with a
+  field Alpaca ignores. `CreateRecipientBankRequest`'s `routing_code` and
+  `routing_code_type` go together because a routing code without its scheme is
+  ambiguous.
+
+  Purely additive. The 78 setters that already existed were written by hand and
+  are now generated, keeping their names, their documentation and their
+  behaviour. Nine *widened*, from `Vec<T>` to `impl Into<Vec<T>>` —
+  `GetUsCorporatesRequest::{cusips, tickers}`,
+  `GetAggregatePositionsRequest::symbols`, `GetSettlementsRequest::statuses`,
+  `CorporateActionEventsRequest::types`, `NewsRequest::symbols`,
+  `CorporateActionsRequest::{symbols, types}` and
+  `UpdateWatchlistRequest::symbols` — which accepts everything it accepted
+  before and arrays besides. Nothing narrowed, and `cargo semver-checks` agrees
+  there is no break.
 
 ### Changed
 

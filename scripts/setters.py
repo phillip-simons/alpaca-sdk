@@ -41,11 +41,15 @@ nothing still reads as a decision.
 
 # What it does not check
 
-Fields carrying `#[setters(skip = "…")]`. Three do, each because a constructor
-already holds the name and two `pub fn` of one name cannot coexist in one impl.
+Fields carrying `#[setters(skip = "…")]`, which fall into two kinds. Either a
+constructor already holds the name, and two `pub fn` of one name cannot coexist
+in one impl; or the field is only coherent set alongside another, and one setter
+writes the group — `OrderAmount`'s `qty`/`notional`, a bracket's class and its
+legs, a routing code and its scheme.
+
 The reason lives in the source next to the field, and the derive refuses a skip
-without one, so there is nothing for a list here to add. They are printed so
-they stay visible rather than becoming invisible by being handled.
+without one, so there is nothing for a list here to add. They are printed on
+every run so they stay visible rather than becoming invisible by being handled.
 
 Usage:
     python3 scripts/setters.py [--src src] [--report]
@@ -58,12 +62,31 @@ import pathlib
 import re
 import sys
 
-# `pub struct Name {`, at the start of a line.
-STRUCT_DECL = re.compile(r"^pub struct (\w+) \{")
+# `pub struct Name {`, at the start of a line, with an optional generic
+# parameter list. No request type is generic today; the alternative was a
+# pattern that silently does not match one, which is the failure mode this whole
+# script exists to remove.
+STRUCT_DECL = re.compile(r"^pub struct (\w+)(?:<[^>]*>)?\s*\{")
 
-# `    pub field: Option<T>,`. Only optional fields: a required field is a
-# constructor argument, and the derive leaves it alone.
-OPTION_FIELD = re.compile(r"^    pub (\w+): Option<.+>,$")
+# Anything that starts a `pub` field, matched before its type is known so that a
+# declaration rustfmt wrapped across lines can be rejoined — see `fields`.
+FIELD_START = re.compile(r"^    pub (\w+):")
+
+# A rejoined `pub field: Option<T>,`. Only optional fields: a required field is
+# a constructor argument, and the derive leaves it alone.
+OPTION_FIELD = re.compile(r"^pub (\w+): Option<.+>,$")
+
+# A tuple or unit struct — `pub struct Codes(HashMap<String, String>);`. It has
+# no named fields, so `Setters` has nothing to generate for it and it is out of
+# scope whatever its name. Recognised explicitly rather than left to fall
+# through, so that the check below can be strict about everything else.
+UNNAMED_STRUCT = re.compile(r"^pub struct (\w+)(?:<[^>]*>)?\s*[(;]")
+
+# Lines this script must understand and does not. A `pub struct` it cannot parse
+# is a type that silently drops out of the report, which is the one outcome a
+# gate must not have — so it stops rather than passing. This fired the first
+# time it ran, on the newtype above.
+UNPARSED_STRUCT = re.compile(r"^pub struct\b")
 
 # `Setters` inside a `#[derive(…)]`. Matched against the whole attribute block
 # above a struct, so a derive list rustfmt has split across lines still hits.
@@ -110,22 +133,6 @@ def in_scope(name: str) -> bool:
     return "Request" in name or name in ADDITIONS
 
 
-def attribute_block(lines: list[str], start: int) -> str:
-    """The contiguous run of attribute and doc lines above `start`.
-
-    Items in this crate are separated by a blank line, so walking up until one
-    collects an item's own attributes and never the previous item's. Struct
-    *fields* are not separated that way, which is why they are read downwards
-    instead — see `parse`.
-    """
-    above = []
-    index = start - 1
-    while index >= 0 and lines[index].strip():
-        above.append(lines[index])
-        index -= 1
-    return "\n".join(reversed(above))
-
-
 def unwrap(text: str) -> str:
     """A Rust string literal's line continuations, resolved.
 
@@ -136,46 +143,95 @@ def unwrap(text: str) -> str:
     return re.sub(r"\\\s*\n\s*", "", text).strip()
 
 
+def fields(lines: list[str], start: int) -> tuple[list[str], list[tuple[str, str]], int]:
+    """One struct's optional fields and skips, plus the index of its closing `}`.
+
+    Read downwards, accumulating each field's attributes and clearing them at
+    the field they belong to. Walking *up* from a field cannot work: fields are
+    not separated by blank lines, so the run above one reaches back through
+    every field before it, and a `skip` on the first would be read as sitting on
+    all of them.
+
+    A declaration rustfmt wrapped across lines is rejoined before it is
+    classified. Matching one line at a time read `pub some_very_long_name:` as a
+    *required* field — the type it was looking for was on the next line — so the
+    field vanished from the count and its type vanished from the report, in the
+    silent direction.
+    """
+    optional: list[str] = []
+    skipped: list[tuple[str, str]] = []
+    pending: list[str] = []
+
+    index = start + 1
+    while index < len(lines) and lines[index] != "}":
+        if not FIELD_START.match(lines[index]):
+            pending.append(lines[index])
+            index += 1
+            continue
+
+        parts = [lines[index].strip()]
+        while not parts[-1].endswith(",") and index + 1 < len(lines):
+            index += 1
+            if lines[index] == "}":  # an unterminated declaration; stop here
+                break
+            parts.append(lines[index].strip())
+        declaration = " ".join(parts)
+
+        found = OPTION_FIELD.match(declaration)
+        if found:
+            optional.append(found.group(1))
+            skip = SKIP_ATTR.search("\n".join(pending))
+            if skip:
+                skipped.append((found.group(1), unwrap(skip.group(1))))
+        pending = []
+        index += 1
+
+    return optional, skipped, index
+
+
 def parse(path: pathlib.Path) -> dict[str, tuple[bool, list[str], list[tuple[str, str]]]]:
     """Every struct in one file, as `{name: (derives, optional, skipped)}`.
 
     `skipped` pairs a field name with the reason recorded on it.
+
+    One downward pass, carrying the attribute lines seen since the last item
+    boundary. An earlier version walked *upwards* from each `pub struct` until a
+    blank line, on the reasoning that items here are blank-line separated — but
+    two that are not merge, and the second is then credited with the first's
+    `#[derive(Setters)]`. That is a gate reporting coverage it did not find,
+    which is the one way for this script to be worse than not existing.
     """
     found: dict[str, tuple[bool, list[str], list[tuple[str, str]]]] = {}
     lines = path.read_text().splitlines()
+    pending: list[str] = []
 
-    for index, line in enumerate(lines):
-        declaration = STRUCT_DECL.match(line)
-        if not declaration:
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+
+        # An item boundary: a blank line, or the `}` that closes the last one.
+        if not line.strip() or line == "}":
+            pending = []
+            index += 1
             continue
 
-        name = declaration.group(1)
-        derives = bool(DERIVES_SETTERS.search(attribute_block(lines, index)))
+        declaration = STRUCT_DECL.match(line)
+        if not declaration:
+            if UNPARSED_STRUCT.match(line) and not UNNAMED_STRUCT.match(line):
+                raise SyntaxError(
+                    f"{path}:{index + 1}: cannot parse `{line.strip()}` — this "
+                    f"script decides which types need `Setters`, so a struct it "
+                    f"cannot read is one it would silently pass. Teach it the "
+                    f"shape rather than letting it skip."
+                )
+            pending.append(line)
+            index += 1
+            continue
 
-        # Read downwards, accumulating each field's attributes and clearing them
-        # at the field they belong to. Walking *up* from a field cannot work:
-        # fields are not separated by blank lines, so the run above one field
-        # reaches back through every field before it, and a `skip` on the first
-        # would be read as sitting on all of them.
-        optional: list[str] = []
-        skipped: list[tuple[str, str]] = []
-        pending: list[str] = []
-        body = index + 1
-        while body < len(lines) and lines[body] != "}":
-            field = OPTION_FIELD.match(lines[body])
-            if field:
-                optional.append(field.group(1))
-                skip = SKIP_ATTR.search("\n".join(pending))
-                if skip:
-                    skipped.append((field.group(1), unwrap(skip.group(1))))
-                pending = []
-            elif re.match(r"^    pub \w+:", lines[body]):
-                pending = []  # a required field, whose attributes end here too
-            else:
-                pending.append(lines[body])
-            body += 1
-
-        found[name] = (derives, optional, skipped)
+        derives = bool(DERIVES_SETTERS.search("\n".join(pending)))
+        optional, skipped, index = fields(lines, index)
+        found[declaration.group(1)] = (derives, optional, skipped)
+        pending = []
 
     return found
 

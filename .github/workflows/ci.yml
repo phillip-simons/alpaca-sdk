@@ -224,7 +224,11 @@ jobs:
         with:
           toolchain: nightly
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-      - run: cargo doc --all-features --no-deps
+      # `--workspace`: `alpaca-sdk-macros` is published too, so its rustdoc
+      # lands on docs.rs and has to build under denied warnings like anything
+      # else. The per-surface builds below stay single-package — they are about
+      # this crate's feature gating, and the macros crate has no features.
+      - run: cargo doc --workspace --all-features --no-deps
       # And once per surface. An intra-doc link that crosses a feature boundary
       # resolves under --all-features and dangles everywhere else, so the
       # all-features build above cannot see it. This moved out of `just check`,

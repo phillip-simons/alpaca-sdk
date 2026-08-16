@@ -1,0 +1,5 @@
+error: `doc` documents a setter, and `skip` says there is none — if the prose is worth keeping, it belongs on the field
+ --> tests/compile_fail/doc_with_skip_fails.rs:6:54
+  |
+6 |     #[setters(skip = "a constructor holds the name", doc = "Sets the symbol.")]
+  |                                                      ^^^

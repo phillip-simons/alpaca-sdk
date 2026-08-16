@@ -108,6 +108,9 @@ struct Options {
     skip: Option<(String, proc_macro2::Span)>,
     /// Documentation to use in place of the field's own, one entry per line.
     doc: Vec<String>,
+    /// The span of the first `doc`, kept so a misplaced one can be reported at
+    /// itself rather than at the field.
+    doc_span: Option<proc_macro2::Span>,
 }
 
 fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
@@ -153,18 +156,31 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                      takes a setter or it does not",
                 ));
             }
+            if let Some(doc) = options.doc_span {
+                return Err(syn::Error::new(
+                    doc,
+                    "`doc` documents a setter, and `skip` says there is none — \
+                     if the prose is worth keeping, it belongs on the field",
+                ));
+            }
             continue;
         }
 
+        // `into` and `doc` on a required field configure a setter that is never
+        // generated, which is worse than doing nothing: it looks configured.
         let Some(inner) = optional else {
-            // `into` and `doc` on a required field configure a setter that is
-            // never generated, which is worse than doing nothing: it looks
-            // configured.
             if let Some(into) = options.into {
                 return Err(syn::Error::new(
                     into,
                     "`into` applies to an `Option` field — this one is required, \
                      so it belongs in the constructor rather than in a setter",
+                ));
+            }
+            if let Some(doc) = options.doc_span {
+                return Err(syn::Error::new(
+                    doc,
+                    "`doc` documents a setter, and a required field gets none — \
+                     it is a constructor argument, so document it on the field",
                 ));
             }
             continue;
@@ -247,6 +263,7 @@ fn parse_options(attrs: &[Attribute]) -> syn::Result<Options> {
             if meta.path.is_ident("doc") {
                 let text: LitStr = meta.value()?.parse()?;
                 options.doc.push(text.value());
+                options.doc_span.get_or_insert(meta.path.span());
                 return Ok(());
             }
             Err(meta.error(

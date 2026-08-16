@@ -176,7 +176,7 @@ The decisions a caller actually runs into, and why each one is the way it is.
 - **Request structs are `#[non_exhaustive]`.** Build one with the constructor
   the type provides — `new`, `default`, or a named one like the
   `OrderRequest::limit` in the example above — then chain a setter per optional
-  field. Every one of them has one.
+  field. Nearly all of them have one.
 
   ```rust,no_run
   use alpaca_sdk::trading::{GetOrdersRequest, QueryOrderStatus};
@@ -188,8 +188,11 @@ The decisions a caller actually runs into, and why each one is the way it is.
   ```
 
   The fields are public, so assigning them still works and always will — it is
-  the fallback rather than the idiom, and it is how you reach the handful of
-  fields whose name a constructor already holds:
+  the fallback rather than the idiom, and it is how you reach the few fields
+  that have no setter: those whose name a constructor already holds, and those
+  that only mean anything set alongside another, where one setter writes the
+  group. `OrderRequest::bracket` takes both exit legs for that reason, and
+  `OrderAmount` is why there is no `.qty()` beside a `.notional()`.
 
   ```rust,no_run
   use alpaca_sdk::trading::GetOrdersRequest;

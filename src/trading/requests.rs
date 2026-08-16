@@ -223,6 +223,9 @@ pub struct OrderRequest {
         skip_serializing_if = "Option::is_none",
         with = "crate::types::option_decimal"
     )]
+    #[setters(skip = "one of `qty` and `notional`, never both — which is what \
+                      `OrderAmount` exists to make unrepresentable, and every \
+                      constructor takes one")]
     pub qty: Option<Decimal>,
     /// Dollar value to trade.
     #[serde(
@@ -230,6 +233,9 @@ pub struct OrderRequest {
         skip_serializing_if = "Option::is_none",
         with = "crate::types::option_decimal"
     )]
+    #[setters(skip = "the other half of `OrderAmount`; a setter for each would \
+                      let a caller send both, which `validate` does not catch \
+                      because the type made it unreachable")]
     pub notional: Option<Decimal>,
     /// Whether the order buys or sells. Required for every class except mleg.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -241,6 +247,10 @@ pub struct OrderRequest {
     pub time_in_force: TimeInForce,
     /// The order class.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(skip = "set with the legs it governs, by `bracket`, `oco`, \
+                      `oto_take_profit`, `oto_stop_loss` or `multi_leg` — a \
+                      class naming legs that are not there is what `validate` \
+                      rejects")]
     pub order_class: Option<OrderClass>,
     /// Whether the order may execute outside regular trading hours.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -252,13 +262,21 @@ pub struct OrderRequest {
     pub client_order_id: Option<String>,
     /// The legs of a multi-leg option order.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(into)]
+    #[setters(skip = "set with the `mleg` class by `multi_leg`; legs without \
+                      that class are sent as an ordinary single-leg order and \
+                      silently ignored")]
     pub legs: Option<Vec<OptionLegRequest>>,
     /// The profit-taking exit, for bracket, OCO, and OTO orders.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(skip = "set with the class that gives it meaning, by `bracket`, \
+                      `oco` or `oto_take_profit` — an exit leg with no order \
+                      class passes `validate` and is not a bracket")]
     pub take_profit: Option<TakeProfitRequest>,
     /// The loss-limiting exit, for bracket, OCO, and OTO orders.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(skip = "set with the class that gives it meaning, by `bracket`, \
+                      `oco` or `oto_stop_loss` — the sibling of `take_profit`, \
+                      and skipped for the same reason")]
     pub stop_loss: Option<StopLossRequest>,
     /// The desired position strategy.
     #[serde(default, skip_serializing_if = "Option::is_none")]

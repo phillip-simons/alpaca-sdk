@@ -3,8 +3,9 @@
 //! The derive itself lives in `alpaca-sdk-macros`, because a procedural macro
 //! cannot live in the crate that uses it. This module is where the *convention*
 //! is written down, and it re-exports the derive so call sites say
-//! `use crate::types::Setters;` rather than naming the macro crate — which is
-//! an implementation detail, pinned with `=` and published in lockstep.
+//! `use crate::types::setters::Setters;` rather than naming the macro crate —
+//! which is an implementation detail, pinned with `=` and published in
+//! lockstep, and which no call site should have to know about.
 //!
 //! # The convention
 //!
@@ -34,14 +35,27 @@
 //!
 //! # Which fields take no setter
 //!
-//! Five, each with `#[setters(skip = "…")]` saying what already holds the name.
-//! Three are constructors — `GetEventsRequest::since`,
-//! `EventStreamRequest::since`, `EstimateOrderRequest::notional` — and two
-//! `pub fn` of one name cannot coexist in one impl. The other two are
-//! `CreateRecipientBankRequest::routing_code` and `routing_code_type`, which
-//! one setter writes together because a routing code without its scheme is
-//! ambiguous. Facts about the types rather than oversights, and the reason sits
-//! next to the field where it stays arguable.
+//! Those carrying `#[setters(skip = "…")]`, which are of two kinds. `just
+//! setters` lists them on every run, with the reason each gives for itself.
+//!
+//! **A constructor already holds the name.** `GetEventsRequest::since`,
+//! `EventStreamRequest::since` and `EstimateOrderRequest::notional`; two
+//! `pub fn` of one name cannot coexist in one impl, so this is a fact about the
+//! type rather than a decision.
+//!
+//! **The field is only coherent set alongside another**, and one setter writes
+//! the group. `OrderRequest`'s `qty` and `notional` are `OrderAmount`, which
+//! exists to make "both at once" unrepresentable — and `validate` does not
+//! catch it, precisely because the type made it unreachable. Its `order_class`,
+//! `take_profit`, `stop_loss` and `legs` are written by `bracket`, `oco`,
+//! `oto_take_profit`, `oto_stop_loss` and `multi_leg`; an exit leg with no
+//! order class passes `validate` and is not a bracket.
+//! `CreateRecipientBankRequest`'s `routing_code` and `routing_code_type` go
+//! together because a routing code without its scheme is ambiguous.
+//!
+//! The test is not "could a caller misuse this" — the fields are public, so
+//! they always could. It is whether the incoherent state is one the API
+//! *offers*, in a documented method a reader would reasonably take as blessed.
 //!
 //! # Documentation
 //!

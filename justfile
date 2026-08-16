@@ -59,7 +59,14 @@ doc:
     # These lints only fire here — clippy does not run rustdoc, so without this
     # recipe `missing_docs` and the intra-doc link lints are decoration. This one
     # is in `check` because any doc edit can trip it.
-    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --locked
+    #
+    # `--workspace` for the same reason `clippy` has it, and it is easier to get
+    # wrong here: `alpaca-sdk-macros` is a *published* crate whose rustdoc lands
+    # on docs.rs, and without this nothing in `just check`, `just ci` or CI ever
+    # builds it under denied warnings. `doc-surfaces` below stays single-package
+    # deliberately — it is about this crate's feature gating, and the macros
+    # crate has no features to gate.
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --locked
 
 # An intra-doc link that crosses a feature boundary resolves under
 # --all-features and dangles everywhere else, so the all-features build alone

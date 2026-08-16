@@ -58,10 +58,13 @@ just doc-docsrs   # RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc �
 On a change that touches no Rust — documentation, issue templates, this file —
 CI skips those jobs. They still report as skipped, which counts as satisfied, so
 the pull request is not left waiting on checks that will never run. Editing
-anything under `src/`, `tests/`, `examples/`, `fixtures/`, `Cargo.toml`,
-`Cargo.lock`, `build.rs`, `deny.toml` or `ci.yml` brings the whole matrix back.
-`scripts/` has its own job on its own filter, so a change to the Python runs the
-script tests without dragging the Rust matrix along with it.
+anything under `src/`, `macros/`, `tests/`, `examples/`, `fixtures/`,
+`Cargo.toml`, `Cargo.lock`, `build.rs`, `deny.toml` or `ci.yml` brings the whole
+matrix back. `macros/` counts because the derive it holds is compiled into every
+request type, so a change there is a change to the library even though nothing
+under `src/` moved. `scripts/` has its own job on its own filter, so a change to
+the Python runs the script tests without dragging the Rust matrix along with
+it.
 
 The minimum supported Rust version is **1.88**. Enabling `polars` raises it to
 1.95, which is why that feature is off by default — a convenience feature does
@@ -172,10 +175,19 @@ doing when it found it.
     and the method should read as an action. The derive uses the field's
     documentation otherwise, and refuses to generate a setter for a field with
     none.
-  - `#[setters(skip = "why")]` where a setter cannot exist — five fields, each
-    because a constructor already holds the name and two `pub fn` of one name
-    cannot coexist in one impl. The reason is required, so a skip is never
-    mistakable for an oversight.
+  - `#[setters(skip = "why")]` where a setter should not exist. Two kinds: a
+    constructor already holds the name, or the field is only coherent set
+    alongside another and one setter writes the group — `OrderAmount`'s
+    `qty`/`notional`, a bracket's class and its legs. The reason is required, so
+    a skip is never mistakable for an oversight, and `just setters` prints them
+    all on every run.
+
+    The test for the second kind is not "could a caller misuse this" — the
+    fields are public, so they always could. It is whether the incoherent state
+    is one the API *offers*, in a documented method a reader would take as
+    blessed. `OrderRequest::validate` does not reject `qty` and `notional`
+    together, because `OrderAmount` made that unreachable; a setter for each
+    would quietly make it reachable again.
 
   `just setters` names request types that do not derive it, and **fails** if it
   finds one. Unlike `just parameters` and `just enums-drift`, which report a

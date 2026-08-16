@@ -8,10 +8,14 @@
 //!
 //! These messages are load-bearing. A derive that refuses without explaining is
 //! worse than one that has no opinion, because the caller's next move is to
-//! guess — and the four things this derive refuses are all cases where the
+//! guess — and every one of the things this derive refuses is a case where the
 //! obvious guess is wrong. `#[setters(skip)]` on a required field is the
-//! sharpest of them: it reads as a settled decision about a real name collision
-//! when the field would never have had a setter either way.
+//! sharpest: it reads as a settled decision about a real name collision when
+//! the field would never have had a setter either way.
+//!
+//! There is one case per refusal in `expand` and `parse_options`, which is what
+//! makes a refusal added without a case here visible — the count of `*_fails.rs`
+//! files and the count of `return Err` sites should move together.
 //!
 //! # Where this runs, and where it deliberately does not
 //!
