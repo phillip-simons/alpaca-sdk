@@ -37,7 +37,16 @@ import sys
 
 # `wire_enum! { … pub enum Name { Variant => "wire", … } }`.
 ENUM_DECL = re.compile(r"^\s*pub enum (\w+) \{", re.M)
-VARIANT = re.compile(r'^\s*(\w+) => "([^"]*)",\s*$')
+# The trailing comma is optional: `wire_enum!` ends its variant list with
+# `),+ $(,)?`, so a block whose last variant omits it compiles fine. Requiring
+# one here dropped that value silently — as a phantom gap if the spec listed it,
+# and as nothing at all if it did not.
+VARIANT = re.compile(r'^\s*(\w+) => "([^"]*)",?\s*$')
+
+# `#[cfg(test)]` on the line before a `mod` — the two shapes it can guard.
+CFG_TEST = re.compile(r"^\s*#\[cfg\(test\)\]\s*$")
+MOD_FILE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod (\w+)\s*;")
+MOD_INLINE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod (\w+)\s*\{")
 
 # Crate enums whose spec schema exists under a different name. Without these the
 # pair never meets: `shared` is an intersection of names, so an enum this crate
@@ -107,9 +116,59 @@ UNRESOLVED: dict[tuple[str, str], str] = {
 }
 
 
+def _code_only(line: str) -> str:
+    """The line with string and char literals blanked and any comment cut.
+
+    Only ever used for counting braces. A test module is full of
+    `format!("{}", …)` and `assert!(matches!(x, Y { .. }))`, and a brace inside
+    a literal would close the skipped region early — which would start counting
+    test declarations again, quietly, exactly the way this whole report fails.
+    """
+    line = re.sub(r'"(?:[^"\\]|\\.)*"', '""', line)
+    line = re.sub(r"'(?:[^'\\]|\\.)'", "''", line)
+    return re.sub(r"//.*$", "", line)
+
+
+def test_only_files(src: pathlib.Path) -> set[pathlib.Path]:
+    """Files whose entire module is `#[cfg(test)]`, so nothing in them ships.
+
+    A stand-in declared to exercise the macro is not a wire enum, and counting
+    one inflates the headline the same way the old `*enums*.rs` glob deflated
+    it — `types/wire_tests.rs` declares a `Side` for exactly that purpose, and
+    widening the glob started reporting it as the crate's.
+
+    Resolved from the declaration site rather than the file, because the
+    attribute sits on `mod wire_tests;` in the parent and leaves no trace
+    inside the file it guards.
+    """
+    excluded: set[pathlib.Path] = set()
+
+    for rs in sorted(src.rglob("*.rs")):
+        lines = rs.read_text().splitlines()
+        for previous, line in zip(lines, lines[1:]):
+            if not CFG_TEST.match(previous):
+                continue
+            declaration = MOD_FILE.match(line)
+            if not declaration:
+                continue
+            name = declaration.group(1)
+            # Both module layouts: `foo/mod.rs` declaring a sibling, and
+            # `foo.rs` declaring a child under `foo/`.
+            for candidate in (
+                rs.parent / f"{name}.rs",
+                rs.parent / name / "mod.rs",
+                rs.parent / rs.stem / f"{name}.rs",
+                rs.parent / rs.stem / name / "mod.rs",
+            ):
+                if candidate.is_file():
+                    excluded.add(candidate)
+
+    return excluded
+
+
 def crate_enums(
     src: pathlib.Path,
-) -> tuple[dict[str, list[str]], list[tuple[str, pathlib.Path, pathlib.Path]]]:
+) -> tuple[dict[str, list[str]], list[tuple[str, list[pathlib.Path]]]]:
     """Every `wire_enum!` in the crate, as `{name: [wire values]}`.
 
     Returns the enums and any name declared by more than one block, since the
@@ -125,45 +184,83 @@ def crate_enums(
     counts described a subset while reading as though they described the crate.
     A `pub enum` that is not a `wire_enum!` has no `Variant => "wire"` arms, so
     it collects no values and the filter below drops it.
+
+    Test code is excluded, both whole `#[cfg(test)]` modules and inline ones.
+    Widening the glob without that traded an undercount for an overcount: a
+    macro stand-in ships to nobody, and a fixture named after a real enum would
+    collide with it and cost that enum its verdict.
     """
+    excluded = test_only_files(src)
     enums: dict[str, list[str]] = {}
-    seen_in: dict[str, pathlib.Path] = {}
-    collisions: list[tuple[str, pathlib.Path, pathlib.Path]] = []
+    # Only the declarations that carried wire values. A collision matters when
+    # two `wire_enum!`s share a name — each fills the other's gaps, so no
+    # verdict is honest. An ordinary valueless `pub enum` that happens to share
+    # one is a different thing entirely, and treating it as a collision would
+    # suppress a real enum's verdict over a name it merely shares: strictly
+    # worse than the narrow glob, which at least compared it.
+    declared_in: dict[str, list[pathlib.Path]] = {}
 
     for rs in sorted(src.rglob("*.rs")):
+        if rs in excluded:
+            continue
         lines = rs.read_text().splitlines()
         current: str | None = None
+        carried = 0
+        depth = 0
+        skip_below: int | None = None
+        pending_cfg_test = False
+
         for line in lines:
-            declaration = ENUM_DECL.match(line)
-            if declaration:
-                current = declaration.group(1)
-                # `setdefault`, never `= []`. Assigning would let a *later*
-                # declaration of the same name wipe an earlier one's values, and
-                # since the glob widened to every `.rs` the names in scope now
-                # include ordinary `pub enum`s — a plain `enum OrderStatus`
-                # anywhere in the tree would silently erase the wire enum of
-                # that name and drop it out of the report entirely, counts and
-                # all, while still exiting 0. Accumulating instead means a
-                # collision can only ever add values, which is visible, and the
-                # collision list below says it happened.
-                # No same-file exemption: two declarations in one file, in
-                # separate inline modules or behind opposing `cfg`s, merge just
-                # as invisibly as two across files.
-                if current in seen_in:
-                    collisions.append((current, seen_in[current], rs))
-                seen_in.setdefault(current, rs)
-                enums.setdefault(current, [])
-                continue
-            if current is None:
-                continue
-            variant = VARIANT.match(line)
-            if variant:
-                enums[current].append(variant.group(2))
-            elif re.match(r"^\s*\}\s*$", line):
-                current = None
-    # Collisions are returned unfiltered. Screening them by whether the name
-    # survived would hide exactly the case worth seeing — a name that collided
-    # with something carrying no wire values, and so vanished from the report.
+            code = _code_only(line)
+
+            if skip_below is None:
+                if CFG_TEST.match(line):
+                    pending_cfg_test = True
+                elif pending_cfg_test and MOD_INLINE.match(code):
+                    skip_below, pending_cfg_test, current, carried = depth, False, None, 0
+                elif line.strip() and not line.lstrip().startswith("#["):
+                    pending_cfg_test = False
+
+            if skip_below is None:
+                declaration = ENUM_DECL.match(line)
+                if declaration:
+                    # `setdefault`, never `= []`. Assigning would let a *later*
+                    # declaration of the same name wipe an earlier one's values,
+                    # and since the glob widened to every `.rs` the names in
+                    # scope now include ordinary `pub enum`s — a plain
+                    # `enum OrderStatus` anywhere in the tree would silently
+                    # erase the wire enum of that name and drop it out of the
+                    # report entirely, counts and all, while still exiting 0.
+                    # Accumulating instead means a collision can only ever add
+                    # values, which is visible and reported below.
+                    if current is not None and carried:
+                        declared_in.setdefault(current, []).append(rs)
+                    current, carried = declaration.group(1), 0
+                    enums.setdefault(current, [])
+                elif current is not None:
+                    variant = VARIANT.match(line)
+                    if variant:
+                        enums[current].append(variant.group(2))
+                        carried += 1
+                    elif re.match(r"^\s*\}\s*$", line):
+                        if carried:
+                            declared_in.setdefault(current, []).append(rs)
+                        current, carried = None, 0
+
+            depth += code.count("{") - code.count("}")
+            if skip_below is not None and depth <= skip_below:
+                skip_below = None
+
+        # A block left open at end of file still declared what it declared.
+        if current is not None and carried:
+            declared_in.setdefault(current, []).append(rs)
+
+    # No same-file exemption: two declarations in one file, in separate inline
+    # modules or behind opposing `cfg`s, merge just as invisibly as two across
+    # files, so the same path is recorded twice and still counts.
+    collisions = [
+        (name, files) for name, files in sorted(declared_in.items()) if len(files) > 1
+    ]
     return {name: values for name, values in enums.items() if values}, collisions
 
 
@@ -186,8 +283,12 @@ def spec_enums(
     different type that happens to live inside this one, and matching it by the
     outer schema's name would compare unrelated things.
     """
-    found: dict[str, set[str]] = {}
-    per_file: dict[str, dict[str, set[str]]] = {}
+    # Every definition separately, not one per file. Two schemas of the same
+    # name inside a single spec merge exactly as invisibly as two across specs,
+    # and the crate side already refuses that same-file exemption — granting it
+    # here would let one `broker.yaml` define `OrderSide` twice and report the
+    # union as a clean verdict.
+    occurrences: dict[str, list[tuple[str, set[str]]]] = {}
 
     for spec in sorted(specs.glob("*.yaml")):
         lines = spec.read_text().splitlines()
@@ -211,20 +312,23 @@ def spec_enums(
 
             if name and re.match(r"^      enum:\s*$", line):
                 collecting = True
-                found.setdefault(name, set())
-                per_file.setdefault(spec.name, {}).setdefault(name, set())
+                occurrences.setdefault(name, []).append((spec.name, set()))
                 continue
 
             if collecting:
                 item = re.match(r"^        - (.*)$", line)
                 if item:
                     value = item.group(1).strip().strip("'\"")
-                    found[name].add(value)
-                    per_file[spec.name][name].add(value)
+                    occurrences[name][-1][1].add(value)
                 else:
                     collecting = False
 
-    # A schema name defined in more than one spec with *different* values is a
+    found = {
+        name: set().union(*(values for _, values in seen))
+        for name, seen in occurrences.items()
+    }
+
+    # A schema name defined more than once with *different* values is a
     # per-surface vocabulary, not one type. Merging them, which is what the
     # return value does, makes the comparison too permissive: a value only
     # `broker.yaml` documents excuses a crate enum built from `trading.yaml`.
@@ -233,10 +337,20 @@ def spec_enums(
     # quieter half of the report. Named here so the verdict can be qualified
     # rather than presented as a clean match.
     merged: dict[str, dict[str, int]] = {}
-    for name in found:
-        defined = {f: e[name] for f, e in per_file.items() if e.get(name)}
-        if len({frozenset(v) for v in defined.values()}) > 1:
-            merged[name] = {f: len(v) for f, v in sorted(defined.items())}
+    for name, seen in occurrences.items():
+        defined = [(label, values) for label, values in seen if values]
+        if len({frozenset(values) for _, values in defined}) <= 1:
+            continue
+        labelled: dict[str, int] = {}
+        for label, values in sorted(defined, key=lambda pair: pair[0]):
+            # Two definitions in one file need distinct labels, or the second
+            # would overwrite the first and the report would show one source
+            # for a disagreement that has two.
+            unique, nth = label, 2
+            while unique in labelled:
+                unique, nth = f"{label} (definition {nth})", nth + 1
+            labelled[unique] = len(values)
+        merged[name] = labelled
 
     return {name: values for name, values in found.items() if values}, merged
 
@@ -290,6 +404,20 @@ def main() -> int:
             )
             return 1
 
+    # Same rule again, and it was the one map this rework left without it. An
+    # UNRESOLVED entry names a spelling the crate carries and the specs do not;
+    # once the crate stops carrying it the note describes nothing, and because
+    # it prints under whichever enum shares its name, it attaches itself to
+    # whatever unrelated gap turns up there next.
+    for enum, ours in sorted(UNRESOLVED):
+        if ours not in crate.get(enum, []):
+            print(
+                f"UNRESOLVED notes {enum} {ours!r}, which this crate no longer "
+                f"carries — drop the entry",
+                file=sys.stderr,
+            )
+            return 1
+
     schema_of = {name: ALIASES.get(name, name) for name in crate}
     shared = sorted(name for name in crate if schema_of[name] in spec)
     unchecked = sorted(name for name in crate if schema_of[name] not in spec)
@@ -300,7 +428,7 @@ def main() -> int:
     # and folding them into one number is how a partial answer starts reading
     # as a whole one.
     skipped = len(
-        [n for n in shared if n in NOT_DRIFT or n in {c[0] for c in collisions}]
+        [n for n in shared if n in NOT_DRIFT or n in {name for name, _ in collisions}]
     )
     print(f"{len(shared)} have a schema to compare against, {skipped} of them")
     print(f"skipped for the reasons below, so {len(shared) - skipped} compared\n")
@@ -309,9 +437,12 @@ def main() -> int:
         print("Declared more than once, so not compared at all. This report is")
         print("keyed by name and cannot hold two types that share one; comparing")
         print("their combined values would let each cover the other's gaps.\n")
-        for name, first, second in collisions:
-            gone = "" if name in crate else "  <- carries no wire values"
-            print(f"  {name}: {first} and {second}{gone}")
+        for name, files in collisions:
+            # Only the ones with a schema were ever going to be compared, so
+            # only those are counted as skipped above. Saying so here stops the
+            # block reading as a contradiction of that count.
+            spare = "" if name in shared else "  <- no spec schema either way"
+            print(f"  {name}: {', '.join(str(f) for f in files)}{spare}")
         print()
 
     agree: list[str] = []
@@ -321,7 +452,7 @@ def main() -> int:
     missing: dict[str, list[str]] = {}
     extra: dict[str, list[str]] = {}
 
-    collided = {name for name, _, _ in collisions}
+    collided = {name for name, _ in collisions}
     # The names that actually reached a comparison. A note explaining why some
     # value is surplus, or why a gap was left open, is a statement about a
     # verdict — printing it for an enum this run declined to compare asserts a
@@ -455,9 +586,12 @@ def main() -> int:
                 shown = value if value else '"" (the empty string)'
                 print(f"    {shown}")
             # Keyed by the crate's spelling, since the whole point of an
-            # unresolved pair is that the two spellings differ.
+            # unresolved pair is that the two spellings differ. Only while the
+            # spelling really is absent from the schema: once Alpaca adopts it
+            # the pair is resolved, and the note would otherwise stay bolted to
+            # whatever other gap this enum develops later.
             for (enum, ours), note in UNRESOLVED.items():
-                if enum == name:
+                if enum == name and ours not in spec[schema_of[name]]:
                     print(f"    note: the crate carries {ours} — {note}")
 
     if extra:
@@ -466,6 +600,14 @@ def main() -> int:
         print("removing one turns a working match arm into an `Unknown`.\n")
         for name, values in sorted(extra.items()):
             print(f"  {name}: {', '.join(values)}")
+            # The heading above is the usual reason a value is crate-only, and
+            # it is the wrong one for an UNRESOLVED pair: a suspected typo is
+            # not a de-documented value, and leaving it under that sentence is
+            # the same mislabelling CRATE_ONLY was added to end for `restated`
+            # and `held`.
+            for (enum, ours), note in UNRESOLVED.items():
+                if enum == name and ours in values:
+                    print(f"    {ours} is not a de-documented value — {note}")
 
     if unchecked:
         print("\nNo spec schema found — this report says nothing about these.")
@@ -477,6 +619,27 @@ def main() -> int:
             # under it, and printing the raw length double-counts.
             dup = " — and declared more than once" if name in collided else ""
             print(f"  {name} ({len(set(crate[name]))} values){dup}")
+
+    # Every compared enum lands in exactly one bucket, so they have to add back
+    # up to the headline. Printing the sum is the cheap half; checking it is the
+    # point. A verdict that quietly stopped being counted is precisely how this
+    # report came to describe less than it appeared to, and a reconciliation
+    # done by hand in a plan file goes stale the first time a branch touches
+    # these branches.
+    flagged = set(missing) | set(extra)
+    buckets = len(agree) + len(excepted) + len(against_merged) + len(flagged)
+    print(
+        f"\n{len(agree)} exact + {len(excepted)} with exceptions + "
+        f"{len(against_merged)} against a merged vocabulary + {len(flagged)} "
+        f"flagged = {buckets} compared"
+    )
+    if buckets != len(compared):
+        print(
+            f"the buckets total {buckets} but {len(compared)} enums were "
+            f"compared — one is being counted twice or not at all",
+            file=sys.stderr,
+        )
+        return 1
 
     return 0
 
