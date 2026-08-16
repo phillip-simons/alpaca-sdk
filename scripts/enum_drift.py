@@ -266,14 +266,18 @@ def crate_enums(
 
 def spec_enums(
     specs: pathlib.Path,
-) -> tuple[dict[str, set[str]], dict[str, dict[str, int]]]:
+) -> tuple[dict[str, set[str]], dict[str, dict[str, int]], set[str]]:
     """Every named schema under `components.schemas` that is a string enum.
 
-    Returns the schemas and, separately, any name that more than one spec
-    defines differently — as `{name: {spec file: value count}}`, so the report
-    can say which surfaces disagreed and by how much. The first value merges
-    those definitions; the second is what lets the verdict be qualified instead
-    of presented as a clean match.
+    Returns three things: the schemas that carry a value list; any name that
+    more than one spec defines differently, as `{name: {spec file: value
+    count}}`, so the report can say which surfaces disagreed and by how much;
+    and every schema name seen at all, value list or not.
+
+    The third is what keeps the coverage claim honest. A crate enum missing
+    from the first has two quite different causes — Alpaca documents no schema
+    of that name, or documents one this parser cannot read a value list out of
+    — and only the first is fixable by aliasing.
 
     Parsed with regexes for the same reason `coverage.py` is: the specs are
     large, the shape needed is shallow, and a YAML dependency for two nested
@@ -289,6 +293,7 @@ def spec_enums(
     # here would let one `broker.yaml` define `OrderSide` twice and report the
     # union as a clean verdict.
     occurrences: dict[str, list[tuple[str, set[str]]]] = {}
+    declared: set[str] = set()
 
     for spec in sorted(specs.glob("*.yaml")):
         lines = spec.read_text().splitlines()
@@ -308,6 +313,7 @@ def spec_enums(
             schema = re.match(r"^    (\w+):\s*$", line)
             if schema:
                 name, collecting = schema.group(1), False
+                declared.add(name)
                 continue
 
             if name and re.match(r"^      enum:\s*$", line):
@@ -352,7 +358,11 @@ def spec_enums(
             labelled[unique] = len(values)
         merged[name] = labelled
 
-    return {name: values for name, values in found.items() if values}, merged
+    return (
+        {name: values for name, values in found.items() if values},
+        merged,
+        declared,
+    )
 
 
 def main() -> int:
@@ -370,7 +380,7 @@ def main() -> int:
         return 1
 
     crate, collisions = crate_enums(args.src)
-    spec, merged_schemas = spec_enums(args.specs)
+    spec, merged_schemas, declared_schemas = spec_enums(args.specs)
 
     # An alias that does not resolve on both sides silently restores the very
     # blindness the map exists to remove: the pair stops being compared and the
@@ -404,6 +414,20 @@ def main() -> int:
             )
             return 1
 
+    # NOT_DRIFT gets no *semantic* guard — no diff confirms that two
+    # vocabularies are unrelated — but whether the key still names an enum is a
+    # different question, and the answer is checkable. A renamed or misspelled
+    # key is silently inert, which is the failure mode every other map here is
+    # now protected from.
+    for enum in sorted(NOT_DRIFT):
+        if enum not in crate:
+            print(
+                f"NOT_DRIFT names {enum}, which is not a wire_enum! in this "
+                f"crate — it was probably renamed; update the key or drop it",
+                file=sys.stderr,
+            )
+            return 1
+
     # Same rule again, and it was the one map this rework left without it. An
     # UNRESOLVED entry names a spelling the crate carries and the specs do not;
     # once the crate stops carrying it the note describes nothing, and because
@@ -430,13 +454,19 @@ def main() -> int:
     skipped = len(
         [n for n in shared if n in NOT_DRIFT or n in {name for name, _ in collisions}]
     )
-    print(f"{len(shared)} have a schema to compare against, {skipped} of them")
-    print(f"skipped for the reasons below, so {len(shared) - skipped} compared\n")
+    if skipped:
+        print(f"{len(shared)} have a schema to compare against, {skipped} of them")
+        print(f"skipped for the reasons below, so {len(shared) - skipped} compared\n")
+    else:
+        # Not "0 of them skipped for the reasons below" — there are no reasons
+        # below to point at.
+        print(f"{len(shared)} have a schema to compare against, all compared\n")
 
     if collisions:
         print("Declared more than once, so not compared at all. This report is")
         print("keyed by name and cannot hold two types that share one; comparing")
-        print("their combined values would let each cover the other's gaps.\n")
+        print("their combined values would let each cover the other's gaps.")
+        print("A verdict comes back when the declarations stop sharing a name.\n")
         for name, files in collisions:
             # Only the ones with a schema were ever going to be compared, so
             # only those are counted as skipped above. Saying so here stops the
@@ -532,10 +562,12 @@ def main() -> int:
         )
 
     if against_merged:
+        one = len(against_merged) == 1
         print(
-            f"\n{len(against_merged)} have no gap, but were compared against a "
-            f"schema name that\nmore than one spec defines differently, so the "
-            f"union was used and any\nsurplus is not trustworthy:\n"
+            f"\n{len(against_merged)} {'has' if one else 'have'} no gap, but "
+            f"{'was' if one else 'were'} compared against a schema name\nthat "
+            f"more than one spec defines differently, so the union was used\n"
+            f"and any surplus is not trustworthy:\n"
         )
         for name in against_merged:
             sizes = ", ".join(
@@ -609,16 +641,36 @@ def main() -> int:
                 if enum == name and ours in values:
                     print(f"    {ours} is not a de-documented value — {note}")
 
-    if unchecked:
-        print("\nNo spec schema found — this report says nothing about these.")
-        print("Not a clean bill of health: an enum here is unverified, not")
-        print("verified-and-agreeing. If one of these does have a schema under")
-        print("another name, add the pair to ALIASES and it starts being checked.\n")
-        for name in unchecked:
+    # Two different reasons an enum went uncompared, and only one of them is
+    # fixable by aliasing. Telling a reader to "add the pair to ALIASES" for a
+    # schema that already exists under exactly that name sends them after a
+    # no-op, and states the report's own coverage wrongly in the bargain —
+    # which is the defect this whole rework is about, aimed at itself.
+    unreadable = [n for n in unchecked if schema_of[n] in declared_schemas]
+    absent = [n for n in unchecked if schema_of[n] not in declared_schemas]
+
+    def catalogue(names: list[str]) -> None:
+        for name in names:
             # Distinct values: a name declared twice has both lists accumulated
             # under it, and printing the raw length double-counts.
             dup = " — and declared more than once" if name in collided else ""
             print(f"  {name} ({len(set(crate[name]))} values){dup}")
+
+    if absent:
+        print("\nNo spec schema found — this report says nothing about these.")
+        print("Not a clean bill of health: an enum here is unverified, not")
+        print("verified-and-agreeing. If one of these does have a schema under")
+        print("another name, add the pair to ALIASES and it starts being checked.\n")
+        catalogue(absent)
+
+    if unreadable:
+        print("\nA schema of this name exists, but carries no value list this")
+        print("report can read — the values are in its `description` prose, or")
+        print("on one of its properties. Also unverified, and aliasing will not")
+        print("help: the name already matches. Closing one of these means")
+        print("comparing it by hand, or teaching the parser to follow a")
+        print("property.\n")
+        catalogue(unreadable)
 
     # Every compared enum lands in exactly one bucket, so they have to add back
     # up to the headline. Printing the sum is the cheap half; checking it is the

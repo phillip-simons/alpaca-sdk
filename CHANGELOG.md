@@ -144,10 +144,17 @@ presented as a whole one:
   somewhere, so a gap against it is still real while surplus is not
   trustworthy — and an enum with both a gap and a suppressed surplus says so,
   rather than printing the gap as though it were the whole verdict.
-- **The report now lists what it could not check** — 88 of 118 enums have no
-  spec schema — and separates "agree exactly" from "agree apart from values
-  recorded below", which two enums only qualified for. The buckets reconcile
-  against the headline.
+- **The report now lists what it could not check** — 88 of 118 enums are
+  uncompared — and says which of two reasons applies, because only one of them
+  a reader can act on. Eighty-three have no schema of that name and an
+  `ALIASES` pair would start checking them; five have one that carries no value
+  list this parser reads, four documenting their values in `description` prose
+  and `LocateQuoteError` on a property, where aliasing is a no-op. It also
+  separates "agree exactly" from "agree apart from values recorded below",
+  which two enums only qualified for, and prints the buckets summed against the
+  compared count. That sum is a guard against a future edit rather than a
+  finding: as the branches stand each compared enum reaches exactly one bucket,
+  so it cannot currently fail.
 - **Deliberate crate-only values can be recorded.** `restated` and `held` were
   listed under "do not delete these, Alpaca still serves values it has stopped
   documenting" — true in general and not why those two are there. A `CRATE_ONLY`
