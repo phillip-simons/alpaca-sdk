@@ -120,13 +120,63 @@ Not shipped in the crate, but it is why the bug above survived to `0.1.0`.
   fetched by `just specs`, so it cannot join `just check` or CI without putting
   a network download in the gate. It remains a step someone has to take.
 
-These two changes are the ones this release needed: without them the
-verification step `.github/CONTRIBUTING.md` requires after touching a wire enum
-could not be run at all, and running it would not have looked at `TradeEvent`.
-Reviewing the report turned up several further defects in it — it read only
-73 of the crate's 121 enum declarations, and merged enums that share a name — none of
-which bear on the values below. Those are a separate change rather than
-passengers on this one.
+Those two were what the `TradeEvent` fix needed. Reviewing the report while
+verifying that fix turned up more, all of the same shape — a partial answer
+presented as a whole one:
+
+- **It only read files named `*enums*.rs`**, 73 of the crate's 120 shipping
+  `wire_enum!` blocks; the rest sit beside the models that use them. Ten enums
+  that do have a spec schema had therefore never been compared to it. None had a
+  missing value, but `TokenizationNetwork` carries `cronos` and `hyperevm`
+  beyond its schema and had simply never been looked at. Reading every file
+  means excluding `#[cfg(test)]` ones, or the undercount is merely traded for an
+  overcount: `wire_tests.rs` declares a `Side` that ships to nobody.
+- **A name declared twice was silently collapsed**, on both sides.
+  `ActivityCategory` and `TransferDirection` are each declared on two surfaces,
+  and six schema names — including `OrderSide`, 9 values in `broker.yaml` against
+  2 in `trading.yaml` — are defined differently in two specs. Each half covered
+  the other's gaps: deleting a value from one `TransferDirection` left it
+  reported as agreeing exactly. Two `wire_enum!`s under one name now get no
+  verdict, since the report cannot hold both; an ordinary `pub enum` that merely
+  shares a name is not a collision, because withholding a verdict over that
+  would be worse than the narrow glob it replaced. Spec-side collisions are
+  compared but flagged, because a union can only add values Alpaca documents
+  somewhere, so a gap against it is still real while surplus is not
+  trustworthy — and an enum with both a gap and a suppressed surplus says so,
+  rather than printing the gap as though it were the whole verdict.
+- **The report now lists what it could not check.** Of 118 enums, 28 get a
+  verdict and 90 do not — 88 with no schema this parser can use, plus
+  `Exchange`, suppressed by `NOT_DRIFT`, and `TransferDirection`, declared
+  twice. The 88 split again by what a reader could do about them: 83 have no
+  schema of that name, so an `ALIASES` pair would start checking them, while 5
+  have one that carries no readable value list — four documenting their values
+  in `description` prose, `LocateQuoteError` on a property — where aliasing is
+  a no-op. It also separates "agree exactly" from "agree apart from values
+  recorded below", which two enums only qualified for, and prints the buckets
+  summed against the compared count. That sum is a guard against a future edit
+  rather than a finding: as the branches stand each compared enum reaches
+  exactly one bucket, so it cannot currently fail.
+- **Deliberate crate-only values can be recorded.** `restated` and `held` were
+  listed under "do not delete these, Alpaca still serves values it has stopped
+  documenting" — true in general and not why those two are there. A `CRATE_ONLY`
+  map carries the real reason. `TaxIdType`'s `ARG_AR_CUIT` sat under the same
+  wrong sentence and now carries its own: a suspected typo, not a value Alpaca
+  stopped documenting.
+- **The suppression maps go stale silently**, so `ALIASES`, `CRATE_ONLY` and
+  `UNRESOLVED` now fail the run or stop printing once the state they describe
+  no longer holds. `DECIDED` and `NOT_DRIFT` can only have their keys checked —
+  the first names a value the crate deliberately does not carry, and the
+  second's claim is that two vocabularies are unrelated, which no diff
+  confirms — so both fail on an enum name that has gone, and a `NOT_DRIFT` pair
+  that comes to match value for value asks to be rechecked.
+- **None of it had a test**, which is how four of the defects above reached a
+  commit. `scripts/tests/test_enum_drift.py` covers each one, and it is in
+  `just check` and CI even though `just enums-drift` is in neither. That is not
+  a contradiction: running the report needs Alpaca's `specs/`, gitignored and
+  fetched over the network, while testing the parser needs a synthetic tree the
+  tests write for themselves. The logic deciding which enums the report can see
+  at all does not have to stay unverified because the report does. Stdlib
+  `unittest`, so the crate's gate gains no Python dependency.
 
 ### The semver call
 
@@ -172,11 +222,11 @@ can match on, whereas a variant Alpaca never sends costs a dead match arm. Each
 says it is prose-only in its own documentation rather than being presented as
 wire-verified.
 
-`just enums-drift` will report both under "in the crate, not in the spec", whose
-heading tells you not to delete them because Alpaca still serves values it has
-stopped documenting. That is true in general and is not the reason these two are
-there; the report has nowhere to record a deliberate crate-only value, so for now
-the reasoning lives in the doc comments alone.
+`just enums-drift` records the same reasoning through its `CRATE_ONLY` map, so
+the pair reads as a decision rather than as unexplained drift on every run. They
+had been appearing under "in the crate, not in the spec", whose heading tells you
+not to delete a value because Alpaca still serves ones it has stopped
+documenting — true in general, and not the reason these two are there.
 
 `held` is also an `OrderStatus` value, so it may be a status that leaked into an
 event list rather than an event in its own right.

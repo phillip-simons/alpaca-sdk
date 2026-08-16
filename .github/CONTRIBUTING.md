@@ -24,11 +24,19 @@ for a better source.
 git clone https://github.com/phillip-simons/alpaca-sdk
 cd alpaca-sdk
 just hooks     # installs the pre-commit credential guard, once per clone
-just check     # fmt, clippy, rustdoc, tests
+just check     # fmt, clippy, rustdoc, tests, script tests
 ```
 
 `just check` is the gate. Run it before every commit. It holds what fires on an
 ordinary edit; CI holds the rest and runs both.
+
+It needs `python3` on your machine as well as a Rust toolchain. The last step is
+`just test-scripts`, which tests the Python under `scripts/` — `enum_drift.py`
+decides which of this crate's wire enums get compared against Alpaca's specs at
+all, and that logic went several defects deep before it had any tests. Stdlib
+`unittest`, no packages to install. `just enums-drift` itself stays out of the
+gate, because running the report needs `specs/` over the network while testing
+the parser needs only the synthetic trees the tests write for themselves.
 
 `just ci` adds what CI checks and `just check` does not: the feature
 combinations, the per-surface rustdoc builds, the nightly `docsrs` build, the
@@ -52,6 +60,8 @@ CI skips those jobs. They still report as skipped, which counts as satisfied, so
 the pull request is not left waiting on checks that will never run. Editing
 anything under `src/`, `tests/`, `examples/`, `fixtures/`, `Cargo.toml`,
 `Cargo.lock`, `build.rs`, `deny.toml` or `ci.yml` brings the whole matrix back.
+`scripts/` has its own job on its own filter, so a change to the Python runs the
+script tests without dragging the Rust matrix along with it.
 
 The minimum supported Rust version is **1.88**. Enabling `polars` raises it to
 1.95, which is why that feature is off by default — a convenience feature does

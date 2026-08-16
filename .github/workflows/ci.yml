@@ -39,6 +39,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       coverage_doc: ${{ steps.filter.outputs.coverage_doc }}
+      scripts: ${{ steps.filter.outputs.scripts }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -66,6 +67,13 @@ jobs:
               - 'src/**'
               - 'scripts/coverage.py'
               - 'COVERAGE.md'
+              - '.github/workflows/ci.yml'
+            scripts:
+              # The Python under `scripts/` and its tests. Not `src/**`: these
+              # tests build their own synthetic trees, so a crate change cannot
+              # break them — and if one ever could, that is a test reaching out
+              # of its fixture rather than a reason to widen the filter.
+              - 'scripts/**'
               - '.github/workflows/ci.yml'
 
   fmt:
@@ -330,6 +338,28 @@ jobs:
 
           exit "$status"
 
+  # `just enums-drift` cannot run here — it reads `specs/`, which is gitignored
+  # and fetched over the network — but that is an argument about the *report*,
+  # not about the parser underneath it. These tests build their own synthetic
+  # spec and source trees, so they need neither the network nor Alpaca's specs,
+  # and the logic that decides which enums the report can even see does not
+  # have to go unverified just because the report itself does.
+  scripts:
+    name: script tests
+    needs: changes
+    if: needs.changes.outputs.scripts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # No `setup-python`, and no requirements file: the suite is stdlib
+      # `unittest` on the runner's own interpreter, which is the same promise
+      # the scripts themselves make to a contributor.
+      #
+      # `run.py`, not `unittest discover`: discover exits 0 when it finds
+      # nothing, so a renamed file would leave this job green having run none
+      # of the suite.
+      - run: python3 scripts/tests/run.py
+
   # The single required status check.
   #
   # Branch protection names check *runs*, and a matrix job that is skipped
@@ -347,7 +377,7 @@ jobs:
   # failure here, not a skip that protection would accept.
   gate:
     name: all checks
-    needs: [changes, fmt, clippy, test, features, msrv, deny, docs, coverage-doc, secret-scan]
+    needs: [changes, fmt, clippy, test, features, msrv, deny, docs, coverage-doc, secret-scan, scripts]
     if: always()
     runs-on: ubuntu-latest
     steps:
