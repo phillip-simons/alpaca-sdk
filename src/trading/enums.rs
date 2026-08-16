@@ -490,32 +490,149 @@ wire_enum! {
 }
 
 wire_enum! {
-    /// The `TradeEvent` values accepted by the API.
+    /// What happened to an order, as reported by the `trade_updates` stream.
+    ///
+    /// This is the set of events the stream *emits*, which is not the set of
+    /// states an order can be *in*. The two vocabularies overlap heavily —
+    /// fourteen of these values are also [`OrderStatus`] values — but neither
+    /// list contains the other, and the differences are where the mistakes
+    /// live: an execution is the `fill` event and the [`OrderStatus::Filled`]
+    /// status, spelled differently, and `filled` is never an event.
+    ///
+    /// The variants follow the order of Alpaca's `TradeUpdateEventType` schema,
+    /// as [`OrderStatus`] follows its own. That order is broadly the lifecycle
+    /// one, but it is not the "common events, then rarer events" split the
+    /// prose uses: `accepted` is documented as common in every passage yet sits
+    /// tenth, behind `rejected` and `pending_new`. Do not read the position of a
+    /// variant as a claim about how often it arrives — and note the passages do
+    /// not agree with each other either, `pending_new` being common in the
+    /// operation's description and rare in the schema's.
+    ///
+    /// Reconciled against the `TradeUpdateEventType` schema in Alpaca's broker
+    /// specification, which lists nineteen values. The published reference for
+    /// the trade events stream lists the same nineteen, but it is a later
+    /// revision of that same specification rather than an independent account,
+    /// so treat the two as one source. [`Self::Restated`] and [`Self::Held`]
+    /// are in neither list and are described only in surrounding prose — see
+    /// their own documentation, which says which prose and how much of it.
+    ///
+    /// That schema belongs to the server-sent trade events endpoint, and no
+    /// vendored source enumerates the websocket stream's vocabulary separately.
+    /// The two are taken to be one vocabulary here, which is what Alpaca's
+    /// documentation implies by describing the same events for both, but it is
+    /// an assumption rather than something a source states.
+    ///
+    /// See <https://docs.alpaca.markets/us/docs/websocket-streaming> for the
+    /// stream itself, and <https://docs.alpaca.markets/reference/subscribetotradev2sse>
+    /// for the reference this was reconciled against — the former describes the
+    /// websocket and does not list every value below.
     pub enum TradeEvent {
-        /// `accepted`
-        Accepted => "accepted",
-        /// `canceled`
-        Canceled => "canceled",
-        /// `expired`
-        Expired => "expired",
-        /// `fill`
-        Fill => "fill",
-        /// `new`
+        /// Sent when an order has been routed to exchanges for execution.
         New => "new",
-        /// `partial_fill`
+        /// Sent when the order has been completely filled.
+        ///
+        /// `timestamp` is the time at which the order was filled.
+        Fill => "fill",
+        /// Sent when fewer shares than the total remaining quantity on the
+        /// order have been filled.
+        ///
+        /// `timestamp` is the time at which the shares were filled.
         PartialFill => "partial_fill",
-        /// `pending_cancel`
-        PendingCancel => "pending_cancel",
-        /// `pending_new`
-        PendingNew => "pending_new",
-        /// `pending_replace`
-        PendingReplace => "pending_replace",
-        /// `rejected`
-        Rejected => "rejected",
-        /// `replaced`
+        /// Sent when the order transitions to the canceled state.
+        ///
+        /// Not only in response to a cancel request. Alpaca also cancels as part
+        /// of automated processing — corporate-action sweeps, aged-GTC
+        /// expiration, the overnight-session lifecycle — and an upstream venue
+        /// can cancel too. Do not read this event as "the cancel I asked for
+        /// went through".
+        ///
+        /// Alpaca exposes a machine-readable cause for it on a `reason` field,
+        /// but documents that field only on the *server-sent* form of these
+        /// events, which this crate does not yet model. No source says the
+        /// websocket frame this type arrives on carries one.
+        ///
+        /// `timestamp` is the time at which the order was canceled.
+        Canceled => "canceled",
+        /// Sent when an order has reached the end of its lifespan, as
+        /// determined by the order's time in force.
+        ///
+        /// `timestamp` is the time at which the order expired.
+        Expired => "expired",
+        /// Sent when the order is done executing for the day, and will not
+        /// receive further updates until the next trading day.
+        DoneForDay => "done_for_day",
+        /// Sent when a requested replacement of an order is processed.
+        ///
+        /// `timestamp` is the time at which the order was replaced.
         Replaced => "replaced",
-        /// `restated`
+        /// Sent when the order has been rejected.
+        ///
+        /// `timestamp` is the time at which the rejection occurred.
+        Rejected => "rejected",
+        /// Sent when the order has been received by Alpaca and routed to the
+        /// exchanges, but has not yet been accepted for execution.
+        PendingNew => "pending_new",
+        /// Sent when an order is received and accepted by Alpaca.
+        Accepted => "accepted",
+        /// Sent when the order has been stopped: a trade is guaranteed for the
+        /// order, usually at a stated price or better, but has not yet
+        /// occurred.
+        Stopped => "stopped",
+        /// Sent when the order is awaiting cancellation.
+        ///
+        /// Most cancellations occur without the order entering this state.
+        PendingCancel => "pending_cancel",
+        /// Sent when the order is awaiting replacement.
+        PendingReplace => "pending_replace",
+        /// Sent when the order has been completed for the day — it is either
+        /// filled or done for the day — but remaining settlement calculations
+        /// are still pending.
+        Calculated => "calculated",
+        /// Sent when the order has been suspended and is not eligible for
+        /// trading.
+        Suspended => "suspended",
+        /// Sent when the order replace has been rejected.
+        ///
+        /// Note the `order_` prefix: the wire value is `order_replace_rejected`
+        /// rather than `replace_rejected`. This is an ordinary event for
+        /// anything that reprices a resting limit order, despite sitting under
+        /// Alpaca's "rarer events" heading.
+        OrderReplaceRejected => "order_replace_rejected",
+        /// Sent when the order cancel has been rejected.
+        ///
+        /// Prefixed like [`Self::OrderReplaceRejected`], and ordinary for the
+        /// same reason: a cancel loses the race against a fill routinely.
+        OrderCancelRejected => "order_cancel_rejected",
+        /// Sent when a previously reported execution has been canceled
+        /// ("busted") by the upstream exchange.
+        TradeBust => "trade_bust",
+        /// Sent when a previously reported trade has been corrected — the
+        /// exchange may have updated the price, quantity or another execution
+        /// parameter after the trade was initially reported.
+        TradeCorrect => "trade_correct",
+        /// Sent when the order is manually modified.
+        ///
+        /// Described in prose in two places — the schema's own description and
+        /// the trade-events operation's — and absent from every machine-readable
+        /// value list. Both passages come from the same specification, which
+        /// the published reference republishes — a later revision of it, not an
+        /// independent account — so treat this as one source saying it twice
+        /// rather than two agreeing. Carried on that prose; the value lists
+        /// alone would drop it.
         Restated => "restated",
+        /// For multi-leg orders, the state the secondary orders (stop loss,
+        /// take profit) enter while waiting to be triggered.
+        ///
+        /// Prose-only in the same way [`Self::Restated`] is, and weaker still:
+        /// where `restated` is described in two prose passages, this appears in
+        /// exactly one — the trade-events operation description — and nowhere in
+        /// the schema's own. It is also an [`OrderStatus`] value, the only one
+        /// of these two that is, so it may be a status that leaked into an event
+        /// list rather than an event in its own right. This is the single
+        /// thinnest claim in the enum. Carried because an unnamed value is one
+        /// no caller can match on, while a variant Alpaca never sends costs a
+        /// dead match arm.
+        Held => "held",
     }
 }
 

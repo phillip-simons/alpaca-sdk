@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Diff this crate's wire enums against the same-named spec schemas.
+"""Diff this crate's wire enums against their spec schemas.
 
 The `wire_enum!` blocks are checked-in source; the specs are Alpaca's own. Where
-both name the same type they should agree, and mostly they do not: only 7 of the
-19 with a same-named schema match exactly.
+both describe the same type they should agree. The run prints how many do; no
+count is kept here, because every count kept here has gone stale.
+
+Pairing is by name, with `ALIASES` for the types the two spell differently. That
+map is not a convenience: an enum whose name does not match is not reported as
+drifting, it is not reported at all, and `TradeEvent` reached a release missing
+nine documented values inside exactly that silence.
 
 This is a quality report, not a bug report. An unknown value deserializes into
 `Unknown(String)` rather than failing, so drift costs a caller a match arm, not
@@ -31,6 +36,20 @@ import sys
 # `wire_enum! { … pub enum Name { Variant => "wire", … } }`.
 ENUM_DECL = re.compile(r"^\s*pub enum (\w+) \{", re.M)
 VARIANT = re.compile(r'^\s*(\w+) => "([^"]*)",\s*$')
+
+# Crate enums whose spec schema exists under a different name. Without these the
+# pair never meets: the comparison set is an intersection of names, so an enum
+# this crate spells differently from Alpaca is not reported as drifting — it is
+# not reported at all.
+#
+# That silence is not hypothetical. `TradeEvent` is Alpaca's
+# `TradeUpdateEventType`, the names never matched, and it reached 0.1.0 carrying
+# twelve of the twenty-one documented values with this report having no opinion
+# on it. The inverse of `NOT_DRIFT`: naming a pair here is a claim that they are
+# the same vocabulary under two names.
+ALIASES: dict[str, str] = {
+    "TradeEvent": "TradeUpdateEventType",
+}
 
 # Enums whose same-named spec schema is about something else. Naming a pair
 # here is a claim that they are unrelated, not that the difference is fine.
@@ -149,10 +168,31 @@ def main() -> int:
 
     crate = crate_enums(args.src)
     spec = spec_enums(args.specs)
-    shared = sorted(set(crate) & set(spec))
+
+    # An alias that stops resolving on either side silently restores the very
+    # blindness the map exists to remove — the pair drops out of the comparison
+    # with no comment, which is indistinguishable from never having been aliased.
+    for enum, schema in sorted(ALIASES.items()):
+        if enum not in crate:
+            print(
+                f"ALIASES maps {enum}, which is not a wire_enum! in this crate "
+                f"— it was probably renamed; update the key or drop the entry",
+                file=sys.stderr,
+            )
+            return 1
+        if schema not in spec:
+            print(
+                f"{enum} is aliased to {schema}, which no spec defines "
+                f"— fix the alias or drop it",
+                file=sys.stderr,
+            )
+            return 1
+
+    schema_of = {name: ALIASES.get(name, name) for name in crate}
+    shared = sorted(name for name in crate if schema_of[name] in spec)
 
     print(f"{len(crate)} enums in the crate, {len(spec)} enum schemas in the specs")
-    print(f"{len(shared)} share a name\n")
+    print(f"{len(shared)} have a schema to compare against\n")
 
     agree: list[str] = []
     missing: dict[str, list[str]] = {}
@@ -162,7 +202,7 @@ def main() -> int:
         if name in NOT_DRIFT:
             continue
         ours = set(crate[name])
-        theirs = spec[name]
+        theirs = spec[schema_of[name]]
         gap = sorted(value for value in theirs - ours if (name, value) not in DECIDED)
         surplus = sorted(ours - theirs)
         if not gap and not surplus:
@@ -190,7 +230,12 @@ def main() -> int:
                 # The empty string is a real wire value here — Alpaca documents
                 # `simple (or "")` for OrderClass — and printing it bare would
                 # look like a blank line rather than a finding.
-                print(f"    {value if value else '\"\" (the empty string)'}")
+                #
+                # Built outside the f-string: a backslash inside an f-string
+                # expression is a syntax error before Python 3.12, which made
+                # this script unrunnable on the Python current macOS ships.
+                shown = value if value else '"" (the empty string)'
+                print(f"    {shown}")
             # Keyed by the crate's spelling, since the whole point of an
             # unresolved pair is that the two spellings differ.
             for (enum, ours), note in UNRESOLVED.items():

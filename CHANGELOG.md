@@ -2,16 +2,194 @@
 
 Notable changes to this crate, newest first.
 
-**Inside `0.x`, these notes are the only mechanism there is.** Every `0.x` bump
-is permitted to break, so `cargo-semver-checks` — which runs in the release
-pipeline — has nothing to assert until `1.0`. A breaking change that no
-compiler will point at gets written down here or it is not communicated at all.
+**Inside `0.x`, these notes are the only mechanism there is.** Cargo treats a
+`0.x.y` bump as compatible, so it reaches dependants without them choosing it,
+and `cargo-semver-checks` — which runs in the release pipeline — only sees the
+type level. A change that alters behaviour without altering a signature is
+invisible to both. It gets written down here or it is not communicated at all.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-Nothing yet.
+**Slated for `0.1.1`.** `cargo semver-checks` agrees there is no type-level
+break. Read "The semver call" below before upgrading anyway: one behaviour
+change here is invisible to the compiler, and a `0.1.1` arrives without you
+asking for it.
+
+### Fixed
+
+- **`TradeEvent` named twelve of the twenty-one documented `trade_updates`
+  events**, and was ordered alphabetically because it had been ported from
+  alpaca-py's `TradeEvent` rather than from Alpaca's own list. The port is the
+  bug; the nine absent values were its symptom. Now added: `done_for_day`,
+  `stopped`, `calculated`, `suspended`, `order_replace_rejected`,
+  `order_cancel_rejected`, `trade_bust`, `trade_correct` and `held`.
+
+  `order_replace_rejected` and `order_cancel_rejected` are the two that matter
+  in practice. Alpaca files them under "rarer events", but a refused replace is
+  routine for anything that reprices a resting limit order, and a refused
+  cancel is routine for anything that races a fill. Both previously decoded to
+  `TradeEvent::Unknown`, so a caller treating `Unknown` as "the API changed
+  under me" — a conservative-looking reading — could halt an execution system
+  on an ordinary event. Note the `order_` prefix on both: the wire values are
+  not bare `replace_rejected` and `cancel_rejected`.
+
+  That is what happens to a frame that decodes. Whether these two decode at all
+  is a separate and still-open question — see the known limit below.
+
+- **The variants are now in the order of Alpaca's `TradeUpdateEventType`
+  schema**, matching how `OrderStatus` already followed its own. That is
+  broadly lifecycle order rather than the "common, then rarer" split the prose
+  uses — `accepted` is documented common but follows `rejected` and
+  `pending_new` — so a variant's position is not a claim about frequency.
+  `WIRE_VALUES` changes both contents and order.
+
+- **`TradeEvent`'s documentation said "the values accepted by the API"**, which
+  describes a request-side parameter list rather than the set of events the
+  stream emits. It now says what it is, and points at the distinction from
+  `OrderStatus` that the original port got wrong: `fill` is an event and
+  `filled` is a status.
+
+### Changed
+
+- **`Unknown(String)` no longer documents itself as "Alpaca added something
+  new."** It has always had a second meaning — this crate omitted a value
+  Alpaca already documents — and `TradeEvent` is the proof that the second
+  meaning is the likelier one. The `wire_enum!` documentation now says so, and
+  says that escalating on `Unknown` is not the safe default it appears to be.
+
+### Known limits
+
+- **`TradeUpdate::timestamp` is required, and it is unconfirmed that every event
+  carries one.** A `trade_updates` frame without it fails the whole decode.
+  Alpaca's prose gives a `timestamp` meaning for six events — `fill`,
+  `partial_fill`, `canceled`, `expired`, `replaced`, `rejected` — and so for
+  neither `order_replace_rejected` nor `order_cancel_rejected`, while
+  introducing the list with "the meanings have been specified here for which
+  types the timestamp field will be present."
+
+  The evidence points mostly the other way, and is recorded here so the limit is
+  not read as worse than it is. `TradeUpdateEventV2`, the schema for the
+  server-sent trade events endpoint, declares `timestamp` and every other field
+  `TradeUpdate` carries — that struct's fields are a strict subset of it — and
+  Alpaca's own worked example for that schema, `TradeUpdateEventV2New`, emits a
+  `timestamp` for `new`, an event outside the documented six. So the prose most
+  likely describes what the field *means* per event rather than when it is sent.
+  Against that, the schema declares no `required:` list at all.
+
+  It stays a known limit because none of that is the websocket message. That
+  schema is `$ref`'d once, from the server-sent endpoint, and describes itself
+  as "sent over the events streaming api"; no vendored source models the
+  websocket frame directly, and nothing under `fixtures/` carries an `event`
+  field. Pre-existing either way: `timestamp` was required before these variants
+  existed, so such a frame failed identically on `0.1.0`, and naming the events
+  does not change it.
+
+- **The server-sent trade events stream does not model `reason`**, which the
+  published reference documents on `TradeUpdateEventV2` and the vendored
+  specification lacks. Its known values include `TOO_LATE_TO_CANCEL` for exactly
+  the two rejection events named above — the cancel or replace lost the race
+  against a fill — which is the discrimination a repricing strategy wants.
+  `get_trade_events` yields the generic `BrokerEvent`, which keeps the payload
+  as it arrived, so the field is unmodelled rather than lost — `SseEvent::json`
+  into your own struct reads it today. Tracked rather than added: the reference
+  says the field is not a closed vocabulary, so the choice between `String` and
+  a `wire_enum!` deserves its own look. Note this is the server-sent payload,
+  not the websocket one — no source seen here says `trade_updates` carries
+  `reason`.
+
+### Tooling
+
+Not shipped in the crate, but it is why the bug above survived to `0.1.0`.
+
+- **`just enums-drift` compared enums by name only**, so an enum this crate
+  spells differently from Alpaca's schema was not reported as drifting — it was
+  not reported at all. `TradeEvent` against `TradeUpdateEventType` is exactly
+  that shape, so the report that exists to catch this had no opinion on it.
+  `scripts/enum_drift.py` now carries an `ALIASES` map for such pairs, and
+  fails loudly if either side of an alias stops resolving, since a stale alias
+  and no alias produce the same silence.
+- **`just enums-drift` could not run on Python 3.9**, which is what ships on
+  current macOS: a backslash inside an f-string expression is a syntax error
+  before 3.12. The step `.github/CONTRIBUTING.md` requires after touching a
+  wire enum was therefore not performable, which is the other half of why
+  nothing caught this.
+
+  It is runnable now, not enforced. It needs `specs/`, which is gitignored and
+  fetched by `just specs`, so it cannot join `just check` or CI without putting
+  a network download in the gate. It remains a step someone has to take.
+
+These two changes are the ones this release needed: without them the
+verification step `.github/CONTRIBUTING.md` requires after touching a wire enum
+could not be run at all, and running it would not have looked at `TradeEvent`.
+Reviewing the report turned up several further defects in it — it read only
+73 of the crate's 121 enum declarations, and merged enums that share a name — none of
+which bear on the values below. Those are a separate change rather than
+passengers on this one.
+
+### The semver call
+
+**The call is `0.1.1`.** `cargo semver-checks` reports no breakage, and is right
+not to: the enum is `#[non_exhaustive]`, so every caller already needs a
+wildcard arm, and adding variants is additive at the type level.
+
+One behaviour change is not additive, and no compiler will point at it. On
+`0.1.0` the only way to handle any of these nine events was to match the
+catch-all by string:
+
+```rust
+TradeEvent::Unknown(s) if s == "done_for_day" => { … }
+```
+
+That arm still compiles and now never fires, because the value arrives as
+`TradeEvent::DoneForDay`. The same applies to all nine, `order_replace_rejected`
+and `order_cancel_rejected` included. `WIRE_VALUES` also changes both contents
+and order, so anything asserting on it by index will move.
+
+`0.1.1` reaches every `alpaca-sdk = "0.1"` dependant without them choosing it,
+which is exactly why this note is here and stated this plainly: per the preamble
+at the top of this file, inside `0.x` these notes are the only mechanism there
+is. **If you match on `TradeEvent::Unknown` by string, grep for it before
+taking this upgrade.**
+
+### On the two values with weaker evidence
+
+`restated` and `held` are described in **prose** and appear in neither list of
+trade event values: the `TradeUpdateEventType` schema and the published
+reference both enumerate the same nineteen, and neither of these is among them.
+(`held` does appear in the `OrderStatus` schema — as a status, which is part of
+why it is the weaker of the two.)
+
+They are not corroborated by two sources. The published reference re-serves the
+same OpenAPI document the specification comes from, so the agreement is one text
+quoted twice. `restated` appears in two prose passages of it; `held` appears in
+exactly one, and in none of the schema's own description. `held` is the thinnest
+claim in the enum and its doc comment says so.
+
+They are carried on that basis: a value the crate does not name is one no caller
+can match on, whereas a variant Alpaca never sends costs a dead match arm. Each
+says it is prose-only in its own documentation rather than being presented as
+wire-verified.
+
+`just enums-drift` will report both under "in the crate, not in the spec", whose
+heading tells you not to delete them because Alpaca still serves values it has
+stopped documenting. That is true in general and is not the reason these two are
+there; the report has nowhere to record a deliberate crate-only value, so for now
+the reasoning lives in the doc comments alone.
+
+`held` is also an `OrderStatus` value, so it may be a status that leaked into an
+event list rather than an event in its own right.
+
+**The port was wider than this enum.** `TradeEvent` was reconciled because it
+had a reported defect, but it is one of twenty-four enums in
+`src/trading/enums.rs`, and all twenty-four sit in alpaca-py's declaration
+order, contiguously — the only divergence is `ContractType`, which this crate
+keeps in `types`. The file was transcribed, not just this type. Most of its
+neighbours have no spec schema for `just enums-drift` to check them against, so
+they sit in the same silence `TradeEvent` did. Nothing here says they are wrong;
+it says they are unverified, and the one that was checked turned out to be
+missing nine values. That is tracked separately rather than fixed here.
 
 ## [0.1.0] — 2026-08-14
 

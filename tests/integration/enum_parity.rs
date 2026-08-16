@@ -243,24 +243,82 @@ fn trading_corporate_action_date_type_wire_values() {
     );
 }
 
+/// Ordered as Alpaca's `TradeUpdateEventType` schema orders them, not
+/// alphabetically. The alphabetical ordering this table used to assert was
+/// alpaca-py's, and transcribing that enum instead of Alpaca's list is why nine
+/// documented values were absent — the ordering was the tell.
 #[test]
 fn trading_trade_event_wire_values() {
     assert_wire_values!(
         TradeEvent,
         [
-            "accepted",
+            "new",
+            "fill",
+            "partial_fill",
             "canceled",
             "expired",
-            "fill",
-            "new",
-            "partial_fill",
-            "pending_cancel",
-            "pending_new",
-            "pending_replace",
-            "rejected",
+            "done_for_day",
             "replaced",
-            "restated"
+            "rejected",
+            "pending_new",
+            "accepted",
+            "stopped",
+            "pending_cancel",
+            "pending_replace",
+            "calculated",
+            "suspended",
+            "order_replace_rejected",
+            "order_cancel_rejected",
+            "trade_bust",
+            "trade_correct",
+            "restated",
+            "held"
         ]
+    );
+}
+
+/// The unprefixed spellings must stay unrecognised.
+///
+/// The parity table above already fails if either wire string loses its
+/// `order_` prefix — it compares `WIRE_VALUES` against literals written out in
+/// this file. What it cannot say is that the *short* forms are wrong, and the
+/// plausible mistake here is not deleting a prefix but adding a variant for
+/// `replace_rejected` alongside the real one, on the reasonable-sounding theory
+/// that Alpaca sends both. It does not. These two assertions are the ones the
+/// parity table cannot make.
+#[test]
+fn trading_trade_event_rejections_keep_their_order_prefix() {
+    assert!(TradeEvent::from("replace_rejected").is_unknown());
+    assert!(TradeEvent::from("cancel_rejected").is_unknown());
+}
+
+/// `TradeEvent` is the stream's vocabulary and `OrderStatus` is the order's;
+/// the port that produced the old list confused the two. `fill` is an event and
+/// never a status, `filled` is a status and never an event.
+///
+/// The overlap count is pinned because `TradeEvent`'s own documentation quotes
+/// it. Adding a variant that is also a status is fine — this asks whoever does
+/// it to update the sentence that says how many there are.
+#[test]
+fn trading_trade_event_is_not_order_status() {
+    for event in ["fill", "partial_fill"] {
+        assert!(!TradeEvent::from(event).is_unknown(), "{event}");
+        assert!(OrderStatus::from(event).is_unknown(), "{event}");
+    }
+    for status in ["filled", "partially_filled", "accepted_for_bidding"] {
+        assert!(!OrderStatus::from(status).is_unknown(), "{status}");
+        assert!(TradeEvent::from(status).is_unknown(), "{status}");
+    }
+
+    let statuses: std::collections::HashSet<_> = OrderStatus::WIRE_VALUES.iter().collect();
+    let shared = TradeEvent::WIRE_VALUES
+        .iter()
+        .filter(|value| statuses.contains(*value))
+        .count();
+    assert_eq!(
+        shared, 14,
+        "TradeEvent's documentation says fourteen of its values are also \
+         OrderStatus values; update it and this assertion together"
     );
 }
 

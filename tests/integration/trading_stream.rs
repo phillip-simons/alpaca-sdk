@@ -274,6 +274,74 @@ async fn trade_updates_arrive_typed() {
     }
 }
 
+/// A refused replace or cancel decodes to a named variant, not `Unknown`.
+///
+/// This is the regression the whole change exists for. Both events shipped in
+/// 0.1.0 as `Unknown`, and a caller that escalates `Unknown` as "the API
+/// changed under me" would halt on an event that a repricing strategy provokes
+/// in the ordinary course of a session.
+///
+/// Scope worth stating: `update()` always supplies a `timestamp`, so this
+/// covers a frame that decodes. Whether Alpaca sends these two *with* a
+/// timestamp is unconfirmed — the field is required and the specification does
+/// not say it is always present — and no fixture exists to settle it. See the
+/// known limit in CHANGELOG.md.
+///
+/// Kept even though `every_named_event_decodes_off_the_wire` covers both in its
+/// sweep: that test derives its inputs from `WIRE_VALUES` and would still pass
+/// if these two variants were deleted. This one names them, so it fails.
+#[tokio::test]
+async fn a_refused_replace_or_cancel_decodes_to_a_named_event() {
+    let (endpoint, _, _) = serve(Script::Send(vec![
+        update("order_replace_rejected"),
+        update("order_cancel_rejected"),
+    ]))
+    .await;
+
+    let stream = TradingStream::with_endpoint(credentials(), endpoint);
+    let messages = collect(stream.run(), 2, Duration::from_secs(5)).await;
+
+    assert_eq!(messages.len(), 2);
+    for (message, expected) in messages.iter().zip([
+        alpaca_sdk::trading::TradeEvent::OrderReplaceRejected,
+        alpaca_sdk::trading::TradeEvent::OrderCancelRejected,
+    ]) {
+        match message.as_ref().unwrap() {
+            TradeStreamMessage::TradeUpdate(update) => assert_eq!(update.event, expected),
+            other => panic!("expected a trade update, got {other:?}"),
+        }
+    }
+}
+
+/// The serde path, not the list: every value the enum *already names* survives
+/// a frame.
+///
+/// This draws its inputs from `WIRE_VALUES`, so it cannot notice a value the
+/// enum is missing — truncate the enum and it still passes. `enum_parity.rs`
+/// holds the list against hand-written literals and is what fails if a value
+/// goes away. What this adds is the leg that table cannot reach: that the same
+/// strings survive the websocket frame and the surrounding `TradeUpdate`
+/// deserialization, which is where a caller actually meets them.
+#[tokio::test]
+async fn every_named_event_decodes_off_the_wire() {
+    let events = alpaca_sdk::trading::TradeEvent::WIRE_VALUES;
+    let (endpoint, _, _) = serve(Script::Send(events.iter().map(|e| update(e)).collect())).await;
+
+    let stream = TradingStream::with_endpoint(credentials(), endpoint);
+    let messages = collect(stream.run(), events.len(), Duration::from_secs(10)).await;
+
+    assert_eq!(messages.len(), events.len());
+    for (message, wire) in messages.iter().zip(events) {
+        match message.as_ref().unwrap() {
+            TradeStreamMessage::TradeUpdate(update) => {
+                assert_eq!(update.event.as_str(), *wire);
+                assert!(!update.event.is_unknown(), "{wire}");
+            }
+            other => panic!("expected a trade update for {wire}, got {other:?}"),
+        }
+    }
+}
+
 #[tokio::test]
 async fn an_unknown_event_does_not_break_the_stream() {
     // A stream that failed on an unfamiliar event would break the moment
