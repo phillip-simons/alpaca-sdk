@@ -88,7 +88,7 @@ asking for it.
   unchecked `start`/`end` since 0.1.0. Mutual exclusion is what earns a skip;
   ordering is not.
 
-  Purely additive. The 78 setters that already existed were written by hand and
+  Purely additive. The 79 setters that already existed were written by hand and
   are now generated, keeping their names, their documentation and their
   behaviour. Nine *widened*, from `Vec<T>` to `impl Into<Vec<T>>` —
   `GetUsCorporatesRequest::{cusips, tickers}`,

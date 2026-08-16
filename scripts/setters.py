@@ -113,9 +113,16 @@ UNNAMED_STRUCT = re.compile(r"^pub struct (\w+)(?:<[^>]*>)?\s*[(;]")
 # an error and being silence.
 UNPARSED_STRUCT = re.compile(r"^\s*pub struct\b")
 
-# `Setters` inside a `#[derive(…)]`. Matched against the whole attribute block
-# above a struct, so a derive list rustfmt has split across lines still hits.
+# `Setters` inside a `#[derive(…)]`. Matched against the attribute block above a
+# struct, so a derive list rustfmt has split across lines still hits.
 DERIVES_SETTERS = re.compile(r"#\[derive\([^)]*\bSetters\b[^)]*\)\]", re.S)
+
+# A doc or ordinary comment, dropped before the block is searched for a derive.
+# Without this a struct whose *documentation* shows `#[derive(…, Setters)]` in an
+# example is credited with deriving it — and that example is the one CONTRIBUTING
+# and the derive's own rustdoc both use, so the likeliest place to hit this is a
+# type documented by someone following the house style.
+COMMENT = re.compile(r"^\s*//")
 
 # `#[setters(skip = "why")]`, and the field it sits above.
 SKIP_ATTR = re.compile(r'#\[setters\(skip = "(.+?)"\)\]', re.S)
@@ -270,7 +277,8 @@ def parse(path: pathlib.Path) -> dict[str, tuple[bool, list[str], list[tuple[str
             index += 1
             continue
 
-        derives = bool(DERIVES_SETTERS.search("\n".join(pending)))
+        attributes = "\n".join(line for line in pending if not COMMENT.match(line))
+        derives = bool(DERIVES_SETTERS.search(attributes))
         optional, skipped, index = fields(lines, index)
         found[declaration.group(1)] = (derives, optional, skipped)
         pending = []

@@ -1,0 +1,5 @@
+error: `setters` applies to a field, not to the struct — there is no whole-type option, so this configures nothing
+ --> tests/compile_fail/setters_on_the_struct_fails.rs:5:1
+  |
+5 | #[setters(into)]
+  | ^^^^^^^^^^^^^^^^

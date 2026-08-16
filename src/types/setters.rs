@@ -44,14 +44,25 @@
 //! type rather than a decision.
 //!
 //! **The field is only coherent set alongside another**, and one setter writes
-//! the group. `OrderRequest`'s `qty` and `notional` are `OrderAmount`, which
-//! exists to make "both at once" unrepresentable — and `validate` does not
-//! catch it, precisely because the type made it unreachable. Its `order_class`,
-//! `take_profit`, `stop_loss` and `legs` are written by `bracket`, `oco`,
-//! `oto_take_profit`, `oto_stop_loss` and `multi_leg`; an exit leg with no
-//! order class passes `validate` and is not a bracket.
-//! `CreateRecipientBankRequest`'s `routing_code` and `routing_code_type` go
-//! together because a routing code without its scheme is ambiguous.
+//! the group. Thirteen fields, all of them cases where setting one alone is
+//! *always* wrong rather than sometimes:
+//!
+//! - `OrderRequest`'s `qty`/`notional` are `OrderAmount` and its
+//!   `trail_price`/`trail_percent` are `Trail`. Both types exist to make "both
+//!   at once" unrepresentable, and `validate` does not catch either pair —
+//!   precisely because the type made it unreachable.
+//! - `OrderRequest`'s `limit_price` and `stop_price` come from the constructor
+//!   for the shape that has one. That module's own documentation says
+//!   "`limit_price` is not supported for market orders" is enforced "by there
+//!   being no way to set it on one", and a setter is that way.
+//! - `OrderRequest`'s `order_class`, `take_profit`, `stop_loss` and `legs` are
+//!   written by `bracket`, `oco`, `oto_take_profit`, `oto_stop_loss` and
+//!   `multi_leg`. An exit leg with no order class passes `validate` and is not
+//!   a bracket.
+//! - `CreateRecipientBankRequest`'s `routing_code` and `routing_code_type` go
+//!   together because a routing code without its scheme is ambiguous.
+//! - `EventStreamRequest`'s `since_id` is documented mutually exclusive with
+//!   `since`, and `from_id` is its constructor.
 //!
 //! The test is not "could a caller misuse this" — the fields are public, so
 //! they always could. It is whether the incoherent state is one the API
@@ -59,7 +70,23 @@
 //!
 //! # What does not earn a skip
 //!
-//! **Mutual exclusion earns one; ordering does not.** `start` and `end` keep
+//! **A field that merely *requires* a companion keeps its setter.**
+//! `EventStreamRequest::until` documents "Alpaca requires `since` whenever this
+//! is set", and `GetEventsRequest::until_id` says the same of its lower bound.
+//! Neither is skipped, and the distinction from `since_id` above is the one
+//! that matters: mutually exclusive fields make *every* chain that sets both
+//! wrong, while a required companion makes only the chain that omits it wrong —
+//! and the chain that includes it, `EventStreamRequest::since(t).until(u)`, is
+//! the ordinary correct usage. Skipping would take the setter away from the
+//! case it is for.
+//!
+//! What makes that safe rather than merely convenient is that the derive gives
+//! each setter the *field's* documentation, so the requirement travels onto the
+//! method: `.until()`'s own rustdoc says `since` is required. A precondition
+//! stated on the method is a different thing from an incoherent pair the API
+//! silently blesses.
+//!
+//! **Mutual exclusion earns a skip; ordering does not.** `start` and `end` keep
 //! their setters on every type that has them, including the four that also
 //! offer a fallible `between(start, end)` — `GetLocatesRequest`,
 //! `GetFpslLoansRequest`, `GetJitBalancesRequest` and

@@ -8,7 +8,7 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{
-    Attribute, Data, DeriveInput, Expr, ExprLit, Fields, GenericArgument, Ident, Lit, LitStr, Meta,
+    Attribute, Data, DeriveInput, Expr, ExprLit, Fields, GenericArgument, Lit, LitStr, Meta,
     PathArguments, Type, parse_macro_input, spanned::Spanned,
 };
 
@@ -129,6 +129,21 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
              writes, and neither a tuple struct nor a unit struct has one",
         ));
     };
+
+    // `#[setters(…)]` is a per-field attribute, and one written on the struct
+    // parses cleanly, applies to nothing, and looks configured — the exact
+    // failure the `into`-on-a-required-field and `doc`-on-a-skipped-field
+    // refusals below exist to prevent. An `#[setters(into)]` one line too high
+    // is a plausible typo, and silence is the worst answer to it.
+    for attribute in &input.attrs {
+        if attribute.path().is_ident("setters") {
+            return Err(syn::Error::new_spanned(
+                attribute,
+                "`setters` applies to a field, not to the struct — there is no \
+                 whole-type option, so this configures nothing",
+            ));
+        }
+    }
 
     let mut setters = Vec::new();
 
@@ -323,7 +338,7 @@ fn option_inner(ty: &Type) -> Option<&Type> {
         return None;
     }
     let segment = path.path.segments.last()?;
-    if segment.ident != Ident::new("Option", segment.ident.span()) {
+    if segment.ident != "Option" {
         return None;
     }
     let PathArguments::AngleBracketed(arguments) = &segment.arguments else {
