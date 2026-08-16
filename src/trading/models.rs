@@ -854,6 +854,15 @@ pub struct TradeUpdate {
     /// The order the update concerns.
     pub order: Order,
     /// When the event occurred.
+    ///
+    /// Required, so a frame without one fails the whole decode rather than
+    /// leaving this absent. Alpaca gives a meaning for it on six events —
+    /// `fill`, `partial_fill`, `canceled`, `expired`, `replaced`, `rejected` —
+    /// and says nothing about the rest, which does not establish that they omit
+    /// it: the schema for the server-sent form of these events declares
+    /// `timestamp` unconditionally, and its own example carries one for `new`.
+    /// Recorded because it is unverified either way, and no captured payload
+    /// exists to settle it.
     pub timestamp: DateTime<Utc>,
     /// Position quantity after the event.
     #[serde(default, with = "crate::types::option_decimal")]

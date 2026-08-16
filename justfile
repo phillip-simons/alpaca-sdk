@@ -222,7 +222,12 @@ reference:
 coverage: specs
     python3 scripts/coverage.py specs --out COVERAGE.md
 
-# Where this crate's wire enums and the same-named spec schemas disagree.
+# Where this crate's wire enums and their spec schemas disagree. Pairing is by
+# name, with an alias map for the types the two spell differently — `TradeEvent`
+# is Alpaca's `TradeUpdateEventType`, and before that map existed the pair never
+# met, so this report had no opinion while the enum shipped missing nine
+# documented values. It would have caught eight of them; the ninth, `held`, is
+# documented only in prose and is in no schema's value list.
 #
 # A quality report, not a gate: an unknown value deserializes into
 # `Unknown(String)` rather than failing. Needs `just specs`.

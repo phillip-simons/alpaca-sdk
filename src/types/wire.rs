@@ -8,6 +8,16 @@
 /// generated `Unknown(String)` variant keeps the raw wire value instead, so an
 /// unrecognized status is inspectable rather than fatal.
 ///
+/// The cost of that tolerance is that a value this crate simply forgot is
+/// indistinguishable from one Alpaca has just invented, and neither fails a
+/// test. `TradeEvent` shipped in 0.1.0 carrying twelve of the twenty-one values
+/// Alpaca documents for its trade events, because it had been transcribed from
+/// another SDK rather than from Alpaca's own list; the nine it omitted — two of
+/// which, `order_replace_rejected` and `order_cancel_rejected`, occur in
+/// routine trading — arrived as `Unknown` for a whole release without anything
+/// noticing. Whenever a variant is added here, check the whole list against a
+/// source rather than adding the one value that prompted the visit.
+///
 /// `Serialize`/`Deserialize` are hand-rolled rather than derived. Derive-based
 /// catch-alls (`#[serde(other)]`, variant-level `#[serde(untagged)]`) rely on
 /// content buffering that behaves differently across formats and, in the case of
@@ -54,6 +64,16 @@ macro_rules! wire_enum {
             ///
             /// Holds the raw wire string so it can be logged or matched on
             /// without waiting for a crate release.
+            ///
+            /// **This does not necessarily mean Alpaca has added something
+            /// new.** It means only that this crate does not name the value,
+            /// which is equally consistent with the crate having omitted one
+            /// Alpaca already documents.
+            ///
+            /// Treating `Unknown` as "the API changed under me" and escalating
+            /// on it is therefore not the conservative choice it looks like.
+            /// Log it, carry the string, and check it against Alpaca's
+            /// documentation before concluding the wire moved.
             Unknown(::std::string::String),
         }
 
