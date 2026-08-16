@@ -167,8 +167,16 @@ def crate_enums(
     return {name: values for name, values in enums.items() if values}, collisions
 
 
-def spec_enums(specs: pathlib.Path) -> dict[str, set[str]]:
+def spec_enums(
+    specs: pathlib.Path,
+) -> tuple[dict[str, set[str]], dict[str, dict[str, int]]]:
     """Every named schema under `components.schemas` that is a string enum.
+
+    Returns the schemas and, separately, any name that more than one spec
+    defines differently — as `{name: {spec file: value count}}`, so the report
+    can say which surfaces disagreed and by how much. The first value merges
+    those definitions; the second is what lets the verdict be qualified instead
+    of presented as a clean match.
 
     Parsed with regexes for the same reason `coverage.py` is: the specs are
     large, the shape needed is shallow, and a YAML dependency for two nested
@@ -309,6 +317,7 @@ def main() -> int:
     agree: list[str] = []
     excepted: list[str] = []
     against_merged: list[str] = []
+    merged_compared: list[str] = []
     missing: dict[str, list[str]] = {}
     extra: dict[str, list[str]] = {}
 
@@ -339,7 +348,16 @@ def main() -> int:
         if schema_of[name] in merged_schemas:
             # Compared, because a gap still means a gap — the union only ever
             # adds values Alpaca documents somewhere. But not called a match:
-            # surplus is unreliable against a merged vocabulary.
+            # surplus is unreliable against a merged vocabulary, so it is
+            # dropped rather than reported.
+            #
+            # Recorded whether or not there is a gap. An enum with both a gap
+            # and a suppressed surplus is the case most in need of the caveat
+            # — it appears below under a heading that reads like a full
+            # verdict, while half of it was never asked. Listing only the
+            # gap-free ones would present a partial answer as a whole one,
+            # which is the failure this report exists to stop.
+            merged_compared.append(name)
             if gap:
                 missing[name] = gap
             else:
@@ -417,7 +435,15 @@ def main() -> int:
     if missing:
         print("\nIn the spec, not in the crate — a value no caller can name:\n")
         for name, values in sorted(missing.items()):
-            print(f"  {name}")
+            # The gap below is sound either way, but against a merged
+            # vocabulary it is only half the comparison: surplus was computed
+            # and discarded, so this entry is not the whole answer for it.
+            merged = (
+                "  <- merged vocabulary; surplus not checked"
+                if name in merged_compared
+                else ""
+            )
+            print(f"  {name}{merged}")
             for value in values:
                 # The empty string is a real wire value here — Alpaca documents
                 # `simple (or "")` for OrderClass — and printing it bare would
