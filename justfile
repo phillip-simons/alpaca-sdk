@@ -177,7 +177,11 @@ semver:
 # feature on, and the attribute it enables is unstable, so the check does not
 # exist on a stable toolchain rather than merely being weaker there.
 doc-docsrs:
-    RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc --all-features --no-deps
+    # `--workspace` to match the `docs` job, which has it. This recipe exists so
+    # that job has a local equivalent, and one that covers fewer packages than
+    # the thing it stands in for is the gap it was written to close, reopened a
+    # package wider.
+    RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc --workspace --all-features --no-deps
 
 # Everything CI runs.
 ci: check doc-surfaces doc-docsrs features msrv deny
@@ -345,8 +349,10 @@ live:
 
 # List exactly what `cargo publish` would upload.
 #
-# The root package only. `alpaca-sdk-macros` is a separate tarball with three
-# files in it, and nothing about its contents has ever been in question.
+# The root package only. `alpaca-sdk-macros` is a separate tarball, and what is
+# in it — `src/lib.rs`, the manifests, and the trybuild cases under `tests/` —
+# has never been the question this recipe exists to answer. Add
+# `-p alpaca-sdk-macros` to inspect it.
 package:
     # Checks the `exclude` list in Cargo.toml before a release rather than
     # after. --allow-dirty because this is for inspection mid-change; the real

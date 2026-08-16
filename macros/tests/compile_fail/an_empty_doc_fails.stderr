@@ -1,0 +1,5 @@
+error: `doc` needs something to say: an empty one satisfies `missing_docs` and documents nothing
+ --> tests/compile_fail/an_empty_doc_fails.rs:6:15
+  |
+6 |     #[setters(doc = "  ")]
+  |               ^^^^^^^^^^

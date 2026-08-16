@@ -288,6 +288,11 @@ pub struct OrderRequest {
         skip_serializing_if = "Option::is_none",
         with = "crate::types::option_decimal"
     )]
+    #[setters(skip = "set by the constructor for the order shapes that take \
+                      one — `limit` and `stop_limit`. This module's own \
+                      documentation says `limit_price` on a market order is \
+                      prevented by there being no way to set it on one, and a \
+                      setter here is that way")]
     pub limit_price: Option<Decimal>,
     /// Stop price, for stop and stop-limit orders.
     #[serde(
@@ -295,6 +300,9 @@ pub struct OrderRequest {
         skip_serializing_if = "Option::is_none",
         with = "crate::types::option_decimal"
     )]
+    #[setters(skip = "set by `stop` and `stop_limit`, the two shapes that have \
+                      one; the sibling of `limit_price`, skipped for the same \
+                      reason")]
     pub stop_price: Option<Decimal>,
     /// Dollar trail, for trailing stop orders.
     #[serde(
@@ -302,6 +310,10 @@ pub struct OrderRequest {
         skip_serializing_if = "Option::is_none",
         with = "crate::types::option_decimal"
     )]
+    #[setters(skip = "one of `trail_price` and `trail_percent`, never both — \
+                      which is what `Trail` exists to make unrepresentable, \
+                      and `validate` does not catch because the type made it \
+                      unreachable")]
     pub trail_price: Option<Decimal>,
     /// Percentage trail, for trailing stop orders.
     #[serde(
@@ -309,6 +321,8 @@ pub struct OrderRequest {
         skip_serializing_if = "Option::is_none",
         with = "crate::types::option_decimal"
     )]
+    #[setters(skip = "the other half of `Trail`; `trailing_stop` takes one and \
+                      clears the other, which a setter for each would undo")]
     pub trail_percent: Option<Decimal>,
 }
 

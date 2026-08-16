@@ -262,6 +262,16 @@ fn parse_options(attrs: &[Attribute]) -> syn::Result<Options> {
             // renders as a space rather than a break.
             if meta.path.is_ident("doc") {
                 let text: LitStr = meta.value()?.parse()?;
+                // A blank first line would satisfy `missing_docs` with nothing
+                // in it, which is the lint passing rather than the method being
+                // documented. Later lines may be blank — that is a paragraph
+                // break — so only the first is checked.
+                if options.doc.is_empty() && text.value().trim().is_empty() {
+                    return Err(meta.error(
+                        "`doc` needs something to say: an empty one satisfies \
+                         `missing_docs` and documents nothing",
+                    ));
+                }
                 options.doc.push(text.value());
                 options.doc_span.get_or_insert(meta.path.span());
                 return Ok(());

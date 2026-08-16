@@ -57,6 +57,19 @@
 //! they always could. It is whether the incoherent state is one the API
 //! *offers*, in a documented method a reader would reasonably take as blessed.
 //!
+//! # What does not earn a skip
+//!
+//! **Mutual exclusion earns one; ordering does not.** `start` and `end` keep
+//! their setters on every type that has them, including the four that also
+//! offer a fallible `between(start, end)` — `GetLocatesRequest`,
+//! `GetFpslLoansRequest`, `GetJitBalancesRequest` and
+//! `GetMarketCalendarRequest`. Both fields set is the ordinary case rather than
+//! the broken one, only the ordering can be wrong, and a one-sided window is
+//! something `between` cannot express at all. `TimeseriesRequest` has shipped
+//! unchecked `start`/`end` since 0.1.0, so this is the existing shape of the
+//! crate and not a new hole; `between` remains the checked path for callers who
+//! have both values at once.
+//!
 //! # Documentation
 //!
 //! The derive gives each setter the field's own doc comment, which for a

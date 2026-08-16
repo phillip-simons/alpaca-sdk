@@ -74,7 +74,19 @@ FIELD_START = re.compile(r"^    pub (\w+):")
 
 # A rejoined `pub field: Option<T>,`. Only optional fields: a required field is
 # a constructor argument, and the derive leaves it alone.
-OPTION_FIELD = re.compile(r"^pub (\w+): Option<.+>,$")
+#
+# The path prefix is optional because `option_inner` in the derive matches on the
+# last segment, so `std::option::Option<u32>` is an optional field to the
+# compiler. A pattern that insisted on the bare spelling disagreed with the
+# derive about what this script is counting, in the direction where the field
+# reads as required and the type stops being checked at all.
+OPTION_FIELD = re.compile(r"^pub (\w+): (?:\w+::)*Option<.+>,$")
+
+# A trailing `// …` on a field, stripped before the field is classified. Without
+# this the declaration no longer ends in `,`, so it matches nothing, and a type
+# whose every optional field carries a comment is reported as having none —
+# which is indistinguishable from being fully covered.
+LINE_COMMENT = re.compile(r"\s*//(?!/).*$")
 
 # A tuple or unit struct — `pub struct Codes(HashMap<String, String>);`. It has
 # no named fields, so `Setters` has nothing to generate for it and it is out of
@@ -86,7 +98,12 @@ UNNAMED_STRUCT = re.compile(r"^pub struct (\w+)(?:<[^>]*>)?\s*[(;]")
 # is a type that silently drops out of the report, which is the one outcome a
 # gate must not have — so it stops rather than passing. This fired the first
 # time it ran, on the newtype above.
-UNPARSED_STRUCT = re.compile(r"^pub struct\b")
+#
+# Deliberately *not* anchored to column 0, where `STRUCT_DECL` is. A struct
+# indented inside an inline `pub mod` matches neither, and an unanchored guard
+# is the difference between "this script does not handle inline modules" being
+# an error and being silence.
+UNPARSED_STRUCT = re.compile(r"^\s*pub struct\b")
 
 # `Setters` inside a `#[derive(…)]`. Matched against the whole attribute block
 # above a struct, so a derive list rustfmt has split across lines still hits.
@@ -169,13 +186,13 @@ def fields(lines: list[str], start: int) -> tuple[list[str], list[tuple[str, str
             index += 1
             continue
 
-        parts = [lines[index].strip()]
+        parts = [LINE_COMMENT.sub("", lines[index]).strip()]
         while not parts[-1].endswith(",") and index + 1 < len(lines):
             index += 1
             if lines[index] == "}":  # an unterminated declaration; stop here
                 break
-            parts.append(lines[index].strip())
-        declaration = " ".join(parts)
+            parts.append(LINE_COMMENT.sub("", lines[index]).strip())
+        declaration = " ".join(part for part in parts if part)
 
         found = OPTION_FIELD.match(declaration)
         if found:
@@ -261,7 +278,14 @@ def main() -> int:
     covered = 0
 
     for rs in sorted(args.src.rglob("*.rs")):
-        for name, (derives, optional, skipped) in parse(rs).items():
+        try:
+            parsed = parse(rs)
+        except SyntaxError as unreadable:
+            # A traceback in a CI log reads as "the checker is broken" when what
+            # it means is "the checker found source it will not guess about".
+            print(unreadable, file=sys.stderr)
+            return 1
+        for name, (derives, optional, skipped) in parsed.items():
             if name in EXCLUSIONS:
                 seen_exclusions.add(name)
                 continue

@@ -1,0 +1,10 @@
+error[E0599]: no method named `qty` found for struct `Request` in the current scope
+  --> tests/compile_fail/a_skipped_field_has_no_setter_fails.rs:23:32
+   |
+13 | pub struct Request {
+   | ------------------ method `qty` not found for this struct
+...
+23 |     let _ = Request::default().qty(1).notional(2);
+   |                                ^^^--- help: remove the arguments
+   |                                |
+   |                                field, not a method

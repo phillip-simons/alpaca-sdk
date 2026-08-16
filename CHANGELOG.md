@@ -19,10 +19,9 @@ asking for it.
 
 ### Added
 
-- **A setter for every optional field on every request type** — 473 of them,
+- **A setter for every optional field on every request type** — 463 of the 478,
   across 119 types. `GetOrdersRequest` had fourteen filters and a setter for
-  none of them; `UpdatableIdentity` had twenty-one and none; `OrderRequest` had
-  fifteen optional fields and setters for three of them.
+  none of them; `UpdatableIdentity` had twenty-one and none.
 
   ```rust
   let orders = client
@@ -51,23 +50,40 @@ asking for it.
   `String` and `Vec<T>` fields take `impl Into<T>`, so `.subtag("desk-7")` works
   without a `to_owned()`. Everything else takes its type exactly.
 
-  Eleven fields have no setter, deliberately, and assignment remains the way to
-  reach them. Three because a *constructor* already holds the name and two
+  Fifteen fields have no setter, deliberately, and assignment remains the way
+  to reach them. Three because a *constructor* already holds the name and two
   `pub fn` of one name cannot coexist in one impl:
   `GetEventsRequest::since`, `EventStreamRequest::since` and
   `EstimateOrderRequest::notional`.
 
-  The other eight because one setter writes them as a group, and offering one
-  per field would make an incoherent request easy to build by accident.
-  `OrderRequest`'s `qty` and `notional` are `OrderAmount`, which exists so that
-  "both at once" cannot be expressed — and `OrderRequest::validate` does not
-  reject it, precisely because the type made it unreachable. Its `order_class`,
-  `take_profit`, `stop_loss` and `legs` belong to `bracket`, `oco`,
-  `oto_take_profit`, `oto_stop_loss` and `multi_leg`; an exit leg with no order
-  class passes `validate` and is not a bracket, it is a plain order with a
-  field Alpaca ignores. `CreateRecipientBankRequest`'s `routing_code` and
-  `routing_code_type` go together because a routing code without its scheme is
-  ambiguous.
+  The other twelve because one setter writes them as a group, and offering one
+  per field would make an incoherent request easy to build by accident. Ten are
+  on `OrderRequest`, whose module documentation names three combinations the
+  *type* makes unrepresentable — a per-field setter would have quietly undone
+  two of them:
+
+  - `qty` / `notional` are `OrderAmount`, and `trail_price` / `trail_percent`
+    are `Trail`. Both exist so "both at once" cannot be expressed, and
+    `OrderRequest::validate` does not reject either pair — precisely because
+    the type made them unreachable.
+  - `limit_price` / `stop_price` are set by the constructors for the shapes
+    that have them. "`limit_price` is not supported for market orders" is
+    enforced, in that module's own words, "by there being no way to set it on
+    one".
+  - `order_class`, `take_profit`, `stop_loss` and `legs` belong to `bracket`,
+    `oco`, `oto_take_profit`, `oto_stop_loss` and `multi_leg`. An exit leg with
+    no order class passes `validate` and is not a bracket — it is a plain order
+    carrying a field Alpaca ignores.
+
+  The remaining two are `CreateRecipientBankRequest`'s `routing_code` and
+  `routing_code_type`, which go together because a routing code without its
+  scheme is ambiguous.
+
+  Window filters are *not* in this category. `start` and `end` set together in
+  the wrong order is a mistake a checked `between(start, end)` catches where one
+  exists, but one-sided windows are ordinary and `TimeseriesRequest` has offered
+  unchecked `start`/`end` since 0.1.0. Mutual exclusion is what earns a skip;
+  ordering is not.
 
   Purely additive. The 78 setters that already existed were written by hand and
   are now generated, keeping their names, their documentation and their
