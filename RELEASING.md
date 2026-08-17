@@ -7,6 +7,27 @@ stored in GitHub, in this repo, or on your machine.
 
 [trusted publishing]: https://crates.io/docs/trusted-publishing
 
+## Two crates, one release
+
+This is a workspace. `alpaca-sdk-macros` holds the `Setters` derive, and exists
+only because a procedural macro cannot live in the crate that uses it. It is not
+a crate anyone depends on directly, and its documentation says so.
+
+`alpaca-sdk` pins it with `=`, following the precedent serde sets for
+`serde_derive`: the derive's output has to match what the SDK's own source
+expects of it, and a caret range would let cargo pair a version of one with a
+version of the other that was never built together. `release.yml` checks the pin
+names the version being published, because a stale pin resolves against
+crates.io instead of the sibling and hands a caller a derive built from
+different source than the SDK was tested against.
+
+**One `cargo publish --workspace` does both**, in dependency order, from a single
+invocation. Two separate `cargo publish` calls would not work: the second needs
+the first to be live and indexed, and crates.io does not index synchronously.
+The same command with `--dry-run` — which is what `just publish-dry` runs —
+packages both and resolves the not-yet-published sibling out of a temporary
+registry, so the whole path is exercised locally before a tag exists.
+
 ## One-time setup
 
 Both steps are manual, and the second cannot be done before the first.
@@ -20,9 +41,10 @@ This is what makes the publish job stop and wait for a human. Verification runs
 *before* the pause, so by the time you are asked to approve, the gate is already
 green.
 
-### 2. The crates.io trusted publisher
+### 2. The crates.io trusted publishers
 
-crates.io → the crate → **Settings → Trusted Publishing → Add publisher**:
+**Two of them, one per crate.** crates.io → the crate → **Settings → Trusted
+Publishing → Add publisher**, with identical values for both:
 
 | Field | Value |
 |---|---|
@@ -33,7 +55,21 @@ crates.io → the crate → **Settings → Trusted Publishing → Add publisher*
 
 A trusted publisher can only be added to a crate that has been published at
 least once. `alpaca-sdk 0.0.0` was published manually on 2026-08-12 for exactly
-this reason, so the prerequisite is already met.
+this reason, so that side is already met.
+
+**`alpaca-sdk-macros` has not been published yet, and needs the same treatment
+before the next release can run.** Publish it once by hand, then add its trusted
+publisher:
+
+```sh
+cargo publish -p alpaca-sdk-macros   # with a scratch API token, once
+```
+
+Until that is done, the `publish` job will fail at the macros crate — after the
+approval prompt, and after `alpaca-sdk` has been packaged but not uploaded.
+Nothing is left half-published: cargo uploads in dependency order and stops at
+the first failure, so the failure mode is "nothing was published", not "the
+macros crate shipped without the SDK".
 
 **The workflow filename is part of the trust configuration.** Renaming
 `release.yml` breaks publishing until the configuration is changed to match, and
@@ -48,6 +84,15 @@ the failure appears at publish time rather than at rename time.
 $EDITOR Cargo.toml
 $EDITOR CHANGELOG.md   # promote the heading to `## [0.1.0] — 2026-08-13`
 
+# 1b. Bump the macros crate to the same version, and the `=` pin with it.
+#     Lockstep every release, even when `macros/` did not change — serde does
+#     the same with serde_derive, and for the same reason: it makes "which
+#     macros version goes with this SDK" a question with one answer instead of
+#     a lookup. It also sidesteps `cargo publish --workspace` meeting a member
+#     whose version is already on crates.io.
+$EDITOR macros/Cargo.toml   # version = "0.1.1"
+$EDITOR Cargo.toml          # alpaca-sdk-macros = { version = "=0.1.1", … }
+
 # 2. Prove it locally first. This is what CI will run again.
 just publish-dry
 
@@ -55,7 +100,7 @@ just publish-dry
 #    `main` is protected and admins are not exempt, so this cannot be
 #    pushed directly.
 git checkout -b release-0.1.0
-git add Cargo.toml Cargo.lock CHANGELOG.md
+git add Cargo.toml macros/Cargo.toml Cargo.lock CHANGELOG.md
 git commit -m "release 0.1.0"
 git push -u origin release-0.1.0
 gh pr create --fill
@@ -101,7 +146,12 @@ tests, feature combinations, MSRV, cargo-deny — plus `cargo-semver-checks` and
 packaging dry run, all on Linux. Then:
 
 - the tag matches `Cargo.toml`;
-- the tarball's file list is printed for review.
+- the `=` pin on `alpaca-sdk-macros` names the version being published, **and**
+  that version matches the tag — the pin agreeing with the macros crate is not
+  enough on its own, since forgetting step 1b leaves both agreeing at a version
+  already on crates.io, and `cargo publish --workspace --dry-run` only *warns*
+  about that;
+- both tarballs' file lists are printed for review.
 
 `cross-platform` runs the test suite on macOS and Windows, in parallel with
 `verify`. **This is the only place those two platforms are tested.** Routine CI

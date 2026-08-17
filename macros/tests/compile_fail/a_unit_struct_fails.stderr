@@ -1,0 +1,7 @@
+error: Setters needs named fields — a setter is named after the field it writes, and neither a tuple struct nor a unit struct has one
+ --> tests/compile_fail/a_unit_struct_fails.rs:3:10
+  |
+3 | #[derive(Setters)]
+  |          ^^^^^^^
+  |
+  = note: this error originates in the derive macro `Setters` (in Nightly builds, run with -Z macro-backtrace for more info)

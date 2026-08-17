@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
+use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -143,7 +144,7 @@ pub struct TokenizationRequest {
 }
 
 /// A request to mint a tokenized asset.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct MintTokenRequest {
     /// The position to tokenize.
@@ -194,7 +195,7 @@ impl MintTokenRequest {
 }
 
 /// Filters for listing tokenization requests.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetTokenizationRequestsRequest {
     /// Only mints, or only redemptions.
@@ -205,6 +206,7 @@ pub struct GetTokenizationRequestsRequest {
     pub status: Option<TokenizationStatus>,
     /// Only requests for this position.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub underlying_symbol: Option<String>,
     /// Only requests through this issuer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -225,20 +227,6 @@ impl GetTokenizationRequestsRequest {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Only mints, or only redemptions.
-    #[must_use]
-    pub fn request_type(mut self, request_type: TokenizationType) -> Self {
-        self.request_type = Some(request_type);
-        self
-    }
-
-    /// Only requests in this state.
-    #[must_use]
-    pub fn status(mut self, status: TokenizationStatus) -> Self {
-        self.status = Some(status);
-        self
     }
 }
 
@@ -271,7 +259,7 @@ fn exactly_one_account(has_account_id: bool, has_external_id: bool) -> Result<()
 ///
 /// The redeem callback is a **different shape**, not a mirror of this one —
 /// see [`TokenizationRedeemRequest`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct TokenizationMintCallback {
     /// Alpaca's identifier for the request being confirmed.
@@ -283,6 +271,7 @@ pub struct TokenizationMintCallback {
     pub client_account_id: Option<Uuid>,
     /// The customer's identifier on the issuer's platform.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub client_external_account_id: Option<String>,
     /// Alpaca's older alias for
     /// [`client_external_account_id`](Self::client_external_account_id).
@@ -290,12 +279,14 @@ pub struct TokenizationMintCallback {
     /// Deprecated since 2026-07-15 and sunsetting 2026-10-15. Still accepted
     /// until then, so the field is here; set the newer one instead.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub client_id: Option<String>,
     /// The chain the mint settled on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network: Option<TokenizationNetwork>,
     /// The wallet address that received the tokenized asset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub wallet_address: Option<String>,
 }
 
@@ -352,7 +343,7 @@ impl TokenizationMintCallback {
 /// Exactly one of [`client_account_id`](Self::client_account_id) and
 /// [`client_external_account_id`](Self::client_external_account_id) must be
 /// set, identifying whose account receives the underlying asset.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct TokenizationRedeemRequest {
     /// The issuer's own identifier for the redemption.
@@ -375,6 +366,7 @@ pub struct TokenizationRedeemRequest {
     pub client_account_id: Option<Uuid>,
     /// The customer's identifier on the issuer's platform.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub client_external_account_id: Option<String>,
     /// Alpaca's older alias for
     /// [`client_external_account_id`](Self::client_external_account_id).
@@ -382,6 +374,7 @@ pub struct TokenizationRedeemRequest {
     /// Deprecated since 2026-07-15 and sunsetting 2026-10-15. Still accepted
     /// until then, so the field is here; set the newer one instead.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub client_id: Option<String>,
 }
 
@@ -487,7 +480,7 @@ pub struct TokenizationRedeemResponse {
 }
 
 /// A lookup by the caller's own request id.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct ByClientRequestId {
     /// The identifier the caller sent with the request.

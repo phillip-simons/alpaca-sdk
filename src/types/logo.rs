@@ -10,10 +10,11 @@
 //! `403 Subscription does not permit querying logos`, so logos are a separate
 //! entitlement rather than part of a data plan.
 
+use crate::types::setters::Setters;
 use serde::{Deserialize, Serialize};
 
 /// A request for a company logo.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct LogoRequest {
     /// Whether to answer with a generated placeholder when no logo exists.
@@ -21,6 +22,7 @@ pub struct LogoRequest {
     /// Alpaca defaults this to `true`, so an unset request never 404s — it
     /// returns an image either way. Set it to `false` to tell the two apart.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Whether a placeholder is acceptable.")]
     pub placeholder: Option<bool>,
 }
 
@@ -29,13 +31,6 @@ impl LogoRequest {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Whether a placeholder is acceptable.
-    #[must_use]
-    pub fn placeholder(mut self, placeholder: bool) -> Self {
-        self.placeholder = Some(placeholder);
-        self
     }
 }
 

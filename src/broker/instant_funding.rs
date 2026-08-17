@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::broker::settlements::TransmitterInfo;
+use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -201,7 +202,7 @@ pub struct InstantFundingReport {
 }
 
 /// Filters for listing instant funding requests.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetInstantFundingRequest {
     /// Only requests in this state.
@@ -237,13 +238,6 @@ impl GetInstantFundingRequest {
         Self::default()
     }
 
-    /// Only requests in this state.
-    #[must_use]
-    pub fn status(mut self, status: InstantFundingStatus) -> Self {
-        self.status = Some(status);
-        self
-    }
-
     /// Sorts the results.
     #[must_use]
     pub fn sort(mut self, sort_by: InstantFundingSortBy, order: SortOrder) -> Self {
@@ -254,7 +248,7 @@ impl GetInstantFundingRequest {
 }
 
 /// A request to advance cash against an uncleared deposit.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateInstantFundingRequest {
     /// The account to credit.
@@ -299,7 +293,7 @@ impl CreateInstantFundingRequest {
 }
 
 /// One advance to settle, and who sent the money.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct SettlementTransfer {
     /// The advance being settled.
@@ -320,13 +314,14 @@ impl SettlementTransfer {
 }
 
 /// A request to settle one or more advances.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateInstantFundingSettlementRequest {
     /// The advances to settle.
     pub transfers: Vec<SettlementTransfer>,
     /// Free-form notes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub additional_info: Option<String>,
 }
 
@@ -356,11 +351,12 @@ impl CreateInstantFundingSettlementRequest {
 }
 
 /// Filters for the instant funding report.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetInstantFundingReportRequest {
     /// Which report to run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub report_type: Option<String>,
     /// The business day to report on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -368,7 +364,7 @@ pub struct GetInstantFundingReportRequest {
 }
 
 /// A request for several accounts' instant funding limits.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetAccountLimitsRequest {
     /// The accounts to ask about, sent as one comma-separated parameter.

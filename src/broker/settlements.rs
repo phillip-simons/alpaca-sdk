@@ -13,6 +13,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -45,35 +46,44 @@ wire_enum! {
 /// is not, so this validates nothing: what a given jurisdiction requires is
 /// Alpaca's business, and refusing a request it would have accepted is the
 /// worse failure.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct TransmitterInfo {
     /// The sender's full name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub originator_full_name: Option<String>,
     /// The sender's bank.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub originator_bank_name: Option<String>,
     /// The sender's account at that bank.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub originator_bank_account_number: Option<String>,
     /// Street address.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub originator_street_address: Option<String>,
     /// City.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub originator_city: Option<String>,
     /// State or province.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub originator_state: Option<String>,
     /// Postal code.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub originator_postal_code: Option<String>,
     /// Country.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub originator_country: Option<String>,
     /// Anything else that identifies the sender.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub other_identifying_information: Option<String>,
 }
 
@@ -128,7 +138,7 @@ pub struct Settlements {
 }
 
 /// Filters for listing settlements.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetSettlementsRequest {
     /// Only settlements in these states, comma-separated.
@@ -137,6 +147,7 @@ pub struct GetSettlementsRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "crate::types::serde_util::comma_separated"
     )]
+    #[setters(into, doc = "Only settlements in these states.")]
     pub statuses: Option<Vec<SettlementStatus>>,
 }
 
@@ -145,13 +156,6 @@ impl GetSettlementsRequest {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Only settlements in these states.
-    #[must_use]
-    pub fn statuses(mut self, statuses: Vec<SettlementStatus>) -> Self {
-        self.statuses = Some(statuses);
-        self
     }
 }
 

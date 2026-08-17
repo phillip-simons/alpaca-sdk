@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use crate::trading::Position;
 use crate::types::serde_util::comma_separated;
+use crate::types::setters::Setters;
 
 /// Positions across accounts as of one close.
 ///
@@ -183,7 +184,7 @@ pub struct AprTiers {
 }
 
 /// Filters for the end-of-day positions report.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetEodPositionsRequest {
     /// Only this account.
@@ -191,6 +192,7 @@ pub struct GetEodPositionsRequest {
     pub account_id: Option<Uuid>,
     /// Only this symbol.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub asset: Option<String>,
     /// The close to report as of.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -200,6 +202,7 @@ pub struct GetEodPositionsRequest {
     pub limit: Option<u32>,
     /// The token from a previous page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub page_token: Option<String>,
 }
 
@@ -209,20 +212,13 @@ impl GetEodPositionsRequest {
     pub fn new() -> Self {
         Self::default()
     }
-
-    /// The close to report as of.
-    #[must_use]
-    pub fn asof(mut self, asof: NaiveDate) -> Self {
-        self.asof = Some(asof);
-        self
-    }
 }
 
 /// Filters for the aggregate positions report.
 ///
 /// `date` is required, so it is a constructor argument rather than a builder
 /// step: the route has no default.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetAggregatePositionsRequest {
     /// The close to report as of.
@@ -233,6 +229,7 @@ pub struct GetAggregatePositionsRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
+    #[setters(into)]
     pub symbols: Option<Vec<String>>,
     /// Whether to include firm accounts in the aggregate.
     ///
@@ -242,6 +239,7 @@ pub struct GetAggregatePositionsRequest {
     /// list of account ids here got parsed as a boolean, and the report came back
     /// silently missing the firm inventory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Whether to include firm accounts. Alpaca includes them by default.")]
     pub firm_accounts: Option<bool>,
 }
 
@@ -255,24 +253,10 @@ impl GetAggregatePositionsRequest {
             firm_accounts: None,
         }
     }
-
-    /// Only these symbols.
-    #[must_use]
-    pub fn symbols(mut self, symbols: Vec<String>) -> Self {
-        self.symbols = Some(symbols);
-        self
-    }
-
-    /// Whether to include firm accounts. Alpaca includes them by default.
-    #[must_use]
-    pub fn firm_accounts(mut self, include: bool) -> Self {
-        self.firm_accounts = Some(include);
-        self
-    }
 }
 
 /// Filters for the cash interest report.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetCashInterestRequest {
     /// Only this account.
@@ -295,6 +279,7 @@ pub struct GetCashInterestRequest {
     pub page_size: Option<u32>,
     /// The token from a previous page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub page_token: Option<String>,
 }
 
@@ -303,13 +288,6 @@ impl GetCashInterestRequest {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Only this account.
-    #[must_use]
-    pub fn account_id(mut self, account_id: Uuid) -> Self {
-        self.account_id = Some(account_id);
-        self
     }
 }
 

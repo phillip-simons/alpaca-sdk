@@ -58,10 +58,13 @@ just doc-docsrs   # RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc �
 On a change that touches no Rust — documentation, issue templates, this file —
 CI skips those jobs. They still report as skipped, which counts as satisfied, so
 the pull request is not left waiting on checks that will never run. Editing
-anything under `src/`, `tests/`, `examples/`, `fixtures/`, `Cargo.toml`,
-`Cargo.lock`, `build.rs`, `deny.toml` or `ci.yml` brings the whole matrix back.
-`scripts/` has its own job on its own filter, so a change to the Python runs the
-script tests without dragging the Rust matrix along with it.
+anything under `src/`, `macros/`, `tests/`, `examples/`, `fixtures/`,
+`Cargo.toml`, `Cargo.lock`, `build.rs`, `deny.toml` or `ci.yml` brings the whole
+matrix back. `macros/` counts because the derive it holds is compiled into every
+request type, so a change there is a change to the library even though nothing
+under `src/` moved. `scripts/` has its own job on its own filter, so a change to
+the Python runs the script tests without dragging the Rust matrix along with
+it.
 
 The minimum supported Rust version is **1.88**. Enabling `polars` raises it to
 1.95, which is why that feature is off by default — a convenience feature does
@@ -124,8 +127,11 @@ doing when it found it.
    spec says what exists; the reference says what is still current.
 3. Add a test. If you have a real captured payload, add it under `fixtures/`
    and parse it — a fixture nothing reads proves nothing.
-4. Re-run `just parameters` and `just enums-drift` if you touched a request
-   struct or a wire enum.
+4. Re-run `just parameters`, `just setters` and `just enums-drift` if you
+   touched a request struct or a wire enum. The first says whether the crate can
+   send a documented parameter at all, the second whether a caller can set it
+   without an assignment, the third whether a wire enum still matches its
+   schema.
 
 ## Conventions worth knowing
 
@@ -138,14 +144,70 @@ doing when it found it.
 - **Unknown response fields are ignored.** Alpaca sends fields no model
   declares.
 - **Request structs are `#[non_exhaustive]`.** Build with the constructor the
-  type provides, then assign fields. That is usually `new` or `default`, but a
-  type whose valid fields depend on a choice offers named constructors instead
-  — `OrderRequest::limit`, `CreateJournalRequest::cash`,
+  type provides, then chain a setter per optional field. That is usually `new`
+  or `default`, but a type whose valid fields depend on a choice offers named
+  constructors instead — `OrderRequest::limit`, `CreateJournalRequest::cash`,
   `CreateBankRequest::domestic` — and `AccountConfiguration` offers neither,
   because it is a read-modify-write and a constructor would invite resetting
   every setting the caller did not name. Give a new request struct the
   constructor its shape justifies. This is what lets a newly documented
   parameter arrive as a field rather than as a breaking change.
+
+  ```rust
+  GetOrdersRequest::default()
+      .status(QueryOrderStatus::Open)
+      .limit(50)
+      .symbols(vec!["AAPL".to_owned()])
+  ```
+
+  **Every request type derives `Setters`**, which generates one consuming
+  setter per `Option` field. A field with no setter is reachable only by
+  assignment, which still compiles and is now the fallback rather than the
+  idiom.
+
+  Because the derive reads the real field list, a field added tomorrow has a
+  setter today — there is nothing to keep in step by hand. What needs saying is
+  only the exceptions:
+
+  - `#[setters(into)]` on `String` and `Vec<T>` fields, so `.subtag("desk-7")`
+    works without a `to_owned()`. Everything else takes its type exactly.
+  - `#[setters(doc = "…")]` where the field's own doc comment reads as a noun
+    and the method should read as an action. The derive uses the field's
+    documentation otherwise, and refuses to generate a setter for a field with
+    none.
+  - `#[setters(skip = "why")]` where a setter should not exist. Three kinds: a
+    constructor already holds the name; the field is only coherent set
+    alongside another and one setter writes the group — `OrderAmount`'s
+    `qty`/`notional`, a bracket's class and its legs; or the `Option` exists so
+    the field serializes as *omitted* rather than `null` and is not a value a
+    caller picks at all, which is what `AccountConfiguration`'s `dtbp_check` and
+    `pdt_check` are. The reason is required, so a skip is never mistakable for
+    an oversight, and `just setters` prints them all on every run.
+
+    The test for the second kind is not "could a caller misuse this" — the
+    fields are public, so they always could. It is whether the incoherent state
+    is one the API *offers*, in a documented method a reader would take as
+    blessed. `OrderRequest::validate` does not reject `qty` and `notional`
+    together, because `OrderAmount` made that unreachable; a setter for each
+    would quietly make it reachable again.
+
+  `just setters` names request types that do not derive it, and **fails** if it
+  finds one. Unlike `just parameters` and `just enums-drift`, which report a
+  difference with Alpaca that may be Alpaca's to resolve, this checks a rule
+  this repository sets for itself and can always satisfy.
+
+  The derive lives in `macros/`, a second published crate, because a procedural
+  macro cannot live in the crate that uses it. See `RELEASING.md` — the two
+  publish together.
+
+  Its refusals are covered by trybuild compile-fail tests in
+  `macros/tests/compile_fail/`. If you change one of those messages, or a
+  toolchain bump rewords a diagnostic, regenerate the expectations rather than
+  editing them by hand, then read the diff:
+
+  ```sh
+  TRYBUILD=overwrite cargo test -p alpaca-sdk-macros --test compile_fail
+  ```
 - **Alpaca's typos are load-bearing.** `face_comparision` and `parnter_fee` are
   spelled that way on the wire. Do not "fix" them.
 

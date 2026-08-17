@@ -268,3 +268,76 @@ fn every_input_type_is_reachable_from_outside_the_crate() {
     let _ = GetMarketCalendarRequest::default();
     let _ = GetPortfolioHistoryRequest::default();
 }
+
+/// A chain of setters and a run of field assignments produce the same request.
+///
+/// The setters are additive: the assignment form is what a caller writes today,
+/// it keeps working, and the two must stay interchangeable or the new idiom is
+/// a second, subtly different way to build the same request. Equivalence is the
+/// behaviour worth pinning, so this asserts on the whole serialized object
+/// rather than field by field — a setter writing into the wrong field passes
+/// every per-field assertion the test author remembered to write, and fails
+/// this one.
+///
+/// `GetOrdersRequest` because it is the widest: fourteen optional fields across
+/// enums, integers, timestamps, `Uuid`, `Decimal`, `Vec` and `String`, which is
+/// every shape the macro generates.
+#[test]
+fn a_setter_chain_and_field_assignment_build_the_same_request() {
+    use alpaca_sdk::trading::{AssetClass, GetOrdersRequest, OrderSide, QueryOrderStatus};
+    use alpaca_sdk::types::Sort;
+
+    let after: chrono::DateTime<chrono::Utc> = "2024-01-01T00:00:00Z".parse().unwrap();
+    let until: chrono::DateTime<chrono::Utc> = "2024-02-01T00:00:00Z".parse().unwrap();
+    let before_order = Uuid::from_u128(1);
+    let after_order = Uuid::from_u128(2);
+
+    let chained = GetOrdersRequest::default()
+        .status(QueryOrderStatus::Open)
+        .limit(50)
+        .after(after)
+        .until(until)
+        .direction(Sort::Desc)
+        .nested(true)
+        .side(OrderSide::Buy)
+        .symbols(vec!["AAPL".to_owned(), "SPY".to_owned()])
+        .asset_class(vec![AssetClass::UsEquity])
+        .before_order_id(before_order)
+        .after_order_id(after_order)
+        .qty_above(Decimal::ONE)
+        .qty_below(Decimal::TEN)
+        // A `&str` where the field is `Option<String>`: the `into` half of the
+        // macro, and the reason it exists.
+        .subtag("desk-7");
+
+    let mut assigned = GetOrdersRequest::default();
+    assigned.status = Some(QueryOrderStatus::Open);
+    assigned.limit = Some(50);
+    assigned.after = Some(after);
+    assigned.until = Some(until);
+    assigned.direction = Some(Sort::Desc);
+    assigned.nested = Some(true);
+    assigned.side = Some(OrderSide::Buy);
+    assigned.symbols = Some(vec!["AAPL".to_owned(), "SPY".to_owned()]);
+    assigned.asset_class = Some(vec![AssetClass::UsEquity]);
+    assigned.before_order_id = Some(before_order);
+    assigned.after_order_id = Some(after_order);
+    assigned.qty_above = Some(Decimal::ONE);
+    assigned.qty_below = Some(Decimal::TEN);
+    assigned.subtag = Some("desk-7".to_owned());
+
+    assert_eq!(
+        serde_json::to_value(&chained).unwrap(),
+        serde_json::to_value(&assigned).unwrap(),
+    );
+
+    // Fourteen fields set, fourteen fields serialized: a setter that wrote into
+    // a field another setter also writes would leave this short, and the
+    // equality above would still hold.
+    let sent = serde_json::to_value(&chained).unwrap();
+    assert_eq!(sent.as_object().unwrap().len(), 14, "{sent}");
+
+    // And the setters stay optional: an untouched request still sends nothing.
+    let empty = serde_json::to_value(GetOrdersRequest::default()).unwrap();
+    assert!(empty.as_object().unwrap().is_empty(), "{empty}");
+}

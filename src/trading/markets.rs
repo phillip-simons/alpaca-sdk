@@ -14,6 +14,7 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -170,7 +171,7 @@ pub struct MarketCalendar {
 }
 
 /// Filters for a market calendar.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetMarketCalendarRequest {
     /// The first day to return.
@@ -181,6 +182,7 @@ pub struct GetMarketCalendarRequest {
     pub end: Option<NaiveDate>,
     /// The timezone to quote sessions in. Alpaca accepts only `UTC`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub timezone: Option<String>,
 }
 

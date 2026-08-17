@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
+use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -162,7 +163,7 @@ pub struct LocateQuotes {
 /// The date window filters on the *locate trading date*, which rolls at 20:00
 /// `America/New_York` rather than at midnight UTC, and `end` is exclusive where
 /// `start` is inclusive.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetLocatesRequest {
     /// Only locates in this state.
@@ -170,6 +171,7 @@ pub struct GetLocatesRequest {
     pub status: Option<LocateStatus>,
     /// Only locates for this symbol.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub symbol: Option<String>,
     /// Locates on or after this trading date.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -182,6 +184,7 @@ pub struct GetLocatesRequest {
     pub limit: Option<u32>,
     /// The token from a previous page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub page_token: Option<String>,
 }
 
@@ -190,20 +193,6 @@ impl GetLocatesRequest {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Only locates in this state.
-    #[must_use]
-    pub fn status(mut self, status: LocateStatus) -> Self {
-        self.status = Some(status);
-        self
-    }
-
-    /// Only locates for this symbol.
-    #[must_use]
-    pub fn symbol(mut self, symbol: impl Into<String>) -> Self {
-        self.symbol = Some(symbol.into());
-        self
     }
 
     /// Restricts the trading-date window.
@@ -224,7 +213,7 @@ impl GetLocatesRequest {
 }
 
 /// A request for locate quotes.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetLocateQuotesRequest {
     /// The symbols to quote, sent as one comma-separated parameter.
@@ -241,7 +230,7 @@ impl GetLocateQuotesRequest {
 }
 
 /// A request for a new locate.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateLocateRequest {
     /// The symbol to borrow.
@@ -254,9 +243,11 @@ pub struct CreateLocateRequest {
         skip_serializing_if = "Option::is_none",
         with = "crate::types::option_decimal"
     )]
+    #[setters(doc = "Refuses to pay more than this per share.")]
     pub limit_price: Option<Decimal>,
     /// Whether to reject a partial fill.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Rejects a partial fill.")]
     pub all_or_none: Option<bool>,
 }
 
@@ -270,20 +261,6 @@ impl CreateLocateRequest {
             limit_price: None,
             all_or_none: None,
         }
-    }
-
-    /// Refuses to pay more than this per share.
-    #[must_use]
-    pub fn limit_price(mut self, limit_price: Decimal) -> Self {
-        self.limit_price = Some(limit_price);
-        self
-    }
-
-    /// Rejects a partial fill.
-    #[must_use]
-    pub fn all_or_none(mut self, all_or_none: bool) -> Self {
-        self.all_or_none = Some(all_or_none);
-        self
     }
 
     /// The coherence checks a request cannot pass without contradicting itself.

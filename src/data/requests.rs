@@ -10,6 +10,7 @@ use crate::data::enums::{
 use crate::data::timeframe::TimeFrame;
 
 use crate::types::serde_util::comma_separated;
+use crate::types::setters::Setters;
 use crate::types::{ContractType, Sort, SupportedCurrencies};
 
 /// One symbol or several.
@@ -80,7 +81,7 @@ impl<const N: usize> From<[&str; N]> for Symbols {
 }
 
 /// Fields shared by every historical time series request.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct TimeseriesRequest {
     /// The symbols to query, sent as one comma-separated `symbols` parameter.
@@ -88,18 +89,23 @@ pub struct TimeseriesRequest {
     pub symbol_or_symbols: Symbols,
     /// The earliest timestamp to return.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Restricts the window to `start` onwards.")]
     pub start: Option<DateTime<Utc>>,
     /// The latest timestamp to return.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Restricts the window to before `end`.")]
     pub end: Option<DateTime<Utc>>,
     /// Maximum number of items across all pages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Caps the total number of items returned across all pages.")]
     pub limit: Option<u32>,
     /// The currency to denominate prices in, for local currency trading.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the denominating currency.")]
     pub currency: Option<SupportedCurrencies>,
     /// Chronological ordering of the response.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the chronological ordering.")]
     pub sort: Option<Sort>,
 }
 
@@ -116,45 +122,10 @@ impl TimeseriesRequest {
             sort: None,
         }
     }
-
-    /// Restricts the window to `start` onwards.
-    #[must_use]
-    pub fn start(mut self, start: DateTime<Utc>) -> Self {
-        self.start = Some(start);
-        self
-    }
-
-    /// Restricts the window to before `end`.
-    #[must_use]
-    pub fn end(mut self, end: DateTime<Utc>) -> Self {
-        self.end = Some(end);
-        self
-    }
-
-    /// Caps the total number of items returned across all pages.
-    #[must_use]
-    pub fn limit(mut self, limit: u32) -> Self {
-        self.limit = Some(limit);
-        self
-    }
-
-    /// Sets the chronological ordering.
-    #[must_use]
-    pub fn sort(mut self, sort: Sort) -> Self {
-        self.sort = Some(sort);
-        self
-    }
-
-    /// Sets the denominating currency.
-    #[must_use]
-    pub fn currency(mut self, currency: SupportedCurrencies) -> Self {
-        self.currency = Some(currency);
-        self
-    }
 }
 
 /// Historical bars for stocks.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct StockBarsRequest {
     /// The shared time series filters.
@@ -164,12 +135,15 @@ pub struct StockBarsRequest {
     pub timeframe: TimeFrame,
     /// How corporate actions are reflected in prices.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the corporate action adjustment.")]
     pub adjustment: Option<Adjustment>,
     /// Which data feed to read from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the data feed.")]
     pub feed: Option<DataFeed>,
     /// The as-of date for symbol mapping.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub asof: Option<String>,
 }
 
@@ -185,24 +159,10 @@ impl StockBarsRequest {
             asof: None,
         }
     }
-
-    /// Sets the corporate action adjustment.
-    #[must_use]
-    pub fn adjustment(mut self, adjustment: Adjustment) -> Self {
-        self.adjustment = Some(adjustment);
-        self
-    }
-
-    /// Sets the data feed.
-    #[must_use]
-    pub fn feed(mut self, feed: DataFeed) -> Self {
-        self.feed = Some(feed);
-        self
-    }
 }
 
 /// Historical bars for crypto.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CryptoBarsRequest {
     /// The shared time series filters.
@@ -223,7 +183,7 @@ impl CryptoBarsRequest {
 }
 
 /// Historical bars for options.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct OptionBarsRequest {
     /// The shared time series filters.
@@ -244,7 +204,7 @@ impl OptionBarsRequest {
 }
 
 /// Historical quotes or trades for stocks.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct StockTimeseriesRequest {
     /// The shared time series filters.
@@ -252,9 +212,11 @@ pub struct StockTimeseriesRequest {
     pub base: TimeseriesRequest,
     /// Which data feed to read from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the data feed.")]
     pub feed: Option<DataFeed>,
     /// The as-of date for symbol mapping.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub asof: Option<String>,
 }
 
@@ -266,13 +228,6 @@ impl StockTimeseriesRequest {
             feed: None,
             asof: None,
         }
-    }
-
-    /// Sets the data feed.
-    #[must_use]
-    pub fn feed(mut self, feed: DataFeed) -> Self {
-        self.feed = Some(feed);
-        self
     }
 }
 
@@ -326,7 +281,7 @@ timeseries_delegates!(StockTimeseriesRequest);
 timeseries_delegates!(StockAuctionsRequest);
 
 /// A request for the most recent stock data.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct StockLatestRequest {
     /// The symbols to query.
@@ -334,6 +289,7 @@ pub struct StockLatestRequest {
     pub symbol_or_symbols: Symbols,
     /// Which data feed to read from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the data feed.")]
     pub feed: Option<DataFeed>,
     /// The currency to denominate prices in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -350,17 +306,10 @@ impl StockLatestRequest {
             currency: None,
         }
     }
-
-    /// Sets the data feed.
-    #[must_use]
-    pub fn feed(mut self, feed: DataFeed) -> Self {
-        self.feed = Some(feed);
-        self
-    }
 }
 
 /// A request for the most recent crypto data.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CryptoLatestRequest {
     /// The symbols to query.
@@ -378,7 +327,7 @@ impl CryptoLatestRequest {
 }
 
 /// A request for the most recent option data.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct OptionLatestRequest {
     /// The symbols to query.
@@ -386,6 +335,7 @@ pub struct OptionLatestRequest {
     pub symbol_or_symbols: Symbols,
     /// Which data feed to read from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the data feed.")]
     pub feed: Option<OptionsFeed>,
 }
 
@@ -396,13 +346,6 @@ impl OptionLatestRequest {
             symbol_or_symbols: symbols.into(),
             feed: None,
         }
-    }
-
-    /// Sets the data feed.
-    #[must_use]
-    pub fn feed(mut self, feed: OptionsFeed) -> Self {
-        self.feed = Some(feed);
-        self
     }
 }
 
@@ -416,7 +359,7 @@ pub type CryptoSnapshotRequest = CryptoLatestRequest;
 pub type OptionSnapshotRequest = OptionLatestRequest;
 
 /// A request for every contract in an underlying's option chain.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct OptionChainRequest {
     /// The underlying symbol.
@@ -427,9 +370,11 @@ pub struct OptionChainRequest {
     pub underlying_symbol: String,
     /// Which data feed to read from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the data feed.")]
     pub feed: Option<OptionsFeed>,
     /// Only calls or only puts.
     #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Restricts to calls or puts.")]
     pub contract_type: Option<ContractType>,
     /// Only contracts struck at or above this price.
     ///
@@ -463,6 +408,7 @@ pub struct OptionChainRequest {
     pub expiration_date_lte: Option<NaiveDate>,
     /// Only contracts with this root symbol.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub root_symbol: Option<String>,
     /// Only contracts updated since this time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -485,20 +431,6 @@ impl OptionChainRequest {
             updated_since: None,
         }
     }
-
-    /// Restricts to calls or puts.
-    #[must_use]
-    pub fn contract_type(mut self, contract_type: ContractType) -> Self {
-        self.contract_type = Some(contract_type);
-        self
-    }
-
-    /// Sets the data feed.
-    #[must_use]
-    pub fn feed(mut self, feed: OptionsFeed) -> Self {
-        self.feed = Some(feed);
-        self
-    }
 }
 
 /// Historical auctions for stocks.
@@ -508,7 +440,7 @@ impl OptionChainRequest {
 /// crate release.
 ///
 /// See <https://docs.alpaca.markets/us/reference/stockauctions-1>.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct StockAuctionsRequest {
     /// The shared time series filters.
@@ -516,9 +448,11 @@ pub struct StockAuctionsRequest {
     pub base: TimeseriesRequest,
     /// Which data feed to read from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the data feed.")]
     pub feed: Option<DataFeed>,
     /// The as-of date for symbol mapping.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub asof: Option<String>,
 }
 
@@ -531,13 +465,6 @@ impl StockAuctionsRequest {
             asof: None,
         }
     }
-
-    /// Sets the data feed.
-    #[must_use]
-    pub fn feed(mut self, feed: DataFeed) -> Self {
-        self.feed = Some(feed);
-        self
-    }
 }
 
 /// A request against one of the single-symbol market data routes.
@@ -546,35 +473,44 @@ impl StockAuctionsRequest {
 /// sibling sends is absent here rather than empty.
 ///
 /// See <https://docs.alpaca.markets/us/reference/stockbarsingle-1>.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct SingleSymbolRequest {
     /// The earliest timestamp to return.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Restricts the window to `start` onwards.")]
     pub start: Option<DateTime<Utc>>,
     /// The latest timestamp to return.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Restricts the window to before `end`.")]
     pub end: Option<DateTime<Utc>>,
     /// Maximum number of items across all pages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Caps the total number of items returned across all pages.")]
     pub limit: Option<u32>,
     /// The bar interval. Only the bars routes take one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the bar interval.")]
     pub timeframe: Option<TimeFrame>,
     /// How corporate actions are reflected in prices. Bars only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the corporate action adjustment.")]
     pub adjustment: Option<Adjustment>,
     /// Which data feed to read from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the data feed.")]
     pub feed: Option<DataFeed>,
     /// The as-of date for symbol mapping.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub asof: Option<String>,
     /// The currency to denominate prices in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the denominating currency.")]
     pub currency: Option<SupportedCurrencies>,
     /// Chronological ordering of the response.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the chronological ordering.")]
     pub sort: Option<Sort>,
 }
 
@@ -584,68 +520,12 @@ impl SingleSymbolRequest {
     pub fn new() -> Self {
         Self::default()
     }
-
-    /// Restricts the window to `start` onwards.
-    #[must_use]
-    pub fn start(mut self, start: DateTime<Utc>) -> Self {
-        self.start = Some(start);
-        self
-    }
-
-    /// Restricts the window to before `end`.
-    #[must_use]
-    pub fn end(mut self, end: DateTime<Utc>) -> Self {
-        self.end = Some(end);
-        self
-    }
-
-    /// Caps the total number of items returned across all pages.
-    #[must_use]
-    pub fn limit(mut self, limit: u32) -> Self {
-        self.limit = Some(limit);
-        self
-    }
-
-    /// Sets the bar interval.
-    #[must_use]
-    pub fn timeframe(mut self, timeframe: TimeFrame) -> Self {
-        self.timeframe = Some(timeframe);
-        self
-    }
-
-    /// Sets the corporate action adjustment.
-    #[must_use]
-    pub fn adjustment(mut self, adjustment: Adjustment) -> Self {
-        self.adjustment = Some(adjustment);
-        self
-    }
-
-    /// Sets the data feed.
-    #[must_use]
-    pub fn feed(mut self, feed: DataFeed) -> Self {
-        self.feed = Some(feed);
-        self
-    }
-
-    /// Sets the chronological ordering.
-    #[must_use]
-    pub fn sort(mut self, sort: Sort) -> Self {
-        self.sort = Some(sort);
-        self
-    }
-
-    /// Sets the denominating currency.
-    #[must_use]
-    pub fn currency(mut self, currency: SupportedCurrencies) -> Self {
-        self.currency = Some(currency);
-        self
-    }
 }
 
 /// Historical forex rates for currency pairs.
 ///
 /// See <https://docs.alpaca.markets/us/reference/rates-1>.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct ForexRatesRequest {
     /// The pairs to query, sent as one comma-separated parameter.
@@ -656,6 +536,7 @@ pub struct ForexRatesRequest {
     pub currency_pairs: Symbols,
     /// The snapshot frequency.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the snapshot frequency.")]
     pub timeframe: Option<TimeFrame>,
     /// The earliest timestamp to return.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -665,6 +546,7 @@ pub struct ForexRatesRequest {
     pub end: Option<DateTime<Utc>>,
     /// Maximum number of rates across all pages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Caps the total number of rates returned.")]
     pub limit: Option<u32>,
     /// Chronological ordering of the response.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -684,13 +566,6 @@ impl ForexRatesRequest {
         }
     }
 
-    /// Sets the snapshot frequency.
-    #[must_use]
-    pub fn timeframe(mut self, timeframe: TimeFrame) -> Self {
-        self.timeframe = Some(timeframe);
-        self
-    }
-
     /// Restricts the window.
     #[must_use]
     pub fn between(mut self, start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
@@ -698,17 +573,10 @@ impl ForexRatesRequest {
         self.end = Some(end);
         self
     }
-
-    /// Caps the total number of rates returned.
-    #[must_use]
-    pub fn limit(mut self, limit: u32) -> Self {
-        self.limit = Some(limit);
-        self
-    }
 }
 
 /// The latest forex rates for currency pairs.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct ForexLatestRatesRequest {
     /// The pairs to query.
@@ -726,7 +594,7 @@ impl ForexLatestRatesRequest {
 }
 
 /// A request for the most actively traded stocks.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct MostActivesRequest {
     /// How many to return.
@@ -758,7 +626,7 @@ fn default_market_type() -> MarketType {
 }
 
 /// A request for the day's biggest movers.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct MarketMoversRequest {
     /// How many of each direction to return.
@@ -788,7 +656,7 @@ impl Default for MarketMoversRequest {
 }
 
 /// A request for news articles.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct NewsRequest {
     /// The earliest article to return.
@@ -806,9 +674,11 @@ pub struct NewsRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
+    #[setters(into)]
     pub symbols: Option<Vec<String>>,
     /// Maximum number of articles across all pages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Caps the total number of articles returned.")]
     pub limit: Option<u32>,
     /// Whether to include the article body.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -818,6 +688,7 @@ pub struct NewsRequest {
     pub exclude_contentless: Option<bool>,
     /// Token for resuming a manual pagination.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub page_token: Option<String>,
 }
 
@@ -827,24 +698,10 @@ impl NewsRequest {
     pub fn new() -> Self {
         Self::default()
     }
-
-    /// Only articles mentioning these symbols.
-    #[must_use]
-    pub fn symbols(mut self, symbols: Vec<String>) -> Self {
-        self.symbols = Some(symbols);
-        self
-    }
-
-    /// Caps the total number of articles returned.
-    #[must_use]
-    pub fn limit(mut self, limit: u32) -> Self {
-        self.limit = Some(limit);
-        self
-    }
 }
 
 /// A request for corporate actions.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CorporateActionsRequest {
     /// Only actions for these symbols.
@@ -853,6 +710,7 @@ pub struct CorporateActionsRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
+    #[setters(into)]
     pub symbols: Option<Vec<String>>,
     /// Only actions for these CUSIPs.
     #[serde(
@@ -860,6 +718,7 @@ pub struct CorporateActionsRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
+    #[setters(into)]
     pub cusips: Option<Vec<String>>,
     /// Only actions of these kinds.
     #[serde(
@@ -867,6 +726,7 @@ pub struct CorporateActionsRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
+    #[setters(into)]
     pub types: Option<Vec<CorporateActionsType>>,
     /// The earliest date to return.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -880,6 +740,7 @@ pub struct CorporateActionsRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
+    #[setters(into)]
     pub ids: Option<Vec<String>>,
     /// Maximum number of actions across all pages.
     ///
@@ -898,20 +759,6 @@ impl CorporateActionsRequest {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Only actions for these symbols.
-    #[must_use]
-    pub fn symbols(mut self, symbols: Vec<String>) -> Self {
-        self.symbols = Some(symbols);
-        self
-    }
-
-    /// Only actions of these kinds.
-    #[must_use]
-    pub fn types(mut self, types: Vec<CorporateActionsType>) -> Self {
-        self.types = Some(types);
-        self
     }
 
     /// Restricts the date window.

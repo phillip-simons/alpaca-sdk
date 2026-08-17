@@ -1,0 +1,5 @@
+error: `into` applies to an `Option` field — this one is required, so it belongs in the constructor rather than in a setter
+ --> tests/compile_fail/into_on_a_required_field_fails.rs:6:15
+  |
+6 |     #[setters(into)]
+  |               ^^^^

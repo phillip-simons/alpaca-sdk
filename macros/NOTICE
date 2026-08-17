@@ -1,0 +1,15 @@
+alpaca-sdk-macros
+Copyright 2026 Phillip Simons
+
+This crate contains the `Setters` derive macro and nothing else. It is original
+work and derives from no other project.
+
+The root crate's NOTICE records that `alpaca-sdk` began as a port of alpaca-py
+and that its test fixtures are extracted from that project's test suite. None of
+that applies here — no ported types, no fixtures, no captured payloads — so this
+file deliberately does not repeat it.
+
+This is an unofficial, community-maintained crate. It is not affiliated with,
+authorized by, endorsed by, or sponsored by Alpaca Securities LLC or any of
+its affiliates. "Alpaca" is a trademark of its respective owner and is used
+here only to identify the API the crate this supports connects to.

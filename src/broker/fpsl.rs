@@ -14,6 +14,7 @@
 //!
 //! [`Decimal`]: rust_decimal::Decimal
 
+use crate::types::setters::Setters;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -114,7 +115,7 @@ pub struct FpslAnalytics {
 }
 
 /// Filters for listing loans.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetFpslLoansRequest {
     /// Only loans from this account.
@@ -131,6 +132,7 @@ pub struct GetFpslLoansRequest {
     pub limit: Option<u32>,
     /// The token from a previous page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub page_token: Option<String>,
 }
 
@@ -139,13 +141,6 @@ impl GetFpslLoansRequest {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Only loans from this account.
-    #[must_use]
-    pub fn account_id(mut self, account_id: Uuid) -> Self {
-        self.account_id = Some(account_id);
-        self
     }
 
     /// Restricts the window.
@@ -166,7 +161,7 @@ impl GetFpslLoansRequest {
 }
 
 /// A window over one account's lending analytics.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetFpslAnalyticsRequest {
     /// The first day.

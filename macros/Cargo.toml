@@ -1,0 +1,43 @@
+[package]
+name = "alpaca-sdk-macros"
+# Version-locked to `alpaca-sdk`, which depends on it with `=`. The two are one
+# unit of release: the derive's output has to match what the SDK's own source
+# expects of it, and a caller never names this crate.
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Derive macros for alpaca-sdk. Not intended for direct use."
+authors = ["Phillip Simons <phillip@simons.gg>"]
+license = "Apache-2.0"
+# Its own, not the SDK's: a caller who lands on this crate's page arrived by
+# accident, and the most useful thing it can say is which crate they wanted.
+readme = "README.md"
+repository = "https://github.com/phillip-simons/alpaca-sdk"
+homepage = "https://github.com/phillip-simons/alpaca-sdk"
+documentation = "https://docs.rs/alpaca-sdk-macros"
+keywords = ["alpaca", "macros", "derive"]
+categories = ["api-bindings"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+# Already in the tree via serde's `derive` feature and thiserror, so this
+# crate's cost to a downstream build is its own compilation and nothing else.
+proc-macro2 = "1.0.107"
+quote = "1.0.47"
+syn = "2.0.119"
+
+[dev-dependencies]
+# Compile-fail tests. A derive's error paths are the half of it a normal test
+# cannot reach: every one of them is a `compile_error!`, so the only way to
+# assert on the message is to compile a file that should not compile and diff
+# the output. See `tests/compile_fail.rs` for where this does and does not run.
+trybuild = "1.0.114"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
+
+[lints.clippy]
+doc_markdown = "warn"

@@ -28,6 +28,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::auth::Credentials;
 use crate::error::{ApiError, Error, Result};
+use crate::types::setters::Setters;
 
 /// The window an event stream replays before going live.
 ///
@@ -41,11 +42,14 @@ use crate::error::{ApiError, Error, Result};
 /// The cursor pair is a [ULID](https://github.com/ulid/spec), and `since_id`
 /// here means the ULID everywhere it is accepted — unlike the v1 broker
 /// streams, where that name belongs to a deprecated integer form.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct EventStreamRequest {
     /// Replay events emitted at or after this time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(skip = "`EventStreamRequest::since(DateTime<Utc>)` is a \
+                      constructor, and two `pub fn` of one name cannot share \
+                      an impl")]
     pub since: Option<DateTime<Utc>>,
     /// Close the connection after the last event at or before this time.
     ///
@@ -68,9 +72,15 @@ pub struct EventStreamRequest {
     ///
     /// Mutually exclusive with `since`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(skip = "`from_id` is the constructor for this cursor, and the \
+                      line above is why it is not also a setter — `since` and \
+                      `since_id` are the two ways to say where to resume, and \
+                      a chain that set both would be two blessed methods \
+                      producing a request Alpaca is documented to refuse")]
     pub since_id: Option<String>,
     /// Close the connection once this ULID has been delivered, inclusive.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub until_id: Option<String>,
 }
 

@@ -1,0 +1,5 @@
+error: this field is not an `Option`, so it takes no setter with or without `skip` — drop the attribute
+ --> tests/compile_fail/skip_on_a_required_field_fails.rs:6:15
+  |
+6 |     #[setters(skip = "a constructor holds the name")]
+  |               ^^^^

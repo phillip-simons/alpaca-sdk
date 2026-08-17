@@ -15,6 +15,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::types::serde_util::comma_separated;
+use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -385,7 +386,7 @@ pub struct EntryRequirement {
 }
 
 /// Filters for the corporates list.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetUsCorporatesRequest {
     /// Only bonds in this state.
@@ -397,6 +398,7 @@ pub struct GetUsCorporatesRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
+    #[setters(into)]
     pub isins: Option<Vec<String>>,
     /// Only these CUSIPs.
     #[serde(
@@ -404,6 +406,7 @@ pub struct GetUsCorporatesRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
+    #[setters(into)]
     pub cusips: Option<Vec<String>>,
     /// Only these issuer tickers.
     #[serde(
@@ -411,6 +414,7 @@ pub struct GetUsCorporatesRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
+    #[setters(into)]
     pub tickers: Option<Vec<String>>,
 }
 
@@ -420,24 +424,10 @@ impl GetUsCorporatesRequest {
     pub fn new() -> Self {
         Self::default()
     }
-
-    /// Only these CUSIPs.
-    #[must_use]
-    pub fn cusips(mut self, cusips: Vec<String>) -> Self {
-        self.cusips = Some(cusips);
-        self
-    }
-
-    /// Only these issuer tickers.
-    #[must_use]
-    pub fn tickers(mut self, tickers: Vec<String>) -> Self {
-        self.tickers = Some(tickers);
-        self
-    }
 }
 
 /// Filters for the treasuries list.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetUsTreasuriesRequest {
     /// Only this kind of instrument.
@@ -452,6 +442,7 @@ pub struct GetUsTreasuriesRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
+    #[setters(into)]
     pub isins: Option<Vec<String>>,
     /// Only these CUSIPs.
     #[serde(
@@ -459,6 +450,7 @@ pub struct GetUsTreasuriesRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "comma_separated"
     )]
+    #[setters(into)]
     pub cusips: Option<Vec<String>>,
 }
 
@@ -468,17 +460,10 @@ impl GetUsTreasuriesRequest {
     pub fn new() -> Self {
         Self::default()
     }
-
-    /// Only this kind of instrument.
-    #[must_use]
-    pub fn subtype(mut self, subtype: TreasurySubtype) -> Self {
-        self.subtype = Some(subtype);
-        self
-    }
 }
 
 /// A request for entry requirements.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetEntryRequirementsRequest {
     /// The symbols to ask about, sent as one comma-separated parameter.

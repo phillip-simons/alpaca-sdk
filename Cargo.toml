@@ -18,8 +18,15 @@ categories = ["api-bindings", "finance"]
 #
 # What is excluded is what cannot work, or has no meaning, outside a clone:
 # `scripts/` needs other SDKs' checkouts and downloaded specs, `RELEASING.md`
-# describes publishing this crate, and `.github/` is CI.
-exclude = [".github/", ".githooks/", "scripts/", "RELEASING.md"]
+# describes publishing this crate, and `.github/` is CI. `macros/` is its own
+# package and cargo would leave it out regardless; naming it here says so.
+exclude = [".github/", ".githooks/", "scripts/", "RELEASING.md", "macros/"]
+
+# One member, and it exists only because a procedural macro cannot live in the
+# crate that uses it. See RELEASING.md — the two crates publish together, in
+# order, and `alpaca-sdk` pins the macros version with `=`.
+[workspace]
+members = ["macros"]
 
 [features]
 default = ["trading", "data", "rustls-tls"]
@@ -50,6 +57,10 @@ _ws = ["dep:tokio-tungstenite"]
 _sse = ["dep:eventsource-stream"]
 
 [dependencies]
+# Pinned with `=` and published in lockstep. The derive's output has to match
+# what this crate's own source expects of it, so a range would let cargo pair a
+# version of one with a version of the other that was never built together.
+alpaca-sdk-macros = { version = "=0.1.0", path = "macros" }
 async-stream = "0.3.6"
 base64 = "0.23.1"
 chrono = { version = "0.4.45", features = ["serde"] }

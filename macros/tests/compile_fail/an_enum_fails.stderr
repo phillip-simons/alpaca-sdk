@@ -1,0 +1,8 @@
+error: Setters applies to structs: an enum has no fields to set, and a union cannot have a safe one
+ --> tests/compile_fail/an_enum_fails.rs:4:1
+  |
+4 | / pub enum Request {
+5 | |     One,
+6 | |     Two,
+7 | | }
+  | |_^

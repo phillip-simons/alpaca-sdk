@@ -26,13 +26,14 @@ use crate::trading::ActivityType;
 use crate::trading::{AccountStatus, AssetClass};
 use crate::types::Sort;
 use crate::types::SupportedCurrencies;
+use crate::types::setters::Setters;
 
 /// An order submitted on behalf of a brokerage account.
 ///
 /// The trading API's [`crate::trading::OrderRequest`] plus the two fields only a
 /// correspondent may set: the commission to charge the end user, and the
 /// currency to settle in.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct OrderRequest {
     /// Every field the trading API also accepts.
@@ -44,9 +45,11 @@ pub struct OrderRequest {
         skip_serializing_if = "Option::is_none",
         with = "crate::types::option_decimal"
     )]
+    #[setters(doc = "Charges `commission` dollars to the end user.")]
     pub commission: Option<Decimal>,
     /// The settlement currency. Unset means USD.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Settles the order in a currency other than USD.")]
     pub currency: Option<SupportedCurrencies>,
 }
 
@@ -59,20 +62,6 @@ impl OrderRequest {
             commission: None,
             currency: None,
         }
-    }
-
-    /// Charges `commission` dollars to the end user.
-    #[must_use]
-    pub fn commission(mut self, commission: Decimal) -> Self {
-        self.commission = Some(commission);
-        self
-    }
-
-    /// Settles the order in a currency other than USD.
-    #[must_use]
-    pub fn currency(mut self, currency: SupportedCurrencies) -> Self {
-        self.currency = Some(currency);
-        self
     }
 
     /// Checks the rules Alpaca enforces on the order before it is sent.
@@ -101,7 +90,7 @@ impl OrderRequest {
 /// lists, since a rejection at that depth is otherwise a round trip away.
 ///
 /// [createaccount]: https://docs.alpaca.markets/us/reference/createaccount
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateAccountRequest {
     /// How to reach the account holder.
@@ -120,6 +109,7 @@ pub struct CreateAccountRequest {
     pub account_sub_type: Option<AccountSubType>,
     /// Identity documents submitted with the application.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub documents: Option<Vec<UploadDocument>>,
     /// A secondary contact.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -129,12 +119,14 @@ pub struct CreateAccountRequest {
     pub currency: Option<SupportedCurrencies>,
     /// Which asset classes the account may trade. Unset means Alpaca decides.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub enabled_assets: Option<Vec<AssetClass>>,
     /// The existing holder to attach this account to, for multi-live accounts.
     ///
     /// When it is set, Alpaca takes the holder's details from that account
     /// instead of `contact` and `identity`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub primary_account_holder_id: Option<String>,
 }
 
@@ -243,32 +235,40 @@ impl CreateAccountRequest {
 ///
 /// The response [`Contact`] requires an email address; an update that only
 /// changes a postal code should not have to restate one.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct UpdatableContact {
     /// Primary email address.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub email_address: Option<String>,
     /// Primary phone number, including the country code.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub phone_number: Option<String>,
     /// Street address lines.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub street_address: Option<Vec<String>>,
     /// Unit or apartment.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub unit: Option<String>,
     /// City.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub city: Option<String>,
     /// State or province. Required when the country is `USA`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub state: Option<String>,
     /// Postal code.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub postal_code: Option<String>,
     /// Country, as a three-letter code.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub country: Option<String>,
 }
 
@@ -282,38 +282,46 @@ pub struct UpdatableContact {
 /// `investment_experience_with_options`, `investment_experience_with_stocks`.
 ///
 /// [patchaccount]: https://docs.alpaca.markets/us/reference/patchaccount
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct UpdatableIdentity {
     /// Given name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub given_name: Option<String>,
     /// Middle name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub middle_name: Option<String>,
     /// Family name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub family_name: Option<String>,
     /// Date of birth.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date_of_birth: Option<NaiveDate>,
     /// Tax identification number.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub tax_id: Option<String>,
     /// Which national scheme the tax id belongs to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tax_id_type: Option<TaxIdType>,
     /// Country of citizenship.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub country_of_citizenship: Option<String>,
     /// Country of birth.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub country_of_birth: Option<String>,
     /// Country of tax residence.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub country_of_tax_residence: Option<String>,
     /// Where the account's funds come from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub funding_source: Option<Vec<FundingSource>>,
     /// Visa category, for non-permanent residents.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -384,7 +392,7 @@ pub struct UpdatableIdentity {
 /// — because they belong to broker features this crate has not modelled yet.
 ///
 /// [patchaccount]: https://docs.alpaca.markets/us/reference/patchaccount
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct UpdateAccountRequest {
     /// New contact details.
@@ -401,19 +409,22 @@ pub struct UpdateAccountRequest {
     pub trusted_contact: Option<TrustedContact>,
     /// Further agreements the holder has signed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub agreements: Option<Vec<Agreement>>,
     /// The holder this account is attached to, for multi-live accounts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub primary_account_holder_id: Option<String>,
 }
 
 /// Filters for listing accounts.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct ListAccountsRequest {
     /// Space-delimited tokens, matched against the account number, phone
     /// number, name and email address.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub query: Option<String>,
     /// Only accounts created at or after this time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -431,6 +442,7 @@ pub struct ListAccountsRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "crate::types::serde_util::comma_separated"
     )]
+    #[setters(into)]
     pub status: Option<Vec<AccountStatus>>,
     /// Chronological ordering. Alpaca defaults to descending.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -446,6 +458,7 @@ pub struct ListAccountsRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "crate::types::serde_util::comma_separated"
     )]
+    #[setters(into)]
     pub entities: Option<Vec<AccountEntities>>,
 }
 
@@ -465,7 +478,7 @@ pub enum CreateACHRelationshipRequest {
 }
 
 /// Bank details for an ACH relationship opened by hand.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct ManualACHRelationship {
     /// The name on the bank account.
@@ -478,11 +491,12 @@ pub struct ManualACHRelationship {
     pub bank_routing_number: String,
     /// A name for the relationship.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into, doc = "Names the relationship.")]
     pub nickname: Option<String>,
 }
 
 /// The processor token from a completed Plaid link.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct PlaidACHRelationship {
     /// The Alpaca-specific processor token Plaid returned.
@@ -506,13 +520,6 @@ impl ManualACHRelationship {
             nickname: None,
         }
     }
-
-    /// Names the relationship.
-    #[must_use]
-    pub fn nickname(mut self, nickname: impl Into<String>) -> Self {
-        self.nickname = Some(nickname.into());
-        self
-    }
 }
 
 impl PlaidACHRelationship {
@@ -526,7 +533,7 @@ impl PlaidACHRelationship {
 }
 
 /// The body that connects a recipient bank for wires.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateBankRequest {
     /// The bank's name.
@@ -539,18 +546,23 @@ pub struct CreateBankRequest {
     pub account_number: String,
     /// The bank's country. International banks only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub country: Option<String>,
     /// The bank's state or province. International banks only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub state_province: Option<String>,
     /// The bank's postal code. International banks only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub postal_code: Option<String>,
     /// The bank's city. International banks only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub city: Option<String>,
     /// The bank's street address. International banks only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub street_address: Option<String>,
 }
 
@@ -644,7 +656,7 @@ impl CreateBankRequest {
 /// Built from [`Default`] and then assigned field by field: all five are
 /// `String`, so a positional constructor would let a city and a postal code
 /// swap places with nothing to catch it. Named assignment cannot.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Setters)]
 #[non_exhaustive]
 pub struct BankAddress {
     /// The bank's country.
@@ -694,7 +706,7 @@ impl CreateTransferRequest {
 }
 
 /// Money moving over an ACH relationship.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateACHTransferRequest {
     /// How much to move. Fees are deducted from this.
@@ -734,7 +746,7 @@ impl CreateACHTransferRequest {
 }
 
 /// Money moving by wire to a connected bank.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateBankTransferRequest {
     /// How much to move. Fees are deducted from this.
@@ -753,6 +765,7 @@ pub struct CreateBankTransferRequest {
     pub fee_payment_method: Option<FeePaymentMethod>,
     /// Detail carried with the wire.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub additional_information: Option<String>,
 }
 
@@ -778,7 +791,7 @@ impl CreateBankTransferRequest {
 }
 
 /// Filters for listing an account's transfers.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetTransfersRequest {
     /// Only transfers moving this way.
@@ -802,7 +815,7 @@ pub struct GetTransfersRequest {
 /// reverse. [`validate`](Self::validate) enforces that. Build one with
 /// [`cash`](Self::cash) or
 /// [`security`](Self::security) and the right fields are set for you.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateJournalRequest {
     /// The account the money or securities come from.
@@ -820,6 +833,7 @@ pub struct CreateJournalRequest {
     pub amount: Option<Decimal>,
     /// The security to move. Security journals only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub symbol: Option<String>,
     /// How much of the security to move. Security journals only.
     #[serde(
@@ -830,21 +844,27 @@ pub struct CreateJournalRequest {
     pub qty: Option<Decimal>,
     /// Free-text description. Sandbox reads fixture directives from this.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub description: Option<String>,
     /// Travel rule: the transmitter's name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub transmitter_name: Option<String>,
     /// Travel rule: the transmitter's account number.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub transmitter_account_number: Option<String>,
     /// Travel rule: the transmitter's address.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub transmitter_address: Option<String>,
     /// Travel rule: the transmitter's financial institution.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub transmitter_financial_institution: Option<String>,
     /// Travel rule: when the transfer was transmitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub transmitter_timestamp: Option<String>,
     /// The settlement currency. Unset means USD.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -933,7 +953,7 @@ impl CreateJournalRequest {
 }
 
 /// One destination in a batch journal.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct BatchJournalRequestEntry {
     /// The account to fund.
@@ -943,21 +963,27 @@ pub struct BatchJournalRequestEntry {
     pub amount: Decimal,
     /// Free-text description.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub description: Option<String>,
     /// Travel rule: the transmitter's name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub transmitter_name: Option<String>,
     /// Travel rule: the transmitter's account number.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub transmitter_account_number: Option<String>,
     /// Travel rule: the transmitter's address.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub transmitter_address: Option<String>,
     /// Travel rule: the transmitter's financial institution.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub transmitter_financial_institution: Option<String>,
     /// Travel rule: when the transfer was transmitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub transmitter_timestamp: Option<String>,
 }
 
@@ -979,7 +1005,7 @@ impl BatchJournalRequestEntry {
 }
 
 /// One source in a reverse batch journal.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct ReverseBatchJournalRequestEntry {
     /// The account to draw from.
@@ -989,21 +1015,27 @@ pub struct ReverseBatchJournalRequestEntry {
     pub amount: Decimal,
     /// Free-text description.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub description: Option<String>,
     /// Travel rule: the transmitter's name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub transmitter_name: Option<String>,
     /// Travel rule: the transmitter's account number.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub transmitter_account_number: Option<String>,
     /// Travel rule: the transmitter's address.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub transmitter_address: Option<String>,
     /// Travel rule: the transmitter's financial institution.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub transmitter_financial_institution: Option<String>,
     /// Travel rule: when the transfer was transmitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub transmitter_timestamp: Option<String>,
 }
 
@@ -1028,7 +1060,7 @@ impl ReverseBatchJournalRequestEntry {
 ///
 /// Only cash batch journals are supported, so `entry_type` is always
 /// [`JournalEntryType::Cash`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateBatchJournalRequest {
     /// Always [`JournalEntryType::Cash`].
@@ -1055,7 +1087,7 @@ impl CreateBatchJournalRequest {
 ///
 /// Only cash reverse batch journals are supported, so `entry_type` is always
 /// [`JournalEntryType::Cash`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateReverseBatchJournalRequest {
     /// Always [`JournalEntryType::Cash`].
@@ -1079,7 +1111,7 @@ impl CreateReverseBatchJournalRequest {
 }
 
 /// Filters for listing journals.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetJournalsRequest {
     /// Only journals created on or after this date.
@@ -1103,7 +1135,7 @@ pub struct GetJournalsRequest {
 }
 
 /// Filters for listing an account's trade documents.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetTradeDocumentsRequest {
     /// Only documents dated on or after this date.
@@ -1164,7 +1196,7 @@ impl UploadDocument {
 }
 
 /// A document uploaded as base64-encoded content.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct UploadDocumentRequest {
     /// What kind of document this is.
@@ -1212,7 +1244,7 @@ impl UploadDocumentRequest {
 }
 
 /// A W-8BEN upload, as an encoded file or as structured fields.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct UploadW8BenDocumentRequest {
     /// Always [`DocumentType::W8ben`]; Alpaca requires it in the body.
@@ -1221,6 +1253,7 @@ pub struct UploadW8BenDocumentRequest {
     pub document_sub_type: UploadDocumentSubType,
     /// The form as base64-encoded content. Set this or `content_data`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub content: Option<String>,
     /// The form as fields. Set this or `content`.
     ///
@@ -1301,7 +1334,7 @@ impl UploadW8BenDocumentRequest {
 }
 
 /// The body that creates a portfolio.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreatePortfolioRequest {
     /// A name for the portfolio.
@@ -1314,6 +1347,7 @@ pub struct CreatePortfolioRequest {
     pub cooldown_days: u32,
     /// When to rebalance towards the target.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub rebalance_conditions: Option<Vec<RebalancingCondition>>,
 }
 
@@ -1352,23 +1386,27 @@ impl CreatePortfolioRequest {
 ///
 /// Changing the weights or the conditions re-evaluates every subscribed account
 /// at the next opportunity, subject to the cooldown.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct UpdatePortfolioRequest {
     /// A new name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub name: Option<String>,
     /// A new description.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub description: Option<String>,
     /// A new target allocation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub weights: Option<Vec<Weight>>,
     /// A new cooldown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cooldown_days: Option<u32>,
     /// New rebalancing conditions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub rebalance_conditions: Option<Vec<RebalancingCondition>>,
 }
 
@@ -1387,17 +1425,20 @@ impl UpdatePortfolioRequest {
 }
 
 /// Filters for listing portfolios.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetPortfoliosRequest {
     /// Only portfolios with this name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub name: Option<String>,
     /// Only portfolios with this description.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub description: Option<String>,
     /// Only portfolios holding this security.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub symbol: Option<String>,
     /// Only this portfolio.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1408,7 +1449,7 @@ pub struct GetPortfoliosRequest {
 }
 
 /// The body that subscribes an account to a portfolio.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateSubscriptionRequest {
     /// The account to rebalance.
@@ -1429,7 +1470,7 @@ impl CreateSubscriptionRequest {
 }
 
 /// Filters for listing subscriptions.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetSubscriptionsRequest {
     /// Only this account's subscription.
@@ -1443,11 +1484,12 @@ pub struct GetSubscriptionsRequest {
     pub limit: Option<u32>,
     /// The page to fetch. Set by the paginating helper on each pass.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub page_token: Option<String>,
 }
 
 /// The body that starts a rebalancing run by hand.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateRunRequest {
     /// The account to rebalance.
@@ -1484,7 +1526,7 @@ impl CreateRunRequest {
 }
 
 /// Filters for listing rebalancing runs.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetRunsRequest {
     /// Only this account's runs.
@@ -1501,6 +1543,7 @@ pub struct GetRunsRequest {
     /// The reference does not list it on this route, but the route pages, and
     /// without it a caller cannot reach the second page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub page_token: Option<String>,
 }
 
@@ -1513,7 +1556,7 @@ pub struct GetRunsRequest {
 /// `date` alongside `after` or `until` is **not** rejected. It is a plausible
 /// rule and nothing in the reference or the spec states it, and this crate does
 /// not refuse requests on a guess.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetAccountActivitiesRequest {
     /// Only this account's activities.
@@ -1527,6 +1570,7 @@ pub struct GetAccountActivitiesRequest {
         skip_serializing_if = "Option::is_none",
         serialize_with = "crate::types::serde_util::comma_separated"
     )]
+    #[setters(into)]
     pub activity_types: Option<Vec<ActivityType>>,
     /// Only trade activities, or only non-trade ones.
     ///
@@ -1537,11 +1581,13 @@ pub struct GetAccountActivitiesRequest {
     ///
     /// [`validate`]: Self::validate
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Only activities in this category.")]
     pub category: Option<ActivityCategory>,
     /// Only activities belonging to one order.
     ///
     /// The way to fetch the fills that made up a completed order.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Only activities belonging to this order.")]
     pub order_id: Option<Uuid>,
     /// Only activities on this date.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1564,6 +1610,7 @@ pub struct GetAccountActivitiesRequest {
     pub page_size: Option<u32>,
     /// Where to resume from: the `id` of the last activity already seen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub page_token: Option<String>,
 }
 
@@ -1591,27 +1638,13 @@ impl GetAccountActivitiesRequest {
         }
         Ok(())
     }
-
-    /// Only activities in this category.
-    #[must_use]
-    pub fn category(mut self, category: ActivityCategory) -> Self {
-        self.category = Some(category);
-        self
-    }
-
-    /// Only activities belonging to this order.
-    #[must_use]
-    pub fn order_id(mut self, order_id: Uuid) -> Self {
-        self.order_id = Some(order_id);
-        self
-    }
 }
 
 /// The body of an option exercise request.
 ///
 /// Both fields are optional and unset ones are dropped, so an exercise with no
 /// commission posts `{}`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateOptionExerciseRequest {
     /// The commission to charge the end user, in dollars.
@@ -1620,6 +1653,7 @@ pub struct CreateOptionExerciseRequest {
         skip_serializing_if = "Option::is_none",
         with = "crate::types::option_decimal"
     )]
+    #[setters(doc = "Charges `commission` dollars to the end user.")]
     pub commission: Option<Decimal>,
 }
 
@@ -1628,12 +1662,5 @@ impl CreateOptionExerciseRequest {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Charges `commission` dollars to the end user.
-    #[must_use]
-    pub fn commission(mut self, commission: Decimal) -> Self {
-        self.commission = Some(commission);
-        self
     }
 }

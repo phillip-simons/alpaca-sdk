@@ -1,0 +1,5 @@
+error: `doc` documents a setter, and a required field gets none — it is a constructor argument, so document it on the field
+ --> tests/compile_fail/doc_on_a_required_field_fails.rs:6:15
+  |
+6 |     #[setters(doc = "Sets the symbol.")]
+  |               ^^^

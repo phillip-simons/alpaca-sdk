@@ -12,10 +12,142 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-**Slated for `0.1.1`.** `cargo semver-checks` agrees there is no type-level
-break. Read "The semver call" below before upgrading anyway: one behaviour
-change here is invisible to the compiler, and a `0.1.1` arrives without you
-asking for it.
+**Slated for `0.2.0`.** `cargo semver-checks` agrees there is no type-level
+break, so a patch number would be defensible on the letter of it. A minor is the
+honest call anyway: this adds a second published crate, and two changes here are
+invisible to that tool — one behaviour change with no signature attached, and
+nine widened setters that can break a call site relying on inference. Read "The
+semver call" below before upgrading.
+
+Cargo treats `0.1.1` as compatible and would deliver it without you choosing it.
+`0.2.0` it will not.
+
+### Added
+
+- **A setter for every optional field on every request type** — 524 of the 547,
+  across 129 types. `GetOrdersRequest` had fourteen filters and a setter for
+  none of them; `UpdatableIdentity` had twenty-one and none; the five check
+  types inside a CIP payload had sixty-eight between them.
+
+  ```rust
+  let orders = client
+      .get_orders(
+          GetOrdersRequest::default()
+              .status(QueryOrderStatus::Open)
+              .limit(50)
+              .symbols(vec!["AAPL".to_owned()]),
+      )
+      .await?;
+  ```
+
+  **The assignment form still works, and always will.** These types are
+  `#[non_exhaustive]` with public fields, so nothing was ever unbuildable:
+
+  ```rust
+  let mut request = GetOrdersRequest::default();
+  request.status = Some(QueryOrderStatus::Open);
+  request.limit = Some(50);
+  ```
+
+  Both build the same request — `tests/integration/request_construction.rs`
+  asserts the two serialize identically, because a second way to build a
+  request is only worth having if it is the same request.
+
+  `String` and `Vec<T>` fields take `impl Into<T>`, so `.subtag("desk-7")` works
+  without a `to_owned()`. Everything else takes its type exactly.
+
+  Twenty-three fields have no setter, deliberately, and assignment remains the way
+  to reach them. Three because a *constructor* already holds the name and two
+  `pub fn` of one name cannot coexist in one impl:
+  `GetEventsRequest::since`, `EventStreamRequest::since` and
+  `EstimateOrderRequest::notional`.
+
+  Eighteen more because one setter writes them as a group, and offering one
+  per field would make an incoherent request easy to build by accident. Twelve
+  are on `OrderRequest`, whose module documentation names three combinations the
+  *type* makes unrepresentable — a per-field setter would have quietly undone
+  two of them:
+
+  - `qty` / `notional` are `OrderAmount`, and `trail_price` / `trail_percent`
+    are `Trail`. Both exist so "both at once" cannot be expressed, and
+    `OrderRequest::validate` does not reject either pair — precisely because
+    the type made them unreachable.
+  - `limit_price` / `stop_price` are set by the constructors for the shapes
+    that have them. "`limit_price` is not supported for market orders" is
+    enforced, in that module's own words, "by there being no way to set it on
+    one".
+  - `order_class`, `take_profit`, `stop_loss` and `legs` belong to `bracket`,
+    `oco`, `oto_take_profit`, `oto_stop_loss` and `multi_leg`. An exit leg with
+    no order class passes `validate` and is not a bracket — it is a plain order
+    carrying a field Alpaca ignores.
+  - `symbol` and `side` are set by whichever constructor chose the order's
+    shape, and `multi_leg` deliberately sets neither: a multi-leg order carries
+    its side per leg. `validate` requires them for every other class and has no
+    reason to examine them for `mleg`.
+
+  Three more are on the rebalancing types, whose constructors pick a shape the
+  same way: `Weight::symbol` belongs to `asset` and not to `cash`, and
+  `RebalancingCondition`'s `percent` and `day` belong to `drift_band` and
+  `calendar`. `Weight::validate` checks that an asset line names a symbol, not
+  that a cash line does not, and `RebalancingCondition` has no `validate` at
+  all.
+
+  Two more are `CreateRecipientBankRequest`'s `routing_code` and
+  `routing_code_type`, which go together because a routing code without its
+  scheme is ambiguous, and the last of the eighteen is
+  `EventStreamRequest::since_id`, documented "mutually exclusive with `since`"
+  and reachable through the `from_id` constructor.
+
+  The last two are `AccountConfiguration`'s `dtbp_check` and `pdt_check`, for a
+  different reason again: Alpaca removed both from its responses on 2026-07-06
+  and neither appears in the current PATCH schema. They are `Option` so that
+  absent means *omitted* rather than `null` — a fact about how the field
+  serializes, not an invitation to choose a value.
+
+  What earns a skip is narrower than "these fields interact". Exclusivity the
+  type already *checks* does not: `GetAccountActivitiesRequest`'s `category` and
+  `activity_types` are as mutually exclusive as `qty` and `notional`, and both
+  keep their setters, because `validate` rejects the pair and the client calls
+  it before sending. Ordering does not either — `start` and `end` keep their
+  setters everywhere, including on the four types that also offer a fallible
+  `between(start, end)`, because a one-sided window is ordinary and `between`
+  cannot express one. Nor does a field that merely *requires* a companion:
+  `EventStreamRequest::until` needs `since`, and says so in its own
+  documentation, which the derive carries onto the setter.
+
+  Nothing was removed or narrowed. The 79 setters that already existed were
+  written by hand and are now generated, keeping their names, their
+  documentation and their behaviour. Nine *widened*, from `Vec<T>` to
+  `impl Into<Vec<T>>` —
+  `GetUsCorporatesRequest::{cusips, tickers}`,
+  `GetAggregatePositionsRequest::symbols`, `GetSettlementsRequest::statuses`,
+  `CorporateActionEventsRequest::types`, `NewsRequest::symbols`,
+  `CorporateActionsRequest::{symbols, types}` and
+  `UpdateWatchlistRequest::symbols` — so an array or a boxed slice works where
+  only a `Vec` did before.
+
+  **Those nine can break a call site that relies on inference**, even though
+  nothing narrowed and `cargo semver-checks` reports no break — it models types,
+  not inference. An argument whose type was previously deduced *from* the
+  parameter now has nothing to deduce it from:
+
+  ```rust
+  // Compiled on 0.1.0, needs a type annotation now:
+  request.symbols(boxed_slice.into())
+  request.symbols(Default::default())
+
+  // Both fine:
+  request.symbols(vec!["AAPL".to_owned()])
+  request.symbols(Vec::<String>::new())
+  ```
+
+  Written down here because this is the class of change `cargo-semver-checks`
+  cannot see, and the reason this release is a minor rather than a patch.
+
+  One parameter was renamed — `GetAggregatePositionsRequest::firm_accounts` took
+  `include` and now takes `firm_accounts`, since the derive names a parameter
+  after its field. Rust has no named arguments, so no call site changes; it is
+  noted because it is visible in the documentation.
 
 ### Fixed
 
@@ -52,6 +184,23 @@ asking for it.
   `filled` is a status.
 
 ### Changed
+
+- **`alpaca-sdk` is now a workspace, and publishes a second crate** —
+  `alpaca-sdk-macros`, holding the `Setters` derive above. A procedural macro
+  cannot live in the crate that uses it, which is the only reason it exists;
+  nothing in it is meant to be named directly, and `alpaca-sdk` pins it with `=`
+  so the two always resolve as the pair they were built as.
+
+  **This costs a caller nothing to compile.** `syn`, `quote` and `proc-macro2`
+  were already in the dependency tree by way of `serde`'s `derive` feature, so
+  cargo unifies them and the only new work is the macros crate's own
+  compilation.
+
+  The alternative was a declarative macro listing each field beside its struct,
+  which needs no second crate — and needs a script to check the list against the
+  struct, because it can fall behind silently. Reading the real fields deletes
+  that class of drift rather than reporting on it.
+
 
 - **`Unknown(String)` no longer documents itself as "Alpaca added something
   new."** It has always had a second meaning — this crate omitted a value
@@ -180,12 +329,16 @@ presented as a whole one:
 
 ### The semver call
 
-**The call is `0.1.1`.** `cargo semver-checks` reports no breakage, and is right
-not to: the enum is `#[non_exhaustive]`, so every caller already needs a
-wildcard arm, and adding variants is additive at the type level.
+**The call is `0.2.0`**, and it was `0.1.1` until the setters work landed in the
+same release. `cargo semver-checks` reports no breakage for either change, and
+is right not to: the enum is `#[non_exhaustive]`, so every caller already needs
+a wildcard arm, and adding variants — or adding setters — is additive at the
+type level.
 
-One behaviour change is not additive, and no compiler will point at it. On
-`0.1.0` the only way to handle any of these nine events was to match the
+Two things in this release are not additive, and no compiler points at either.
+The setter widenings are described under **Added** above. The other is here.
+
+On `0.1.0` the only way to handle any of these nine events was to match the
 catch-all by string:
 
 ```rust
@@ -197,11 +350,14 @@ That arm still compiles and now never fires, because the value arrives as
 and `order_cancel_rejected` included. `WIRE_VALUES` also changes both contents
 and order, so anything asserting on it by index will move.
 
-`0.1.1` reaches every `alpaca-sdk = "0.1"` dependant without them choosing it,
-which is exactly why this note is here and stated this plainly: per the preamble
-at the top of this file, inside `0.x` these notes are the only mechanism there
-is. **If you match on `TradeEvent::Unknown` by string, grep for it before
-taking this upgrade.**
+A `0.1.1` would have reached every `alpaca-sdk = "0.1"` dependant without them
+choosing it, which is why this note was written as plainly as it is: per the
+preamble at the top of this file, inside `0.x` these notes are the only
+mechanism there is. **`0.2.0` does not** — cargo treats a leading-zero minor
+bump as incompatible, so nobody takes this upgrade by accident. That is the
+better outcome and it is not why the number moved; it is a side effect of the
+setters work landing alongside. The note stands either way. **If you match on
+`TradeEvent::Unknown` by string, grep for it before taking this upgrade.**
 
 ### On the two values with weaker evidence
 

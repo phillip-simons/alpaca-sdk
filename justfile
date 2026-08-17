@@ -29,8 +29,13 @@ default: check
 # push and pull request, and branch protection means a miss costs a fixup push
 # rather than a broken `main`.
 #
+# `setters` is in here and `parameters`/`enums-drift` are not, for the reason
+# given at that recipe: it needs no downloaded specs, runs in well under a
+# second, and reports a rule this repository can always satisfy rather than a
+# difference with Alpaca that it cannot.
+#
 # The gate. Run before every commit.
-check: fmt-check clippy doc test test-scripts
+check: fmt-check clippy doc test test-scripts setters
 
 # Rewrite formatting in place.
 fmt:
@@ -41,15 +46,27 @@ fmt-check:
     cargo fmt --all -- --check
 
 # Lint every target and feature, warnings denied.
+#
+# `--workspace` because this is a workspace now: `alpaca-sdk-macros` is a second
+# package, and without it cargo lints the root package alone. A proc-macro crate
+# is exactly the kind that wants linting — its output is invisible at the call
+# site, so a warning in it is a warning nobody sees.
 clippy:
-    cargo clippy --all-targets --all-features -- -D warnings
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 # Build the docs with rustdoc lints denied.
 doc:
     # These lints only fire here — clippy does not run rustdoc, so without this
     # recipe `missing_docs` and the intra-doc link lints are decoration. This one
     # is in `check` because any doc edit can trip it.
-    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features --locked
+    #
+    # `--workspace` for the same reason `clippy` has it, and it is easier to get
+    # wrong here: `alpaca-sdk-macros` is a *published* crate whose rustdoc lands
+    # on docs.rs, and without this nothing in `just check`, `just ci` or CI ever
+    # builds it under denied warnings. `doc-surfaces` below stays single-package
+    # deliberately — it is about this crate's feature gating, and the macros
+    # crate has no features to gate.
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --locked
 
 # An intra-doc link that crosses a feature boundary resolves under
 # --all-features and dangles everywhere else, so the all-features build alone
@@ -74,7 +91,13 @@ doc-open:
 test:
     # Deliberately no `--all-targets`: adding it silently drops the Doc-tests
     # pass — the doctests still compile, and stop ever being run.
-    cargo test --all-features --locked
+    #
+    # `--workspace` picks up `alpaca-sdk-macros`, whose tests include the
+    # trybuild compile-fail cases. Those pin rustc's and syn's diagnostic
+    # wording, so a toolchain bump can redden them on a change that had nothing
+    # to do with it. Regenerate rather than hand-edit:
+    #     TRYBUILD=overwrite cargo test -p alpaca-sdk-macros --test compile_fail
+    cargo test --workspace --all-features --locked
 
 # Run a subset by name, e.g. `just test-one mleg` or `just test-one decimal`.
 test-one *args:
@@ -99,7 +122,7 @@ test-scripts:
 # Auto-fix what is mechanically fixable, then show what is left.
 fix:
     cargo fmt --all
-    cargo clippy --all-targets --all-features --fix --allow-dirty --allow-staged
+    cargo clippy --workspace --all-targets --all-features --fix --allow-dirty --allow-staged
     just check
 
 # Check that each API surface still builds on its own.
@@ -154,7 +177,11 @@ semver:
 # feature on, and the attribute it enables is unstable, so the check does not
 # exist on a stable toolchain rather than merely being weaker there.
 doc-docsrs:
-    RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc --all-features --no-deps
+    # `--workspace` to match the `docs` job, which has it. This recipe exists so
+    # that job has a local equivalent, and one that covers fewer packages than
+    # the thing it stands in for is the gap it was written to close, reopened a
+    # package wider.
+    RUSTDOCFLAGS="-D warnings --cfg docsrs" cargo +nightly doc --workspace --all-features --no-deps
 
 # Everything CI runs.
 ci: check doc-surfaces doc-docsrs features msrv deny
@@ -166,7 +193,7 @@ hooks:
 
 # Fast inner-loop compile check. Needs `cargo install cargo-watch`.
 watch:
-    cargo watch -x 'clippy --all-targets --all-features -- -D warnings'
+    cargo watch -x 'clippy --workspace --all-targets --all-features -- -D warnings'
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -270,6 +297,26 @@ cov-open:
 parameters:
     python3 scripts/parameters.py
 
+# Which optional request fields a caller can only reach by assignment.
+#
+# `just parameters` asks whether the crate can send a documented parameter at
+# all; this asks whether it is pleasant to. Every request type is
+# `#[non_exhaustive]` with public fields, so a missing setter is never a compile
+# error, never a failing test, and never visible in the diff that adds the
+# field. `GetOrdersRequest` shipped 0.1.0 with fourteen filters and no setter
+# for any of them inside exactly that silence.
+#
+# A gate, unlike `parameters` and `enums-drift`, and it can be one because the
+# derive makes the fix a single word. Those two report a difference from an
+# outside source that may be Alpaca's to resolve; this one reports a rule this
+# repository sets for itself and can always satisfy.
+#
+# It does not check that each *field* has a setter — `#[derive(Setters)]` reads
+# the real field list, so that half is the compiler's, and stays true for a
+# field added by someone who never read the script. What is left is the question
+# a derive cannot ask about itself: which types should be deriving it.
+setters:
+    python3 scripts/setters.py
 
 # ---------------------------------------------------------------------------
 # Live API
@@ -300,6 +347,11 @@ live:
 # ---------------------------------------------------------------------------
 
 # List exactly what `cargo publish` would upload.
+#
+# The root package only. `alpaca-sdk-macros` is a separate tarball, and what is
+# in it — `src/lib.rs`, the manifests, and the trybuild cases under `tests/` —
+# has never been the question this recipe exists to answer. Add
+# `-p alpaca-sdk-macros` to inspect it.
 package:
     # Checks the `exclude` list in Cargo.toml before a release rather than
     # after. --allow-dirty because this is for inspection mid-change; the real
@@ -308,4 +360,10 @@ package:
 
 # Full pre-release verification, without publishing.
 publish-dry: ci semver
-    cargo publish --dry-run --locked
+    # `--workspace`, because publishing is now two crates. Cargo packages both,
+    # resolves `alpaca-sdk`'s dependency on the not-yet-published
+    # `alpaca-sdk-macros` out of a temporary registry it builds from the local
+    # tarball, verifies each, and orders the uploads. Publishing them one at a
+    # time in a script would need the macros crate to already be on crates.io
+    # before the SDK could even be verified.
+    cargo publish --workspace --dry-run --locked

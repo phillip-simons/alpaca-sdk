@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::types::SupportedCurrencies;
+use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -307,11 +308,12 @@ pub struct RecipientBank {
 }
 
 /// A request to open funding wallets for several accounts at once.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct BatchCreateFundingWalletsRequest {
     /// The accounts to open wallets for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub account_ids: Option<Vec<Uuid>>,
 }
 
@@ -326,7 +328,7 @@ impl BatchCreateFundingWalletsRequest {
 }
 
 /// Filters for an account's funding details.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetFundingDetailsRequest {
     /// Only details for this rail.
@@ -338,7 +340,7 @@ pub struct GetFundingDetailsRequest {
 }
 
 /// A request to register a bank a withdrawal may be sent to.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateRecipientBankRequest {
     /// The account number.
@@ -355,27 +357,38 @@ pub struct CreateRecipientBankRequest {
     pub city: String,
     /// State or province.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub state_or_province: Option<String>,
     /// Postal code.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub postal_code: Option<String>,
     /// The holder's name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub bank_account_holder_name: Option<String>,
     /// What kind of account it is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_type: Option<RecipientAccountType>,
     /// The IBAN, where the country uses one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into, doc = "Sets the IBAN.")]
     pub iban: Option<String>,
     /// The BIC or SWIFT code.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into, doc = "Sets the BIC or SWIFT code.")]
     pub bic_swift: Option<String>,
     /// The national routing code.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(skip = "`routing_code(code, code_type)` sets this and \
+                      `routing_code_type` together, which is the point: a \
+                      routing code without its scheme is ambiguous")]
     pub routing_code: Option<String>,
     /// Which scheme that code belongs to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(skip = "set with the code it describes, by \
+                      `routing_code(code, code_type)` — a scheme naming no \
+                      code is not a state worth being able to reach")]
     pub routing_code_type: Option<RoutingCodeType>,
 }
 
@@ -416,20 +429,6 @@ impl CreateRecipientBankRequest {
         }
     }
 
-    /// Sets the IBAN.
-    #[must_use]
-    pub fn iban(mut self, iban: impl Into<String>) -> Self {
-        self.iban = Some(iban.into());
-        self
-    }
-
-    /// Sets the BIC or SWIFT code.
-    #[must_use]
-    pub fn bic_swift(mut self, bic_swift: impl Into<String>) -> Self {
-        self.bic_swift = Some(bic_swift.into());
-        self
-    }
-
     /// Sets the national routing code and its scheme.
     #[must_use]
     pub fn routing_code(mut self, code: impl Into<String>, code_type: RoutingCodeType) -> Self {
@@ -440,7 +439,7 @@ impl CreateRecipientBankRequest {
 }
 
 /// A request to send money out of a funding wallet.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateWithdrawalRequest {
     /// How much to send, in USD.
@@ -460,6 +459,7 @@ pub struct CreateWithdrawalRequest {
     pub desired_currency: Option<SupportedCurrencies>,
     /// Which rail to send it on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Sets the rail.")]
     pub payment_type: Option<PaymentType>,
 }
 
@@ -472,13 +472,6 @@ impl CreateWithdrawalRequest {
             desired_currency: Some(desired_currency),
             payment_type: None,
         }
-    }
-
-    /// Sets the rail.
-    #[must_use]
-    pub fn payment_type(mut self, payment_type: PaymentType) -> Self {
-        self.payment_type = Some(payment_type);
-        self
     }
 
     /// The one check a withdrawal cannot pass without contradicting itself.
@@ -500,7 +493,7 @@ impl CreateWithdrawalRequest {
 }
 
 /// A sandbox-only deposit, for testing the funding path end to end.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct DemoFundingRequest {
     /// How much to deposit.
@@ -515,9 +508,11 @@ pub struct DemoFundingRequest {
     pub currency: Option<crate::types::SupportedCurrencies>,
     /// The account number to credit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub receiver_account_number: Option<String>,
     /// Its routing code.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub receiver_routing_code: Option<String>,
 }
 

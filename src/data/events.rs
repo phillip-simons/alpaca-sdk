@@ -15,6 +15,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::sse::EventStreamRequest;
+use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -72,7 +73,7 @@ wire_enum! {
 }
 
 /// Filters for the corporate actions event stream.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CorporateActionEventsRequest {
     /// The replay window and cursor, shared with every other Alpaca stream
@@ -81,9 +82,11 @@ pub struct CorporateActionEventsRequest {
     pub window: EventStreamRequest,
     /// Only these event types. Sent as one comma-separated `type` parameter.
     #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    #[setters(into, doc = "Only these event types.")]
     pub types: Option<Vec<CorporateActionEventType>>,
     /// Which markets to receive events for. Alpaca defaults this to `all`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(doc = "Only this region.")]
     pub region: Option<CorporateActionRegion>,
 }
 
@@ -98,20 +101,6 @@ impl CorporateActionEventsRequest {
     #[must_use]
     pub fn window(mut self, window: EventStreamRequest) -> Self {
         self.window = window;
-        self
-    }
-
-    /// Only these event types.
-    #[must_use]
-    pub fn types(mut self, types: Vec<CorporateActionEventType>) -> Self {
-        self.types = Some(types);
-        self
-    }
-
-    /// Only this region.
-    #[must_use]
-    pub fn region(mut self, region: CorporateActionRegion) -> Self {
-        self.region = Some(region);
         self
     }
 

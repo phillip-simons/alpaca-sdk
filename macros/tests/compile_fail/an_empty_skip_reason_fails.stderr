@@ -1,0 +1,5 @@
+error: `skip` needs a reason: a bare skip is indistinguishable from an oversight
+ --> tests/compile_fail/an_empty_skip_reason_fails.rs:6:15
+  |
+6 |     #[setters(skip = "   ")]
+  |               ^^^^^^^^^^^^

@@ -17,6 +17,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -184,11 +185,12 @@ pub struct TransferFeeEstimate {
 }
 
 /// Filters for listing deposit wallets.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct GetCryptoWalletsRequest {
     /// Only wallets for this asset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub asset: Option<String>,
     /// Only wallets on this chain.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -204,20 +206,6 @@ impl GetCryptoWalletsRequest {
     pub fn new() -> Self {
         Self::default()
     }
-
-    /// Only wallets for this asset.
-    #[must_use]
-    pub fn asset(mut self, asset: impl Into<String>) -> Self {
-        self.asset = Some(asset.into());
-        self
-    }
-
-    /// Only wallets on this chain.
-    #[must_use]
-    pub fn chain(mut self, chain: CryptoChain) -> Self {
-        self.chain = Some(chain);
-        self
-    }
 }
 
 /// A request to withdraw crypto to an on-chain address.
@@ -226,7 +214,7 @@ impl GetCryptoWalletsRequest {
 /// `broker::BrokerClient::create_crypto_transfer_for_account`. The trading
 /// API's `POST /v2/wallets/transfers` takes the same shape and is deprecated;
 /// see this module's header for why only the broker route is implemented.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateCryptoTransferRequest {
     /// The destination wallet address.
@@ -257,7 +245,7 @@ impl CreateCryptoTransferRequest {
 }
 
 /// A request to allowlist a withdrawal address.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct CreateWhitelistedAddressRequest {
     /// The address to allow.
@@ -281,17 +269,20 @@ impl CreateWhitelistedAddressRequest {
 }
 
 /// A request for a transfer's estimated gas fee.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct TransferFeeEstimateRequest {
     /// The asset to move.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub asset: Option<String>,
     /// The sending address.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub from_address: Option<String>,
     /// The receiving address.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(into)]
     pub to_address: Option<String>,
     /// How much to move.
     #[serde(

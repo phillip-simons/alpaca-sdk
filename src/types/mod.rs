@@ -8,6 +8,7 @@ mod ident;
 mod logo;
 pub(crate) mod path;
 pub mod serde_util;
+pub(crate) mod setters;
 pub mod timestamp;
 
 pub use common_enums::{ContractType, Sort, SupportedCurrencies};

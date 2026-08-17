@@ -1,0 +1,5 @@
+error: `skip` is already set on this field, with a different reason — keep the one that is true
+ --> tests/compile_fail/a_repeated_skip_fails.rs:7:15
+  |
+7 |     #[setters(skip = "set with the field beside it")]
+  |               ^^^^
