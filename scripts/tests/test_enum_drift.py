@@ -40,12 +40,14 @@ def load_script():
 
 
 def wire_enum(name: str, values: dict[str, str], trailing_comma: bool = True) -> str:
-    """A `wire_enum!` block, spelled the way the macro accepts it."""
-    arms = [f'        {variant} => "{wire}",' for variant, wire in values.items()]
+    """A `#[wire_enum]` enum, spelled the way the attribute accepts it."""
+    arms = [
+        f'    #[wire = "{wire}"]\n    {variant},' for variant, wire in values.items()
+    ]
     if not trailing_comma and arms:
         arms[-1] = arms[-1].rstrip(",")
     body = "\n".join(arms)
-    return f"wire_enum! {{\n    pub enum {name} {{\n{body}\n    }}\n}}\n"
+    return f"#[wire_enum]\npub enum {name} {{\n{body}\n}}\n"
 
 
 def schema(name: str, values: list[str]) -> str:
@@ -486,7 +488,7 @@ class TestCollisions(TreeTest):
         self.assertEqual(sorted(self.enums()), ["OrderStatus"])
 
     def test_an_ordinary_pub_enum_is_not_in_the_report_at_all(self) -> None:
-        """A `pub enum` with no `Variant => "wire"` arms is not a wire enum.
+        """A `pub enum` with no `#[wire = "…"]` lines is not a wire enum.
 
         Deliberately under a name no `wire_enum!` shares: where the two collide
         the filter's effect is invisible, since the name is in the report
@@ -560,7 +562,7 @@ class TestVariantParsing(TreeTest):
         self.assertEqual(sorted(self.enums()), ["Shipping"])
 
     def test_a_closing_brace_with_a_comment_still_closes_the_block(self) -> None:
-        """Otherwise every later `Ident => "wire",` is filed as one of its values.
+        """Otherwise every later `#[wire = "…"]` is filed as one of its values.
 
         An ordinary match arm elsewhere in the file has that shape.
         """
@@ -569,11 +571,13 @@ class TestVariantParsing(TreeTest):
             """
             wire_enum! {
                 pub enum Shipping {
-                    Live => "live",
+                    #[wire = "live"]
+                    Live,
                 } // closes the enum
                 fn route() {
                     match x {
-                        Sneaky => "sneaky",
+                        #[wire = "sneaky"]
+                        Sneaky,
                     }
                 }
             }
@@ -583,32 +587,32 @@ class TestVariantParsing(TreeTest):
         # Not `["live", "sneaky"]`: the match arm is not one of its values.
         self.assertEqual(self.enums()["Shipping"], ["live"])
 
-    def test_an_empty_enum_does_not_adopt_later_match_arms(self) -> None:
+    def test_an_empty_enum_does_not_adopt_a_later_enums_values(self) -> None:
         """`pub enum Never {}` opens and closes on one line.
 
         It never meets the closing-brace reset, so it stayed open and filed
-        every later `Ident => "wire",` in the file as one of its values — a
+        every later `#[wire = "…"]` in the file as one of its values — a
         phantom enum with fabricated values, which would then be compared
         against a schema of that name. rustfmt leaves the shape alone.
         """
         self.write(
             "src/a.rs",
             "pub enum Never {}\n\n"
-            "fn route(x: Thing) -> &str {\n    match x {\n"
-            '        Alpha => "alpha",\n        Beta => "beta",\n    }\n}\n',
+            "#[wire_enum]\npub enum Later {\n"
+            '    #[wire = "alpha"]\n    Alpha,\n}\n',
         )
 
-        self.assertEqual(self.enums(), {})
+        self.assertEqual(self.enums(), {"Later": ["alpha"]})
 
     def test_a_block_closed_on_one_line_still_declares_its_enum(self) -> None:
         """`    }}` never matches the closing-brace reset, so the block ends at EOF."""
         self.write(
             "src/a.rs",
-            'wire_enum! {\n    pub enum Shared {\n        A => "a",\n    }}\n',
+            '#[wire_enum]\npub enum Shared {\n    #[wire = "a"]\n    A,\n}\n',
         )
         self.write(
             "src/b.rs",
-            'wire_enum! {\n    pub enum Shared {\n        B => "b",\n    }}\n',
+            '#[wire_enum]\npub enum Shared {\n    #[wire = "b"]\n    B,\n}\n',
         )
 
         self.assertEqual([name for name, _ in self.collisions()], ["Shared"])

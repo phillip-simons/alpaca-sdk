@@ -1,0 +1,6 @@
+error: this variant has no documentation, and its documentation is where a caller reads when the value occurs — say what the wire means, not what it spells
+ --> tests/compile_fail/an_undocumented_variant_fails.rs:5:5
+  |
+5 | /     #[wire = "buy"]
+6 | |     Buy,
+  | |_______^

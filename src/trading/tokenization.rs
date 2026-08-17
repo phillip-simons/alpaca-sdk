@@ -17,62 +17,75 @@ use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// Who issues the token.
-    pub enum TokenizationIssuer {
-        /// xStocks.
-        Xstocks => "xstocks",
-        /// St0x.
-        St0x => "st0x",
-    }
+/// Who issues the token.
+#[wire_enum]
+pub enum TokenizationIssuer {
+    /// xStocks.
+    #[wire = "xstocks"]
+    Xstocks,
+    /// St0x.
+    #[wire = "st0x"]
+    St0x,
 }
 
-wire_enum! {
-    /// The chain a token lives on.
-    pub enum TokenizationNetwork {
-        /// Solana.
-        Solana => "solana",
-        /// Arbitrum.
-        Arbitrum => "arbitrum",
-        /// Ethereum.
-        Ethereum => "ethereum",
-        /// BNB Chain.
-        Binance => "binance",
-        /// Base.
-        Base => "base",
-        /// TON.
-        Ton => "ton",
-        /// Tron.
-        Tron => "tron",
-        /// Mantle.
-        Mantle => "mantle",
-        /// Cronos.
-        Cronos => "cronos",
-        /// `HyperEVM`.
-        HyperEvm => "hyperevm",
-    }
+/// The chain a token lives on.
+#[wire_enum]
+pub enum TokenizationNetwork {
+    /// Solana.
+    #[wire = "solana"]
+    Solana,
+    /// Arbitrum.
+    #[wire = "arbitrum"]
+    Arbitrum,
+    /// Ethereum.
+    #[wire = "ethereum"]
+    Ethereum,
+    /// BNB Chain.
+    #[wire = "binance"]
+    Binance,
+    /// Base.
+    #[wire = "base"]
+    Base,
+    /// TON.
+    #[wire = "ton"]
+    Ton,
+    /// Tron.
+    #[wire = "tron"]
+    Tron,
+    /// Mantle.
+    #[wire = "mantle"]
+    Mantle,
+    /// Cronos.
+    #[wire = "cronos"]
+    Cronos,
+    /// `HyperEVM`.
+    #[wire = "hyperevm"]
+    HyperEvm,
 }
 
-wire_enum! {
-    /// Where a tokenization request stands.
-    pub enum TokenizationStatus {
-        /// Submitted and not yet settled.
-        Pending => "pending",
-        /// Refused.
-        Rejected => "rejected",
-        /// Settled.
-        Completed => "completed",
-    }
+/// Where a tokenization request stands.
+#[wire_enum]
+pub enum TokenizationStatus {
+    /// Submitted and not yet settled.
+    #[wire = "pending"]
+    Pending,
+    /// Refused.
+    #[wire = "rejected"]
+    Rejected,
+    /// Settled.
+    #[wire = "completed"]
+    Completed,
 }
 
-wire_enum! {
-    /// Which direction a tokenization request goes.
-    pub enum TokenizationType {
-        /// Position to token.
-        Mint => "mint",
-        /// Token back to position.
-        Redeem => "redeem",
-    }
+/// Which direction a tokenization request goes.
+#[wire_enum(sorted)]
+pub enum TokenizationType {
+    /// Position to token.
+    #[wire = "mint"]
+    Mint,
+    /// Token back to position.
+    #[wire = "redeem"]
+    Redeem,
 }
 
 /// A tokenization request and its status.

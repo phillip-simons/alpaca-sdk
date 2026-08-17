@@ -1,0 +1,5 @@
+error: `wire` takes the string the API sends, spelled exactly: `#[wire = "buy"]`
+ --> tests/compile_fail/a_malformed_wire_value_fails.rs:6:5
+  |
+6 |     #[wire("buy")]
+  |     ^^^^^^^^^^^^^^

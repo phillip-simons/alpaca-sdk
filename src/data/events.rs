@@ -19,58 +19,74 @@ use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// Which markets a corporate actions stream should carry.
-    pub enum CorporateActionRegion {
-        /// Every event, whichever market.
-        All => "all",
-        /// US-listed or US-regulated actions only.
-        Us => "us",
-        /// Everything else.
-        NonUs => "non_us",
-    }
+/// Which markets a corporate actions stream should carry.
+#[wire_enum]
+pub enum CorporateActionRegion {
+    /// Every event, whichever market.
+    #[wire = "all"]
+    All,
+    /// US-listed or US-regulated actions only.
+    #[wire = "us"]
+    Us,
+    /// Everything else.
+    #[wire = "non_us"]
+    NonUs,
 }
 
-wire_enum! {
-    /// The `event_type` discriminator on a corporate actions event.
-    ///
-    /// Also the filter: naming a subset here narrows the stream to those types.
-    /// The values are not the same strings as
-    /// [`CorporateActionsType`](crate::data::CorporateActionsType), which the
-    /// polled route uses — these carry a `_corporateaction_event` suffix, and
-    /// the two lists do not even hold the same members.
-    pub enum CorporateActionEventType {
-        /// A cash dividend.
-        CashDividend => "cash_dividend_corporateaction_event",
-        /// A cash merger.
-        CashMerger => "cash_merger_corporateaction_event",
-        /// A partial call of an equity.
-        EquityPartialCall => "equity_partial_call_corporateaction_event",
-        /// A forward split.
-        ForwardSplit => "forward_split_corporateaction_event",
-        /// A name change.
-        NameChange => "name_change_corporateaction_event",
-        /// A redemption.
-        Redemption => "redemption_corporateaction_event",
-        /// A reorganization.
-        Reorganization => "reorganization_corporateaction_event",
-        /// A reverse split.
-        ReverseSplit => "reverse_split_corporateaction_event",
-        /// A rights distribution.
-        RightsDistribution => "rights_distribution_corporateaction_event",
-        /// A spin off.
-        SpinOff => "spin_off_corporateaction_event",
-        /// A merger paid in stock and cash.
-        StockAndCashMerger => "stock_and_cash_merger_corporateaction_event",
-        /// A stock dividend.
-        StockDividend => "stock_dividend_corporateaction_event",
-        /// A stock merger.
-        StockMerger => "stock_merger_corporateaction_event",
-        /// A unit split.
-        UnitSplit => "unit_split_corporateaction_event",
-        /// A worthless removal.
-        WorthlessRemoval => "worthless_removal_corporateaction_event",
-    }
+/// The `event_type` discriminator on a corporate actions event.
+///
+/// Also the filter: naming a subset here narrows the stream to those types.
+/// The values are not the same strings as
+/// [`CorporateActionsType`](crate::data::CorporateActionsType), which the
+/// polled route uses — these carry a `_corporateaction_event` suffix, and
+/// the two lists do not even hold the same members.
+#[wire_enum(sorted)]
+pub enum CorporateActionEventType {
+    /// A cash dividend.
+    #[wire = "cash_dividend_corporateaction_event"]
+    CashDividend,
+    /// A cash merger.
+    #[wire = "cash_merger_corporateaction_event"]
+    CashMerger,
+    /// A partial call of an equity.
+    #[wire = "equity_partial_call_corporateaction_event"]
+    EquityPartialCall,
+    /// A forward split.
+    #[wire = "forward_split_corporateaction_event"]
+    ForwardSplit,
+    /// A name change.
+    #[wire = "name_change_corporateaction_event"]
+    NameChange,
+    /// A redemption.
+    #[wire = "redemption_corporateaction_event"]
+    Redemption,
+    /// A reorganization.
+    #[wire = "reorganization_corporateaction_event"]
+    Reorganization,
+    /// A reverse split.
+    #[wire = "reverse_split_corporateaction_event"]
+    ReverseSplit,
+    /// A rights distribution.
+    #[wire = "rights_distribution_corporateaction_event"]
+    RightsDistribution,
+    /// A spin off.
+    #[wire = "spin_off_corporateaction_event"]
+    SpinOff,
+    /// A merger paid in stock and cash.
+    #[wire = "stock_and_cash_merger_corporateaction_event"]
+    StockAndCashMerger,
+    /// A stock dividend.
+    #[wire = "stock_dividend_corporateaction_event"]
+    StockDividend,
+    /// A stock merger.
+    #[wire = "stock_merger_corporateaction_event"]
+    StockMerger,
+    /// A unit split.
+    #[wire = "unit_split_corporateaction_event"]
+    UnitSplit,
+    /// A worthless removal.
+    #[wire = "worthless_removal_corporateaction_event"]
+    WorthlessRemoval,
 }
 
 /// Filters for the corporate actions event stream.

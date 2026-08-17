@@ -1,0 +1,5 @@
+error: a wire enum takes no generics: every variant is one fixed string, and the generated `Deserialize` has nowhere to put a bound
+ --> tests/compile_fail/a_generic_wire_enum_fails.rs:4:14
+  |
+4 | pub enum Side<T> {
+  |              ^^^

@@ -23,120 +23,143 @@ use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// Whether a funding wallet may be used.
-    pub enum FundingWalletStatus {
-        /// Usable.
-        Active => "active",
-        /// Being set up.
-        Pending => "pending",
-        /// Switched off.
-        Disabled => "disabled",
-    }
+/// Whether a funding wallet may be used.
+#[wire_enum]
+pub enum FundingWalletStatus {
+    /// Usable.
+    #[wire = "active"]
+    Active,
+    /// Being set up.
+    #[wire = "pending"]
+    Pending,
+    /// Switched off.
+    #[wire = "disabled"]
+    Disabled,
 }
 
-wire_enum! {
-    /// Which rail money moves on.
-    pub enum PaymentType {
-        /// International wire.
-        SwiftWire => "swift_wire",
-        /// A domestic scheme in the destination country.
-        LocalRails => "local_rails",
-    }
+/// Which rail money moves on.
+#[wire_enum]
+pub enum PaymentType {
+    /// International wire.
+    #[wire = "swift_wire"]
+    SwiftWire,
+    /// A domestic scheme in the destination country.
+    #[wire = "local_rails"]
+    LocalRails,
 }
 
-wire_enum! {
-    /// Which way a funding wallet transfer moves.
+/// Which way a funding wallet transfer moves.
+///
+/// Lower-case here, where the crypto wallet's equivalent is upper-case.
+/// Two families, two conventions.
+#[wire_enum(sorted)]
+pub enum FundingDirection {
+    /// Into the account.
+    #[wire = "incoming"]
+    Incoming,
+    /// Out of it.
+    #[wire = "outgoing"]
+    Outgoing,
+}
+
+/// Where a funding wallet transfer stands.
+#[wire_enum]
+pub enum FundingTransferStatus {
+    /// Submitted.
+    #[wire = "PENDING"]
+    Pending,
+    /// Withdrawn.
+    #[wire = "CANCELED"]
+    Canceled,
+    /// Sent.
+    #[wire = "EXECUTED"]
+    Executed,
+    /// Failed.
+    #[wire = "FAILED"]
+    Failed,
+    /// Settled.
     ///
-    /// Lower-case here, where the crypto wallet's equivalent is upper-case.
-    /// Two families, two conventions.
-    pub enum FundingDirection {
-        /// Into the account.
-        Incoming => "incoming",
-        /// Out of it.
-        Outgoing => "outgoing",
-    }
+    /// `COMPLETE`, not `COMPLETED` — the instant funding family spells the
+    /// same idea the other way.
+    #[wire = "COMPLETE"]
+    Complete,
 }
 
-wire_enum! {
-    /// Where a funding wallet transfer stands.
-    pub enum FundingTransferStatus {
-        /// Submitted.
-        Pending => "PENDING",
-        /// Withdrawn.
-        Canceled => "CANCELED",
-        /// Sent.
-        Executed => "EXECUTED",
-        /// Failed.
-        Failed => "FAILED",
-        /// Settled.
-        ///
-        /// `COMPLETE`, not `COMPLETED` — the instant funding family spells the
-        /// same idea the other way.
-        Complete => "COMPLETE",
-    }
-}
-
-wire_enum! {
-    /// What a fee on a funding wallet transfer is for.
-    pub enum FundingFeeType {
-        /// Sending money out.
-        WithdrawalFee => "withdrawal_fee",
-        /// Converting currency.
-        FxFee => "fx_fee",
-        /// The network's own charge.
-        NetworkFee => "network_fee",
-        /// Taking money in.
-        DepositFee => "deposit_fee",
-        /// A returned ACH.
-        AchReturnFee => "ach_return_fee",
-        /// The correspondent's cut.
-        ///
-        /// Spelled `parnter_fee` on the wire. That is Alpaca's typo, and
-        /// matching it is what makes the value decode.
-        PartnerFee => "parnter_fee",
-        /// Alpaca's cut.
-        AlpacaFee => "alpaca_fee",
-    }
-}
-
-wire_enum! {
-    /// Which national scheme a routing code belongs to.
-    pub enum RoutingCodeType {
-        /// UK sort code.
-        SortCode => "sort_code",
-        /// US ABA routing number.
-        Aba => "aba",
-        /// Australian BSB.
-        BsbCode => "bsb_code",
-        /// Canadian institution number.
-        InstitutionNo => "institution_no",
-        /// A bank code.
-        BankCode => "bank_code",
-        /// A branch code.
-        BranchCode => "branch_code",
-        /// Mexican CLABE.
-        Clabe => "clabe",
-        /// Chinese CNAPS.
-        Cnaps => "cnaps",
-        /// Indian IFSC.
-        Ifsc => "ifsc",
-    }
-}
-
-wire_enum! {
-    /// What kind of bank account a recipient bank is.
+/// What a fee on a funding wallet transfer is for.
+#[wire_enum]
+pub enum FundingFeeType {
+    /// Sending money out.
+    #[wire = "withdrawal_fee"]
+    WithdrawalFee,
+    /// Converting currency.
+    #[wire = "fx_fee"]
+    FxFee,
+    /// The network's own charge.
+    #[wire = "network_fee"]
+    NetworkFee,
+    /// Taking money in.
+    #[wire = "deposit_fee"]
+    DepositFee,
+    /// A returned ACH.
+    #[wire = "ach_return_fee"]
+    AchReturnFee,
+    /// The correspondent's cut.
     ///
-    /// Lower-case here, where the ACH relationship's
-    /// [`BankAccountType`](crate::broker::BankAccountType) is upper-case and
-    /// carries an empty variant besides. Same idea, two wire vocabularies, so
-    /// two types.
-    pub enum RecipientAccountType {
-        /// Checking.
-        Checking => "checking",
-        /// Savings.
-        Savings => "savings",
-    }
+    /// Spelled `parnter_fee` on the wire. That is Alpaca's typo, and
+    /// matching it is what makes the value decode.
+    #[wire = "parnter_fee"]
+    PartnerFee,
+    /// Alpaca's cut.
+    #[wire = "alpaca_fee"]
+    AlpacaFee,
+}
+
+/// Which national scheme a routing code belongs to.
+#[wire_enum]
+pub enum RoutingCodeType {
+    /// UK sort code.
+    #[wire = "sort_code"]
+    SortCode,
+    /// US ABA routing number.
+    #[wire = "aba"]
+    Aba,
+    /// Australian BSB.
+    #[wire = "bsb_code"]
+    BsbCode,
+    /// Canadian institution number.
+    #[wire = "institution_no"]
+    InstitutionNo,
+    /// A bank code.
+    #[wire = "bank_code"]
+    BankCode,
+    /// A branch code.
+    #[wire = "branch_code"]
+    BranchCode,
+    /// Mexican CLABE.
+    #[wire = "clabe"]
+    Clabe,
+    /// Chinese CNAPS.
+    #[wire = "cnaps"]
+    Cnaps,
+    /// Indian IFSC.
+    #[wire = "ifsc"]
+    Ifsc,
+}
+
+/// What kind of bank account a recipient bank is.
+///
+/// Lower-case here, where the ACH relationship's
+/// [`BankAccountType`](crate::broker::BankAccountType) is upper-case and
+/// carries an empty variant besides. Same idea, two wire vocabularies, so
+/// two types.
+#[wire_enum(sorted)]
+pub enum RecipientAccountType {
+    /// Checking.
+    #[wire = "checking"]
+    Checking,
+    /// Savings.
+    #[wire = "savings"]
+    Savings,
 }
 
 /// An account's funding wallet.

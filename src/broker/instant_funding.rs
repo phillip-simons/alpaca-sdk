@@ -19,56 +19,64 @@ use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// Where an instant funding request stands.
-    pub enum InstantFundingStatus {
-        /// Submitted.
-        Pending => "PENDING",
-        /// Withdrawn before execution.
-        Canceled => "CANCELED",
-        /// The cash has been advanced.
-        Executed => "EXECUTED",
-        /// It could not be advanced.
-        Failed => "FAILED",
-        /// Advanced and settled.
-        Completed => "COMPLETED",
-    }
+/// Where an instant funding request stands.
+#[wire_enum]
+pub enum InstantFundingStatus {
+    /// Submitted.
+    #[wire = "PENDING"]
+    Pending,
+    /// Withdrawn before execution.
+    #[wire = "CANCELED"]
+    Canceled,
+    /// The cash has been advanced.
+    #[wire = "EXECUTED"]
+    Executed,
+    /// It could not be advanced.
+    #[wire = "FAILED"]
+    Failed,
+    /// Advanced and settled.
+    #[wire = "COMPLETED"]
+    Completed,
 }
 
-wire_enum! {
-    /// Who charges a fee on an instant funding request.
-    pub enum InstantFundingFeeType {
-        /// The correspondent.
-        Partner => "partner",
-        /// Alpaca.
-        Alpaca => "alpaca",
-    }
+/// Who charges a fee on an instant funding request.
+#[wire_enum]
+pub enum InstantFundingFeeType {
+    /// The correspondent.
+    #[wire = "partner"]
+    Partner,
+    /// Alpaca.
+    #[wire = "alpaca"]
+    Alpaca,
 }
 
-wire_enum! {
-    /// What an instant funding list is sorted by.
-    pub enum InstantFundingSortBy {
-        /// When the request was made.
-        CreatedAt => "created_at",
-        /// How much was advanced.
-        Amount => "amount",
-        /// When it must be settled.
-        Deadline => "deadline",
-    }
+/// What an instant funding list is sorted by.
+#[wire_enum]
+pub enum InstantFundingSortBy {
+    /// When the request was made.
+    #[wire = "created_at"]
+    CreatedAt,
+    /// How much was advanced.
+    #[wire = "amount"]
+    Amount,
+    /// When it must be settled.
+    #[wire = "deadline"]
+    Deadline,
 }
 
-wire_enum! {
-    /// Which way a sort runs.
-    ///
-    /// Upper-case here, unlike the lower-case `asc`/`desc` every other route in
-    /// this crate takes — which is why this is its own enum rather than
-    /// [`Sort`](crate::types::Sort).
-    pub enum SortOrder {
-        /// Ascending.
-        Asc => "ASC",
-        /// Descending.
-        Desc => "DESC",
-    }
+/// Which way a sort runs.
+///
+/// Upper-case here, unlike the lower-case `asc`/`desc` every other route in
+/// this crate takes — which is why this is its own enum rather than
+/// [`Sort`](crate::types::Sort).
+#[wire_enum(sorted)]
+pub enum SortOrder {
+    /// Ascending.
+    #[wire = "ASC"]
+    Asc,
+    /// Descending.
+    #[wire = "DESC"]
+    Desc,
 }
 
 /// A fee charged on an instant funding request.

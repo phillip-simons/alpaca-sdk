@@ -19,116 +19,144 @@ use crate::types::serde_util::comma_separated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// Where a bond is in its life.
-    pub enum BondStatus {
-        /// Issued and not yet matured.
-        Outstanding => "outstanding",
-        /// Past its maturity date.
-        Matured => "matured",
-        /// Announced but not yet issued.
-        PreIssuance => "pre_issuance",
-    }
+/// Where a bond is in its life.
+#[wire_enum]
+pub enum BondStatus {
+    /// Issued and not yet matured.
+    #[wire = "outstanding"]
+    Outstanding,
+    /// Past its maturity date.
+    #[wire = "matured"]
+    Matured,
+    /// Announced but not yet issued.
+    #[wire = "pre_issuance"]
+    PreIssuance,
 }
 
-wire_enum! {
-    /// How often a bond pays.
-    pub enum CouponFrequency {
-        /// Once a year.
-        Annual => "annual",
-        /// Twice a year, the US corporate norm.
-        SemiAnnual => "semi_annual",
-        /// Four times a year.
-        Quarterly => "quarterly",
-        /// Every month.
-        Monthly => "monthly",
-        /// Never — a discount instrument.
-        Zero => "zero",
-    }
+/// How often a bond pays.
+#[wire_enum]
+pub enum CouponFrequency {
+    /// Once a year.
+    #[wire = "annual"]
+    Annual,
+    /// Twice a year, the US corporate norm.
+    #[wire = "semi_annual"]
+    SemiAnnual,
+    /// Four times a year.
+    #[wire = "quarterly"]
+    Quarterly,
+    /// Every month.
+    #[wire = "monthly"]
+    Monthly,
+    /// Never — a discount instrument.
+    #[wire = "zero"]
+    Zero,
 }
 
-wire_enum! {
-    /// What kind of coupon a bond pays.
-    pub enum CouponType {
-        /// A fixed rate.
-        Fixed => "fixed",
-        /// A rate that resets against a benchmark.
-        Floating => "floating",
-        /// None; the return is the discount.
-        Zero => "zero",
-    }
+/// What kind of coupon a bond pays.
+#[wire_enum(sorted)]
+pub enum CouponType {
+    /// A fixed rate.
+    #[wire = "fixed"]
+    Fixed,
+    /// A rate that resets against a benchmark.
+    #[wire = "floating"]
+    Floating,
+    /// None; the return is the discount.
+    #[wire = "zero"]
+    Zero,
 }
 
-wire_enum! {
-    /// The day-count convention accrued interest is figured on.
-    pub enum DayCount {
-        /// Actual/360.
-        Actual360 => "A/360",
-        /// Actual/365.
-        Actual365 => "A/365",
-        /// 30/360.
-        Thirty360 => "30/360",
-        /// 30/365.
-        Thirty365 => "30/365",
-        /// Actual/actual.
-        ActualActual => "A/A",
-        /// 30E/360, the European variant.
-        ThirtyE360 => "30E/360",
-        /// Business/252.
-        Business252 => "B/252",
-        /// Actual/364.
-        Actual364 => "A/364",
-    }
+/// The day-count convention accrued interest is figured on.
+#[wire_enum]
+pub enum DayCount {
+    /// Actual/360.
+    #[wire = "A/360"]
+    Actual360,
+    /// Actual/365.
+    #[wire = "A/365"]
+    Actual365,
+    /// 30/360.
+    #[wire = "30/360"]
+    Thirty360,
+    /// 30/365.
+    #[wire = "30/365"]
+    Thirty365,
+    /// Actual/actual.
+    #[wire = "A/A"]
+    ActualActual,
+    /// 30E/360, the European variant.
+    #[wire = "30E/360"]
+    ThirtyE360,
+    /// Business/252.
+    #[wire = "B/252"]
+    Business252,
+    /// Actual/364.
+    #[wire = "A/364"]
+    Actual364,
 }
 
-wire_enum! {
-    /// How an issuer may call a bond early.
-    pub enum CallType {
-        /// At a schedule of prices.
-        Ordinary => "ordinary",
-        /// At a price that compensates for lost coupons.
-        MakeWhole => "make_whole",
-        /// On a regulatory event.
-        Regulatory => "regulatory",
-        /// On some other named event.
-        Special => "special",
-    }
+/// How an issuer may call a bond early.
+#[wire_enum]
+pub enum CallType {
+    /// At a schedule of prices.
+    #[wire = "ordinary"]
+    Ordinary,
+    /// At a price that compensates for lost coupons.
+    #[wire = "make_whole"]
+    MakeWhole,
+    /// On a regulatory event.
+    #[wire = "regulatory"]
+    Regulatory,
+    /// On some other named event.
+    #[wire = "special"]
+    Special,
 }
 
-wire_enum! {
-    /// Which way S&P expects a rating to move.
-    pub enum CreditOutlook {
-        /// Upward.
-        Positive => "positive",
-        /// Downward.
-        Negative => "negative",
-        /// Either way.
-        Developing => "developing",
-        /// Neither way.
-        Stable => "stable",
-        /// No rating.
-        NotRated => "not_rated",
-        /// A rating that says nothing useful.
-        NotMeaningful => "not_meaningful",
-    }
+/// Which way S&P expects a rating to move.
+#[wire_enum]
+pub enum CreditOutlook {
+    /// Upward.
+    #[wire = "positive"]
+    Positive,
+    /// Downward.
+    #[wire = "negative"]
+    Negative,
+    /// Either way.
+    #[wire = "developing"]
+    Developing,
+    /// Neither way.
+    #[wire = "stable"]
+    Stable,
+    /// No rating.
+    #[wire = "not_rated"]
+    NotRated,
+    /// A rating that says nothing useful.
+    #[wire = "not_meaningful"]
+    NotMeaningful,
 }
 
-wire_enum! {
-    /// Which kind of treasury instrument.
-    pub enum TreasurySubtype {
-        /// Long-dated, coupon-paying.
-        Bond => "bond",
-        /// Short-dated, discount.
-        Bill => "bill",
-        /// Medium-dated, coupon-paying.
-        Note => "note",
-        /// A stripped coupon or principal.
-        Strips => "strips",
-        /// Inflation-protected.
-        Tips => "tips",
-        /// Floating rate.
-        Floating => "floating",
-    }
+/// Which kind of treasury instrument.
+#[wire_enum]
+pub enum TreasurySubtype {
+    /// Long-dated, coupon-paying.
+    #[wire = "bond"]
+    Bond,
+    /// Short-dated, discount.
+    #[wire = "bill"]
+    Bill,
+    /// Medium-dated, coupon-paying.
+    #[wire = "note"]
+    Note,
+    /// A stripped coupon or principal.
+    #[wire = "strips"]
+    Strips,
+    /// Inflation-protected.
+    #[wire = "tips"]
+    Tips,
+    /// Floating rate.
+    #[wire = "floating"]
+    Floating,
 }
 
 /// A US corporate bond.

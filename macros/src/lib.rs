@@ -1,16 +1,34 @@
-//! Derive macros for [`alpaca-sdk`](https://docs.rs/alpaca-sdk).
+//! Macros for [`alpaca-sdk`](https://docs.rs/alpaca-sdk).
 //!
 //! This crate exists because a procedural macro cannot live in the crate that
 //! uses it. Nothing here is meant to be named directly: `alpaca-sdk` re-exports
 //! what it needs, and this crate's version is pinned to it exactly.
+//!
+//! Three macros, one per shape the SDK repeats:
+//!
+//! - [`macro@Setters`], a derive, generates a consuming setter for every
+//!   `Option` field on a request type.
+//! - [`macro@Validated`], a derive, gives a request type the no-op validator
+//!   that makes a hand-written one impossible to shadow.
+//! - [`macro@wire_enum`], an attribute, defines a string-valued enum with a
+//!   catch-all `Unknown` variant, and refuses the ways such an enum can be
+//!   written wrong.
+//!
+//! All three are here for the same reason: the alternative is a list repeated
+//! beside the thing it describes, and a repeated list drifts silently.
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{
-    Attribute, Data, DeriveInput, Expr, ExprLit, Fields, GenericArgument, Ident, Lit, LitStr, Meta,
-    PathArguments, Type, parse_macro_input, spanned::Spanned,
+    Attribute, Data, DeriveInput, Fields, GenericArgument, Ident, LitStr, PathArguments, Type,
+    parse_macro_input, spanned::Spanned,
 };
+
+mod attrs;
+mod wire_enum;
+
+use crate::attrs::doc_lines;
 
 /// Generates a consuming setter for every `Option` field on a request type.
 ///
@@ -265,6 +283,116 @@ pub fn derive_setters(input: TokenStream) -> TokenStream {
 pub fn derive_validated(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     expand_validated(&input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Defines a string-valued enum with a catch-all `Unknown` variant.
+///
+/// ```
+/// use alpaca_sdk_macros::wire_enum;
+///
+/// /// Which side of the market an order is on.
+/// #[wire_enum(sorted)]
+/// pub enum OrderSide {
+///     /// Buy.
+///     #[wire = "buy"]
+///     Buy,
+///     /// Sell.
+///     #[wire = "sell"]
+///     Sell,
+/// }
+///
+/// assert_eq!(OrderSide::WIRE_VALUES, &["buy", "sell"]);
+/// assert_eq!(OrderSide::Buy.as_str(), "buy");
+/// assert_eq!(OrderSide::from("short"), OrderSide::Unknown("short".to_owned()));
+/// ```
+///
+/// The enum keeps its own documentation and visibility and gains
+/// `#[derive(Debug, Clone, PartialEq, Eq, Hash)]`, `#[non_exhaustive]`, an
+/// `Unknown(String)` variant, an `as_str`, an `is_unknown`, a `WIRE_VALUES`
+/// constant in declaration order, and impls of `From<&str>`, `From<String>`,
+/// `FromStr`, `Display`, `Serialize` and `Deserialize`.
+///
+/// # Attributes
+///
+/// | Attribute | Where | Effect |
+/// |---|---|---|
+/// | `#[wire = "…"]` | Variant | The string this variant is, on the wire. Required |
+/// | `#[wire_enum(sorted)]` | Enum | Asserts the wire values are in byte order |
+///
+/// `sorted` is opt-in because plenty of these enums are deliberately ordered by
+/// something else — significance, or the shape of the API's own list — and a
+/// check that rejected those would only teach people to write the attribute
+/// that turns it off. Where an enum *is* alphabetical, saying so is what keeps
+/// a value inserted in the wrong place from reading as intentional.
+///
+/// # Serde is hand-rolled
+///
+/// Alpaca introduces new enum values without a version bump, and an SDK that
+/// models them as a closed set rejects the whole payload the first time it
+/// meets one — a new order status breaking deserialization in production. The
+/// `Unknown(String)` variant keeps the raw wire value instead, so an
+/// unrecognized status is inspectable rather than fatal.
+///
+/// The derive-based ways of spelling that catch-all do not survive contact with
+/// two formats. `#[serde(other)]` discards the string, which is the one thing
+/// worth keeping. `#[serde(untagged)]` on a variant relies on content
+/// buffering, which behaves differently across formats. A plain string visitor
+/// behaves identically under `serde_json` and `rmp-serde`, and the live market
+/// data stream is msgpack.
+///
+/// # What it refuses, and why
+///
+/// Almost none of this is newly *detected*. Thirteen of the seventeen were
+/// already build failures under the `macro_rules!` this replaces — as
+/// ``no rules expected `(` ``, as a diagnostic inside the expansion, or as
+/// `cannot find attribute`. Two more catch strictly wider: a bare `///`,
+/// which `missing_docs` accepts, and a `#[cfg_attr]` carrying no `cfg`. Only
+/// `sorted` and its option parsing are new outright.
+///
+/// What each one buys is a message that names the rule and says what breaking
+/// it costs, at the value that broke it.
+///
+/// | Refusal | What it prevents |
+/// |---|---|
+/// | Two variants with one wire value | The second is an unreachable `match` arm, so it can never come back off the wire. `unreachable_patterns` catches it, but as a warning, and on the MSRV it is spanned at the macro body rather than at either literal |
+/// | A variant with no `#[wire = "…"]` | No arm at all, so the same unreachability by another route |
+/// | A second `#[wire]` on one variant | Two literals, and nothing saying which one wins |
+/// | A `#[wire]` that is not `= "…"` | A value that is not a string is not something the wire carries |
+/// | A variant with no documentation | The docs are where a caller reads to learn when a value occurs; a bare `///` counts as none |
+/// | A variant with fields | A wire enum's variants are strings; a payload-carrying one has no `as_str()` |
+/// | A variant named `Unknown` | Collides with the injected catch-all |
+/// | A variant discriminant | `Buy = 3` would be dropped, not used — the value is the `#[wire]` string |
+/// | `#[cfg_attr]` on a variant | It may carry a `cfg`, which has to be copied onto the generated arms, or anything else, which must not be — and this macro runs before it expands. The only refusal here that rejects something harmless |
+/// | Two variants of one name | `E0428`, plus two `E0004`s spanned at the attribute suggesting it be edited into a match arm |
+/// | `#[serde(…)]`, on a variant or the enum | It cannot apply: `serde` is a helper attribute of `#[derive(Serialize)]`, and both impls are hand-rolled here. Passed through it is rustc's `cannot find attribute`, which reads as a missing import |
+/// | `#[wire = "…"]` on the enum | It names one variant's string, so on the enum it names nothing — usually a leftover from a variant that moved |
+/// | `sorted` with values out of order | An ordering claim nobody holds is worse than no claim |
+/// | An unknown `#[wire_enum(…)]` option | A misspelled option is silence, and silence reads as applied |
+/// | A struct or a union | Neither has variants to map to a string at all |
+/// | An enum with no variants | A type that is only ever `Unknown`, and no caller can name a value of it |
+/// | A generic enum, or one with a `where` clause | The generated `Deserialize` has nowhere to put a bound, and its visitor cannot name a type parameter |
+///
+/// Every other attribute on a variant — `#[deprecated]`, `#[doc(hidden)]` —
+/// passes through to the generated enum untouched. A plain `#[cfg]` passes
+/// through *and* is copied onto the `WIRE_VALUES` element and the three
+/// `match` arms that name the variant, so gating one variant works.
+///
+/// The class of bug has a history here. `TradeEvent` shipped in 0.1.0 carrying
+/// twelve of the twenty-one values Alpaca documents for its trade events, and
+/// the nine it omitted arrived as `Unknown` for a whole release without
+/// anything noticing. No macro catches *that* one — a value nobody wrote down
+/// is not visible from the source — which is what `scripts/enum_drift.py` is
+/// for. These refusals cover the routes that are visible from the source.
+///
+/// One thing it deliberately does **not** refuse is an empty wire value.
+/// `#[wire = ""]` reads like an oversight and is not: Alpaca's schemas list the
+/// empty string as an enum value, and rejecting it would mean deleting a value
+/// the API sends. Two variants both claiming `""` is still a duplicate.
+#[proc_macro_attribute]
+pub fn wire_enum(args: TokenStream, item: TokenStream) -> TokenStream {
+    wire_enum::expand(args.into(), item.into())
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }
@@ -536,12 +664,21 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
         let docs = if options.doc.is_empty() {
             let inherited = doc_lines(&field.attrs);
-            if inherited.is_empty() {
+            // Blank as well as absent. A bare `///` on the field satisfies
+            // `missing_docs` on the generated setter while saying nothing,
+            // which is the same hole `#[setters(doc = "")]` is refused for one
+            // branch down. `wire_enum` refuses it too, and the two macros
+            // should not disagree about the same question.
+            //
+            // "the setter can inherit" rather than "the field has", because a
+            // `#[doc = include_str!(…)]` is documentation this cannot copy:
+            // the value is still an unexpanded expression here.
+            if inherited.iter().all(|line| line.trim().is_empty()) {
                 return Err(syn::Error::new_spanned(
                     field,
-                    "this field has no documentation to give its setter — \
-                     document the field, or write the setter's own with \
-                     `#[setters(doc = \"…\")]`",
+                    "this field has no documentation the setter can inherit — \
+                     document it with a plain `///`, or write the setter's own \
+                     with `#[setters(doc = \"…\")]`",
                 ));
             }
             inherited
@@ -774,29 +911,6 @@ fn base_ident(ty: &Type) -> Option<&Ident> {
     Some(&segment.ident)
 }
 
-/// The text of a field's `///` comments, one entry per line.
-fn doc_lines(attrs: &[Attribute]) -> Vec<String> {
-    attrs
-        .iter()
-        .filter_map(|attr| {
-            if !attr.path().is_ident("doc") {
-                return None;
-            }
-            let Meta::NameValue(pair) = &attr.meta else {
-                return None;
-            };
-            let Expr::Lit(ExprLit {
-                lit: Lit::Str(text),
-                ..
-            }) = &pair.value
-            else {
-                return None;
-            };
-            Some(text.value())
-        })
-        .collect()
-}
-
 /// The `T` of an `Option<T>`, or `None` for any other type.
 ///
 /// Matches on the last path segment, so `std::option::Option<T>` and a plain
@@ -993,29 +1107,5 @@ mod tests {
         // parameters would have nowhere to go.
         assert!(base_of("Base<u32>").is_none());
         assert!(base_of("crate::data::Base<u32>").is_none());
-    }
-
-    #[test]
-    fn doc_lines_reads_every_line_and_nothing_else() {
-        let field: syn::Field = syn::parse_quote!(
-            /// First.
-            ///
-            /// Second.
-            #[serde(default)]
-            #[setters(into)]
-            pub name: Option<String>
-        );
-
-        assert_eq!(doc_lines(&field.attrs), [" First.", "", " Second."]);
-    }
-
-    #[test]
-    fn a_field_with_no_documentation_reads_as_empty() {
-        let field: syn::Field = syn::parse_quote!(
-            #[serde(default)]
-            pub name: Option<String>
-        );
-
-        assert!(doc_lines(&field.attrs).is_empty());
     }
 }

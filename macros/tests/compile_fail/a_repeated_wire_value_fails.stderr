@@ -1,0 +1,5 @@
+error: this variant already has a `#[wire]` value — one variant is one string on the wire, and a second says nothing about which one wins
+ --> tests/compile_fail/a_repeated_wire_value_fails.rs:7:5
+  |
+7 |     #[wire = "sell"]
+  |     ^^^^^^^^^^^^^^^^

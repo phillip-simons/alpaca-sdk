@@ -17,28 +17,32 @@ use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// Where a settlement stands.
-    pub enum SettlementStatus {
-        /// Submitted.
-        Pending => "PENDING",
-        /// Short of funds, and waiting for them.
-        AwaitingAdditionalFunds => "AWAITING_ADDITIONAL_FUNDS",
-        /// Settled.
-        Completed => "COMPLETED",
-        /// Failed.
-        Failed => "FAILED",
-    }
+/// Where a settlement stands.
+#[wire_enum]
+pub enum SettlementStatus {
+    /// Submitted.
+    #[wire = "PENDING"]
+    Pending,
+    /// Short of funds, and waiting for them.
+    #[wire = "AWAITING_ADDITIONAL_FUNDS"]
+    AwaitingAdditionalFunds,
+    /// Settled.
+    #[wire = "COMPLETED"]
+    Completed,
+    /// Failed.
+    #[wire = "FAILED"]
+    Failed,
 }
 
-wire_enum! {
-    /// Which book a settlement belongs to.
-    pub enum SettlementAssetClass {
-        /// Equities.
-        UsEquity => "us_equity",
-        /// Crypto.
-        Crypto => "crypto",
-    }
+/// Which book a settlement belongs to.
+#[wire_enum]
+pub enum SettlementAssetClass {
+    /// Equities.
+    #[wire = "us_equity"]
+    UsEquity,
+    /// Crypto.
+    #[wire = "crypto"]
+    Crypto,
 }
 
 /// Who sent the money, for travel-rule reporting.

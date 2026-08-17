@@ -1,0 +1,6 @@
+error: this variant has no `#[wire = "…"]`, so nothing on the wire maps to it — it can be constructed but never deserialized
+ --> tests/compile_fail/a_variant_with_no_wire_value_fails.rs:5:5
+  |
+5 | /     /// Buy.
+6 | |     Buy,
+  | |_______^

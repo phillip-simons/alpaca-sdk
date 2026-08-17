@@ -19,24 +19,26 @@ use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// Whether a registered OAuth client may be used.
-    pub enum OAuthClientStatus {
-        /// Usable.
-        Active => "ACTIVE",
-        /// Not usable.
-        Disabled => "DISABLED",
-    }
+/// Whether a registered OAuth client may be used.
+#[wire_enum(sorted)]
+pub enum OAuthClientStatus {
+    /// Usable.
+    #[wire = "ACTIVE"]
+    Active,
+    /// Not usable.
+    #[wire = "DISABLED"]
+    Disabled,
 }
 
-wire_enum! {
-    /// Which OAuth flow a client is asking for.
-    pub enum OAuthResponseType {
-        /// The authorization-code flow.
-        Code => "code",
-        /// The implicit flow.
-        Token => "token",
-    }
+/// Which OAuth flow a client is asking for.
+#[wire_enum(sorted)]
+pub enum OAuthResponseType {
+    /// The authorization-code flow.
+    #[wire = "code"]
+    Code,
+    /// The implicit flow.
+    #[wire = "token"]
+    Token,
 }
 
 /// A registered third-party application.

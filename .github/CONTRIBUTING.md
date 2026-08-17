@@ -60,9 +60,9 @@ CI skips those jobs. They still report as skipped, which counts as satisfied, so
 the pull request is not left waiting on checks that will never run. Editing
 anything under `src/`, `macros/`, `tests/`, `examples/`, `fixtures/`,
 `Cargo.toml`, `Cargo.lock`, `build.rs`, `deny.toml` or `ci.yml` brings the whole
-matrix back. `macros/` counts because the derive it holds is compiled into every
-request type, so a change there is a change to the library even though nothing
-under `src/` moved. `scripts/` has its own job on its own filter, so a change to
+matrix back. `macros/` counts because the macros it holds are compiled into
+every request type and every wire enum, so a change there is a change to the
+library even though nothing under `src/` moved. `scripts/` has its own job on its own filter, so a change to
 the Python runs the script tests without dragging the Rust matrix along with
 it.
 
@@ -264,7 +264,7 @@ doing when it found it.
   directly and checked by nothing. `scripts/validated.py` records the exemption
   and fails if either stops declaring the `validate` it is about.
 
-  Both derives live in `macros/`, a second published crate, because a procedural
+  All three live in `macros/`, a second published crate, because a procedural
   macro cannot live in the crate that uses it. See `RELEASING.md` — the two
   publish together.
 

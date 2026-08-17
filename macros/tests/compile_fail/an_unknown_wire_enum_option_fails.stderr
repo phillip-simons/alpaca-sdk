@@ -1,0 +1,5 @@
+error: unknown `wire_enum` option — expected `sorted`
+ --> tests/compile_fail/an_unknown_wire_enum_option_fails.rs:3:13
+  |
+3 | #[wire_enum(ordered)]
+  |             ^^^^^^^

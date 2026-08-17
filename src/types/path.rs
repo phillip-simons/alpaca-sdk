@@ -2,7 +2,7 @@
 //!
 //! Every route in this crate builds its path with `format!`, and most of what
 //! gets interpolated is caller-supplied: a ticker symbol, an Alpaca-issued
-//! reference string, or a [`wire_enum!`](crate::types::wire) value, whose
+//! reference string, or a [`wire_enum`](crate::types::wire) value, whose
 //! `Unknown(String)` variant means even the enum-typed segments carry whatever
 //! the caller put in them. Interpolating those raw is how `BTC/USD` becomes two
 //! path segments and how `..` reaches a route the caller never named.

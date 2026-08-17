@@ -1,0 +1,5 @@
+error: `serde` attributes cannot apply here: they are read by `#[derive(Serialize)]`, and this macro hand-rolls `Serialize` and `Deserialize` rather than deriving them — the wire spelling is `#[wire = "…"]` and nothing else
+ --> tests/compile_fail/a_serde_attribute_on_a_variant_fails.rs:6:5
+  |
+6 |     #[serde(rename = "b")]
+  |     ^^^^^^^^^^^^^^^^^^^^^^

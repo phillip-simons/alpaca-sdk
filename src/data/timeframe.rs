@@ -8,20 +8,24 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use crate::error::{Error, Result};
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// The unit of time a [`TimeFrame`] is measured in.
-    pub enum TimeFrameUnit {
-        /// Minutes.
-        Minute => "Min",
-        /// Hours.
-        Hour => "Hour",
-        /// Days.
-        Day => "Day",
-        /// Weeks.
-        Week => "Week",
-        /// Months.
-        Month => "Month",
-    }
+/// The unit of time a [`TimeFrame`] is measured in.
+#[wire_enum]
+pub enum TimeFrameUnit {
+    /// Minutes.
+    #[wire = "Min"]
+    Minute,
+    /// Hours.
+    #[wire = "Hour"]
+    Hour,
+    /// Days.
+    #[wire = "Day"]
+    Day,
+    /// Weeks.
+    #[wire = "Week"]
+    Week,
+    /// Months.
+    #[wire = "Month"]
+    Month,
 }
 
 /// A bar interval: a positive multiple of a [`TimeFrameUnit`].

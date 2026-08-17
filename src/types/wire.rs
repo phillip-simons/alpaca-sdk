@@ -1,184 +1,76 @@
-//! The `wire_enum!` macro behind every string enum in this crate.
+//! The `wire_enum` attribute behind every string enum in this crate.
+//!
+//! The attribute itself lives in `alpaca-sdk-macros`, because a procedural
+//! macro cannot live in the crate that uses it. This module is where the
+//! *convention* is written down, and it re-exports the attribute so call sites
+//! say `use crate::types::wire::wire_enum;` rather than naming the macro crate —
+//! which is an implementation detail, pinned with `=` and published in
+//! lockstep, and which no call site should have to know about.
+//!
+//! What it generates, and the rules it enforces, are documented on the
+//! attribute itself, which is public on docs.rs. What follows is the part that
+//! is about this crate's wire vocabulary rather than about the macro.
+//!
+//! # Why `Unknown` exists
+//!
+//! Alpaca introduces new enum values without a version bump, and an SDK that
+//! models them as a closed set rejects the whole payload the first time it meets
+//! one — a new order status breaking deserialization in production. The
+//! generated `Unknown(String)` variant keeps the raw wire value instead, so an
+//! unrecognized status is inspectable rather than fatal.
+//!
+//! # The cost of that tolerance
+//!
+//! A value this crate simply forgot is indistinguishable from one Alpaca has
+//! just invented, and neither fails a test. `TradeEvent` shipped in 0.1.0
+//! carrying twelve of the twenty-one values Alpaca documents for its trade
+//! events, because it had been transcribed from another SDK rather than from
+//! Alpaca's own list; the nine it omitted — two of which,
+//! `order_replace_rejected` and `order_cancel_rejected`, occur in routine
+//! trading — arrived as `Unknown` for a whole release without anything noticing.
+//!
+//! **Whenever a variant is added here, check the whole list against a source
+//! rather than adding the one value that prompted the visit.**
+//! `just enums-drift` does that against Alpaca's own schemas and is the report
+//! to read before believing a list is complete.
+//!
+//! That report is also why `Unknown` is not an alarm. Treating it as "the API
+//! changed under me" is not the conservative reading it looks like: it is at
+//! least as likely to mean this crate omitted a value Alpaca already documents.
+//!
+//! # Grammar
+//!
+//! ```
+//! // A doctest compiles as its own crate, so it cannot use the `pub(crate)`
+//! // re-export below and names the macro crate directly. Call sites inside
+//! // this crate should use `crate::types::wire::wire_enum` instead.
+//! use alpaca_sdk_macros::wire_enum;
+//!
+//! /// Which side of the market an order is on.
+//! #[wire_enum(sorted)]
+//! pub enum OrderSide {
+//!     /// Buy.
+//!     #[wire = "buy"]
+//!     Buy,
+//!     /// Sell.
+//!     #[wire = "sell"]
+//!     Sell,
+//! }
+//!
+//! assert_eq!(OrderSide::WIRE_VALUES, &["buy", "sell"]);
+//! assert_eq!(OrderSide::from("short"), OrderSide::Unknown("short".to_owned()));
+//! ```
+//!
+//! The grammar is checked in two further places, so a change to it cannot rot
+//! quietly: `wire_tests.rs` declares enums through the attribute and exercises
+//! them under both wire formats, and
+//! `macros/tests/compile_fail/a_whole_wire_enum.rs` compiles one in a crate of
+//! its own.
+//!
+//! `sorted` is an opt-in claim that the wire values are in byte order, checked
+//! at compile time. Plenty of these enums are deliberately ordered by something
+//! else — `ActivityType` leads with `Fill` because that is the one anybody
+//! reads for — and those simply do not carry it. A claim nobody meant is worse
+//! than silence.
 
-/// Defines a string-valued enum with a catch-all `Unknown` variant.
-///
-/// Alpaca introduces new enum values without a version bump, and an SDK that
-/// models them as a closed set rejects the whole payload the first time it meets
-/// one — a new order status breaking deserialization in production. The
-/// generated `Unknown(String)` variant keeps the raw wire value instead, so an
-/// unrecognized status is inspectable rather than fatal.
-///
-/// The cost of that tolerance is that a value this crate simply forgot is
-/// indistinguishable from one Alpaca has just invented, and neither fails a
-/// test. `TradeEvent` shipped in 0.1.0 carrying twelve of the twenty-one values
-/// Alpaca documents for its trade events, because it had been transcribed from
-/// another SDK rather than from Alpaca's own list; the nine it omitted — two of
-/// which, `order_replace_rejected` and `order_cancel_rejected`, occur in
-/// routine trading — arrived as `Unknown` for a whole release without anything
-/// noticing. Whenever a variant is added here, check the whole list against a
-/// source rather than adding the one value that prompted the visit.
-///
-/// `Serialize`/`Deserialize` are hand-rolled rather than derived. Derive-based
-/// catch-alls (`#[serde(other)]`, variant-level `#[serde(untagged)]`) rely on
-/// content buffering that behaves differently across formats and, in the case of
-/// `other`, discard the unknown string. A plain string visitor behaves identically
-/// under `serde_json` and `rmp-serde`, and the live market data stream is msgpack.
-///
-/// The fence below is `ignore` because it has to be: the macro is
-/// `pub(crate) use` rather than `#[macro_export]`, and a doctest compiles as a
-/// separate crate that cannot name it. The arm grammar it shows is not left
-/// unchecked, though — `wire_tests.rs` declares the same enum through the macro
-/// for real, so a change to the grammar fails there rather than silently
-/// rotting here.
-///
-/// ```ignore
-/// wire_enum! {
-///     /// Which side of the market an order is on.
-///     pub enum OrderSide {
-///         /// Buy.
-///         Buy => "buy",
-///         /// Sell.
-///         Sell => "sell",
-///     }
-/// }
-/// ```
-macro_rules! wire_enum {
-    (
-        $(#[$meta:meta])*
-        $vis:vis enum $name:ident {
-            $(
-                $(#[$variant_meta:meta])*
-                $variant:ident => $wire:literal
-            ),+ $(,)?
-        }
-    ) => {
-        $(#[$meta])*
-        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        #[non_exhaustive]
-        $vis enum $name {
-            $(
-                $(#[$variant_meta])*
-                $variant,
-            )+
-            /// A value this version of the SDK does not recognize.
-            ///
-            /// Holds the raw wire string so it can be logged or matched on
-            /// without waiting for a crate release.
-            ///
-            /// **This does not necessarily mean Alpaca has added something
-            /// new.** It means only that this crate does not name the value,
-            /// which is equally consistent with the crate having omitted one
-            /// Alpaca already documents.
-            ///
-            /// Treating `Unknown` as "the API changed under me" and escalating
-            /// on it is therefore not the conservative choice it looks like.
-            /// Log it, carry the string, and check it against Alpaca's
-            /// documentation before concluding the wire moved.
-            Unknown(::std::string::String),
-        }
-
-        impl $name {
-            /// Every wire value this type recognizes, excluding `Unknown`.
-            pub const WIRE_VALUES: &'static [&'static str] = &[$($wire),+];
-
-            /// The value as it appears on the wire.
-            #[must_use]
-            pub fn as_str(&self) -> &str {
-                match self {
-                    $(Self::$variant => $wire,)+
-                    Self::Unknown(value) => value.as_str(),
-                }
-            }
-
-            /// Whether this value is one the SDK does not recognize.
-            #[must_use]
-            pub fn is_unknown(&self) -> bool {
-                ::std::matches!(self, Self::Unknown(_))
-            }
-        }
-
-        impl ::std::convert::From<&str> for $name {
-            fn from(value: &str) -> Self {
-                match value {
-                    $($wire => Self::$variant,)+
-                    other => Self::Unknown(::std::borrow::ToOwned::to_owned(other)),
-                }
-            }
-        }
-
-        impl ::std::convert::From<::std::string::String> for $name {
-            fn from(value: ::std::string::String) -> Self {
-                match value.as_str() {
-                    $($wire => Self::$variant,)+
-                    // Reuse the allocation the caller already made.
-                    _ => Self::Unknown(value),
-                }
-            }
-        }
-
-        impl ::std::str::FromStr for $name {
-            type Err = ::std::convert::Infallible;
-
-            fn from_str(value: &str) -> ::std::result::Result<Self, Self::Err> {
-                ::std::result::Result::Ok(Self::from(value))
-            }
-        }
-
-        impl ::std::fmt::Display for $name {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                f.write_str(self.as_str())
-            }
-        }
-
-        impl ::serde::Serialize for $name {
-            fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
-            where
-                S: ::serde::Serializer,
-            {
-                serializer.serialize_str(self.as_str())
-            }
-        }
-
-        impl<'de> ::serde::Deserialize<'de> for $name {
-            fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-            where
-                D: ::serde::Deserializer<'de>,
-            {
-                struct WireVisitor;
-
-                impl ::serde::de::Visitor<'_> for WireVisitor {
-                    type Value = $name;
-
-                    fn expecting(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                        f.write_str(::std::concat!("a ", ::std::stringify!($name), " string"))
-                    }
-
-                    fn visit_str<E>(self, value: &str) -> ::std::result::Result<Self::Value, E>
-                    where
-                        E: ::serde::de::Error,
-                    {
-                        ::std::result::Result::Ok(<$name as ::std::convert::From<&str>>::from(value))
-                    }
-
-                    // Formats that hand over an owned string let `Unknown` take
-                    // the allocation rather than copying it.
-                    fn visit_string<E>(
-                        self,
-                        value: ::std::string::String,
-                    ) -> ::std::result::Result<Self::Value, E>
-                    where
-                        E: ::serde::de::Error,
-                    {
-                        ::std::result::Result::Ok(
-                            <$name as ::std::convert::From<::std::string::String>>::from(value),
-                        )
-                    }
-                }
-
-                deserializer.deserialize_str(WireVisitor)
-            }
-        }
-    };
-}
-
-pub(crate) use wire_enum;
+pub(crate) use alpaca_sdk_macros::wire_enum;

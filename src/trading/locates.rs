@@ -21,32 +21,38 @@ use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// Where a locate is in its lifecycle.
-    pub enum LocateStatus {
-        /// Located and usable for the trading day.
-        Active => "active",
-        /// The trading day has rolled and the locate is spent.
-        Expired => "expired",
-        /// Alpaca could not fill the request.
-        Rejected => "rejected",
-    }
+/// Where a locate is in its lifecycle.
+#[wire_enum(sorted)]
+pub enum LocateStatus {
+    /// Located and usable for the trading day.
+    #[wire = "active"]
+    Active,
+    /// The trading day has rolled and the locate is spent.
+    #[wire = "expired"]
+    Expired,
+    /// Alpaca could not fill the request.
+    #[wire = "rejected"]
+    Rejected,
 }
 
-wire_enum! {
-    /// Why a symbol has no locate quote.
-    pub enum LocateQuoteError {
-        /// The symbol is not one Alpaca knows.
-        SymbolNotFound => "symbol_not_found",
-        /// No locate is needed — the symbol is easy to borrow.
-        EasyToBorrow => "easy_to_borrow",
-        /// A threshold security, which cannot be located.
-        ThresholdSecurity => "threshold_security",
-        /// A corporate action is in progress.
-        CorporateAction => "corporate_action",
-        /// No quote is available right now.
-        QuoteUnavailable => "quote_unavailable",
-    }
+/// Why a symbol has no locate quote.
+#[wire_enum]
+pub enum LocateQuoteError {
+    /// The symbol is not one Alpaca knows.
+    #[wire = "symbol_not_found"]
+    SymbolNotFound,
+    /// No locate is needed — the symbol is easy to borrow.
+    #[wire = "easy_to_borrow"]
+    EasyToBorrow,
+    /// A threshold security, which cannot be located.
+    #[wire = "threshold_security"]
+    ThresholdSecurity,
+    /// A corporate action is in progress.
+    #[wire = "corporate_action"]
+    CorporateAction,
+    /// No quote is available right now.
+    #[wire = "quote_unavailable"]
+    QuoteUnavailable,
 }
 
 /// A locate request and its current status.

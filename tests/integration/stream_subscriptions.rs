@@ -199,7 +199,7 @@ fn every_stream_can_be_pointed_somewhere_else() {
 
 // ------------------------------------------------------------ feed guards
 
-/// A `wire_enum!`'s `Unknown(String)` variant is publicly constructible, so an
+/// A `wire_enum`'s `Unknown(String)` variant is publicly constructible, so an
 /// unrecognised feed name would otherwise be interpolated straight into the
 /// websocket endpoint URL — the same hazard the REST path encoder exists for.
 /// There is no live stream behind a feed this crate does not know, so refusing

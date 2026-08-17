@@ -1,20 +1,25 @@
-//! The derives' error paths, asserted on the message each produces.
+//! Every macro's error paths, asserted on the message each produces.
 //!
-//! Every refusal in `expand` is a `compile_error!`, which is exactly the half of
-//! a derive an ordinary test cannot reach: the failure is that the code does not
-//! compile, so the only way to assert on it is to compile a file that should
-//! not and diff the output. The unit tests in `src/lib.rs` cover the parsing
-//! helpers; this covers what the derives say when they say no.
+//! Every refusal in this crate is a `compile_error!`, which is exactly the half
+//! of a macro an ordinary test cannot reach: the failure is that the code does
+//! not compile, so the only way to assert on it is to compile a file that should
+//! not and diff the output. The unit tests in `src/` cover the parsing helpers;
+//! this covers what the macros say when they say no.
 //!
-//! These messages are load-bearing. A derive that refuses without explaining is
+//! These messages are load-bearing. A macro that refuses without explaining is
 //! worse than one that has no opinion, because the caller's next move is to
-//! guess — and every one of the things these derives refuse is a case where the
+//! guess — and every one of the things these macros refuse is a case where the
 //! obvious guess is wrong. `#[setters(skip)]` on a required field is the
 //! sharpest: it reads as a settled decision about a real name collision when
-//! the field would never have had a setter either way.
+//! the field would never have had a setter either way. `wire_enum`'s duplicate
+//! literal is the most consequential: the second variant compiles, passes every
+//! round-trip test written for it, and can never come back off the wire.
 //!
-//! There is at least one case per refusal in `expand`, `parse_options` and
-//! `parse_container_options`, which is what makes a refusal added without a case
+//! There is at least one case per refusal — in the derives' `expand`,
+//! `parse_options` and `parse_container_options`, and in `wire_enum`'s `expand`,
+//! `read_variant`, `wire_value`, `unhonoured`, `parse_options`,
+//! `duplicate_variant_names`, `duplicate_wire_values` and `out_of_order`. That is
+//! what makes a refusal added without a case
 //! here visible: the two counts do not match and are not meant to — several
 //! refusals are reachable by more than one shape, and some cases below are not
 //! refusals at all — but a `return Err` added without a case is a delta in one
@@ -69,6 +74,19 @@
 //! third points at two `#[derive(Setters)]` attributes and never mentions the
 //! field, which is the whole reason it is worth having a file that shows it.
 //!
+//! # `wire_enum`'s exceptions to that convention
+//!
+//! Seventeen refusals, seventeen `*_fails.rs`. One `Err` *site* has no case
+//! though its refusal does: `#[serde]` on the enum rather than on a variant
+//! reaches the same message through a second site in `wire_enum::expand`, and
+//! is covered by a unit test. A second `.stderr` pinning a message already
+//! pinned would be churn without cover.
+//!
+//! And one refusal has several triggers: `wire_value` gives `#[wire]`,
+//! `#[wire("buy")]` and `#[wire = 5]` one message, because the fix for all
+//! three is the same line, and a `where` clause reaches the same `Err` as a
+//! type parameter.
+//!
 //! # Where this runs, and where it deliberately does not
 //!
 //! `.stderr` files pin rustc's and syn's diagnostic formatting, neither of
@@ -96,5 +114,6 @@ fn the_derive_refuses_what_it_cannot_generate() {
     let harness = trybuild::TestCases::new();
     harness.pass("tests/compile_fail/every_attribute_together.rs");
     harness.pass("tests/compile_fail/a_flattened_base.rs");
+    harness.pass("tests/compile_fail/a_whole_wire_enum.rs");
     harness.compile_fail("tests/compile_fail/*_fails.rs");
 }

@@ -228,6 +228,83 @@ Cargo treats `0.1.1` as compatible and would deliver it without you choosing it.
 
 ### Changed
 
+- **The 120 string enums are declared with a `#[wire_enum]` attribute rather
+  than a `wire_enum!` macro, and the attribute checks itself.** No public API
+  moved: same types, same variants, same `WIRE_VALUES`, same impls.
+  `cargo semver-checks` sees nothing, which is the point. Two things inside the
+  expansion did change, neither visible to a caller: all seven generated impls
+  carry `#[allow(deprecated)]`, so a `#[deprecated]` enum or variant warns
+  where you use it rather than where the macro does, and the serde impls' type
+  parameters are `__`-prefixed, so an enum named `D` or `E` no longer shadows
+  them.
+
+  ```rust
+  // before                        // after
+  wire_enum! {                     /// Which side of the market an order is on.
+      /// Which side …             #[wire_enum]
+      pub enum OrderSide {         pub enum OrderSide {
+          /// Buy.                     /// Buy.
+          Buy => "buy",                #[wire = "buy"]
+      }                                Buy,
+  }                                }
+  ```
+
+  **This is a diagnostics change, not a detection one, and it is worth being
+  precise about that.** The attribute refuses seventeen things, each with one
+  compile-fail test pinning its message. Only **two** of them are newly
+  detected — `sorted` with values out of order, and an unrecognised
+  `#[wire_enum(…)]` option. Two more catch strictly wider than before: a
+  variant documented with a bare `///`, which `missing_docs` accepts, and a
+  `#[cfg_attr]` carrying no `cfg`, which was harmless and is refused because
+  this macro runs before `cfg_attr` expands and cannot tell it from one that
+  is not.
+
+  The other thirteen already failed the build, in every case they catch. What
+  they did not do is say why. Most were the macro grammar failing to match —
+  ``no rules expected `(` ``, or `=`, or `,`, or `}`, or `<`. That names neither
+  the rule nor the variant. Several landed in code nobody wrote, two reported a
+  missing import for a name only this macro gives meaning to, and one was a
+  *warning*, fatal only because this crate denies them.
+
+  A macro whose job is a 702-value wire vocabulary should say which value is
+  wrong and what being wrong costs. That is the change.
+
+  The duplicate wire literal is the one worth singling out, because it was a
+  *warning* — `unreachable_patterns` on the generated arm, fatal only because
+  this crate builds under `-D warnings`. On the MSRV its span is the macro body,
+  naming neither the literal nor the variant. It is now an error at both
+  spellings on every toolchain, saying what is lost: the second variant can
+  never come back off the wire.
+
+  The rest are mostly ways to write a variant that reads as configured and is
+  not — a discriminant that would be dropped, a `#[serde(rename = "…")]` that
+  cannot apply because both impls are hand-rolled here rather than derived, two
+  variants sharing a name.
+
+  One thing is newly **supported**: `#[cfg]` on a single variant. It never
+  worked, under the old macro or the first draft of this one — the gate reached
+  the variant's declaration and not the `WIRE_VALUES` element or the three
+  `match` arms built from it, so turning it off left four uses of a variant that
+  was no longer there. The gate is copied onto all four now.
+
+  `#[wire_enum(sorted)]` is an opt-in claim that an enum's wire values are in
+  byte order, checked at compile time; 37 of the 120 carry it. The rest are
+  deliberately ordered by something else — `ActivityType` leads with `Fill` —
+  and a check that rejected those would only teach people to turn it off.
+
+  One thing it deliberately does not refuse is an empty wire value.
+  `#[wire = ""]` reads like an oversight, but Alpaca's schemas list the empty
+  string as an enum value and three of these enums carry a variant for it
+  (`DocumentType`, `BankAccountType`, `AssetExchange`), so rejecting it would
+  mean deleting a value the API sends.
+
+  **`Setters` changed too, in one small way**, because the two macros answer the
+  same question and should not disagree: a field carrying a bare `///` is now a
+  compile error rather than a setter documented with a blank line. `missing_docs`
+  passes on an empty doc comment, which is the lint being satisfied rather than
+  the method being documented — and `#[setters(doc = "")]` was already refused
+  for exactly that reason.
+
 - **A request cannot be sent without being offered the chance to validate
   itself.** `RestClient` takes a new `Validated` bound on every body and every
   query — `get`, `post`, `put`, `patch`, `delete`, `delete_effectful`,
