@@ -19,7 +19,7 @@ asking for it.
 
 ### Added
 
-- **A setter for every optional field on every request type** — 527 of the 547,
+- **A setter for every optional field on every request type** — 524 of the 547,
   across 129 types. `GetOrdersRequest` had fourteen filters and a setter for
   none of them; `UpdatableIdentity` had twenty-one and none; the five check
   types inside a CIP payload had sixty-eight between them.
@@ -51,13 +51,13 @@ asking for it.
   `String` and `Vec<T>` fields take `impl Into<T>`, so `.subtag("desk-7")` works
   without a `to_owned()`. Everything else takes its type exactly.
 
-  Twenty fields have no setter, deliberately, and assignment remains the way
+  Twenty-three fields have no setter, deliberately, and assignment remains the way
   to reach them. Three because a *constructor* already holds the name and two
   `pub fn` of one name cannot coexist in one impl:
   `GetEventsRequest::since`, `EventStreamRequest::since` and
   `EstimateOrderRequest::notional`.
 
-  Fifteen more because one setter writes them as a group, and offering one
+  Eighteen more because one setter writes them as a group, and offering one
   per field would make an incoherent request easy to build by accident. Twelve
   are on `OrderRequest`, whose module documentation names three combinations the
   *type* makes unrepresentable — a per-field setter would have quietly undone
@@ -80,11 +80,18 @@ asking for it.
     its side per leg. `validate` requires them for every other class and has no
     reason to examine them for `mleg`.
 
+  Three more are on the rebalancing types, whose constructors pick a shape the
+  same way: `Weight::symbol` belongs to `asset` and not to `cash`, and
+  `RebalancingCondition`'s `percent` and `day` belong to `drift_band` and
+  `calendar`. `Weight::validate` checks that an asset line names a symbol, not
+  that a cash line does not, and `RebalancingCondition` has no `validate` at
+  all.
+
   Two more are `CreateRecipientBankRequest`'s `routing_code` and
   `routing_code_type`, which go together because a routing code without its
-  scheme is ambiguous, and the fifteenth is `EventStreamRequest::since_id`,
-  documented "mutually exclusive with `since`" and reachable through the
-  `from_id` constructor.
+  scheme is ambiguous, and the last of the eighteen is
+  `EventStreamRequest::since_id`, documented "mutually exclusive with `since`"
+  and reachable through the `from_id` constructor.
 
   The last two are `AccountConfiguration`'s `dtbp_check` and `pdt_check`, for a
   different reason again: Alpaca removed both from its responses on 2026-07-06

@@ -90,13 +90,13 @@ EMPTY_STRUCT = re.compile(r"^pub struct (\w+)(?:<[^>]*>)?\s*\{\s*\}\s*$")
 
 # Anything that starts a `pub` field, matched before its type is known so that a
 # declaration rustfmt wrapped across lines can be rejoined — see `fields`.
-FIELD_START = re.compile(r"^    pub (\w+):")
+FIELD_START = re.compile(r"^    pub ((?:r#)?\w+):")
 
 # A rejoined field of any type. Not used to classify — `OPTION_FIELD` does that
 # — but to tell "this is a required field" from "the rejoin produced something
 # this script does not understand". Without the distinction the second case
 # looks exactly like the first, which is how a field goes missing quietly.
-REQUIRED_FIELD = re.compile(r"^pub (\w+): .+,$")
+REQUIRED_FIELD = re.compile(r"^pub ((?:r#)?\w+): .+,$")
 
 # A rejoined `pub field: Option<T>,`. Only optional fields: a required field is
 # a constructor argument, and the derive leaves it alone.
@@ -109,7 +109,7 @@ REQUIRED_FIELD = re.compile(r"^pub (\w+): .+,$")
 # field reads as required and the type stops being checked at all. The leading
 # `::` was a second instance of the same bug, found after the first was fixed:
 # match what the derive matches, not what the source usually looks like.
-OPTION_FIELD = re.compile(r"^pub (\w+): (?:::)?(?:\w+::)*Option<.+>,$")
+OPTION_FIELD = re.compile(r"^pub ((?:r#)?\w+): (?:::)?(?:\w+::)*Option<.+>,$")
 
 # A trailing `// …` on a field, stripped before the field is classified. Without
 # this the declaration no longer ends in `,`, so it matches nothing, and a type
@@ -123,6 +123,11 @@ LINE_COMMENT = re.compile(r"\s*//(?!/).*$")
 # through, so that the check below can be strict about everything else.
 UNNAMED_STRUCT = re.compile(r"^pub struct (\w+)(?:<[^>]*>)?\s*[(;]")
 
+# `pub(crate) struct …`. Out of scope by definition: a type a caller cannot name
+# is not a type a caller builds. Matched so the guard below can be strict about
+# `pub struct` without failing on the three of these in `src/`.
+RESTRICTED_STRUCT = re.compile(r"^\s*pub\([^)]*\) struct\b")
+
 # Lines this script must understand and does not. A `pub struct` it cannot parse
 # is a type that silently drops out of the report, which is the one outcome a
 # gate must not have — so it stops rather than passing. This fired the first
@@ -132,18 +137,19 @@ UNNAMED_STRUCT = re.compile(r"^pub struct (\w+)(?:<[^>]*>)?\s*[(;]")
 # indented inside an inline `pub mod` matches neither, and an unanchored guard
 # is the difference between "this script does not handle inline modules" being
 # an error and being silence.
-UNPARSED_STRUCT = re.compile(r"^\s*pub struct\b")
+UNPARSED_STRUCT = re.compile(r"^\s*pub(?:\([^)]*\))? struct\b")
 
 # `Setters` inside a `#[derive(…)]`. Matched against the attribute block above a
 # struct, so a derive list rustfmt has split across lines still hits.
 DERIVES_SETTERS = re.compile(r"#\[derive\([^)]*\bSetters\b[^)]*\)\]", re.S)
 
-# A doc or ordinary line comment, dropped before the block is searched for a
-# derive. Without this a struct whose *documentation* shows
-# `#[derive(…, Setters)]` in an example is credited with deriving it — and that
-# example is the one CONTRIBUTING and the derive's own rustdoc both use, so the
-# likeliest place to hit this is a type documented in the house style.
-COMMENT = re.compile(r"^\s*//")
+# A line comment anywhere — at the start of a line or trailing one — removed
+# before the block is searched for a derive. Without this a struct whose
+# *documentation* shows `#[derive(…, Setters)]` in an example is credited with
+# deriving it, and that example is the one CONTRIBUTING and the derive's own
+# rustdoc both use. A trailing comment inside a rustfmt-split derive list is the
+# same hazard one line in.
+LINE_COMMENT_ANYWHERE = re.compile(r"//.*$", re.M)
 
 # The same hazard in the other comment syntax. `rustfmt` reformats neither, so
 # nothing else in the toolchain would notice a `/* … Setters … */` sitting above
@@ -323,6 +329,10 @@ def parse(path: pathlib.Path) -> dict[str, tuple[bool, list[str], list[tuple[str
 
         declaration = STRUCT_DECL.match(line)
         if not declaration:
+            if RESTRICTED_STRUCT.match(line):
+                pending = []
+                index += 1
+                continue
             if UNNAMED_STRUCT.match(line):
                 # A tuple or unit struct is an item boundary like any other. It
                 # used to fall through to the accumulator, so its `#[derive(…)]`
@@ -341,8 +351,16 @@ def parse(path: pathlib.Path) -> dict[str, tuple[bool, list[str], list[tuple[str
             index += 1
             continue
 
-        attributes = "\n".join(line for line in pending if not COMMENT.match(line))
-        derives = bool(DERIVES_SETTERS.search(BLOCK_COMMENT.sub("", attributes)))
+        # Comments are removed rather than whole lines dropped. Dropping lines
+        # that *begin* with `//` misses one sitting inside a rustfmt-split
+        # derive list — `    Clone, // TODO: add Setters` — where the word is in
+        # a comment and the derive list is real, so the search hits and the type
+        # is credited. Three spellings of the same hazard now; strip the comment
+        # text wherever it sits, and there is only one.
+        attributes = LINE_COMMENT_ANYWHERE.sub(
+            "", BLOCK_COMMENT.sub("", "\n".join(pending))
+        )
+        derives = bool(DERIVES_SETTERS.search(attributes))
 
         empty = EMPTY_STRUCT.match(line)
         if empty:

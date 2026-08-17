@@ -35,8 +35,10 @@
 //!
 //! # Which fields take no setter
 //!
-//! Those carrying `#[setters(skip = "…")]`, which are of two kinds. `just
-//! setters` lists them on every run, with the reason each gives for itself.
+//! Those carrying `#[setters(skip = "…")]`, which are of three kinds. `just
+//! setters` prints all of them on every run, each with the reason it gives for
+//! itself — so no count is kept here. Every count kept in prose in this change
+//! went stale within a day of being written.
 //!
 //! **A constructor already holds the name.** `GetEventsRequest::since`,
 //! `EventStreamRequest::since` and `EstimateOrderRequest::notional`; two
@@ -44,8 +46,8 @@
 //! type rather than a decision.
 //!
 //! **The field is only coherent set alongside another**, and one setter writes
-//! the group. Thirteen fields, all of them cases where setting one alone is
-//! *always* wrong rather than sometimes:
+//! the group. The largest kind, and in every case setting one alone is *always*
+//! wrong rather than sometimes:
 //!
 //! - `OrderRequest`'s `qty`/`notional` are `OrderAmount` and its
 //!   `trail_price`/`trail_percent` are `Trail`. Both types exist to make "both
@@ -59,6 +61,14 @@
 //!   written by `bracket`, `oco`, `oto_take_profit`, `oto_stop_loss` and
 //!   `multi_leg`. An exit leg with no order class passes `validate` and is not
 //!   a bracket.
+//! - `OrderRequest`'s `symbol` and `side` are set by whichever constructor
+//!   chose the shape, and `multi_leg` sets neither — a multi-leg order carries
+//!   its side per leg, on `OptionLegRequest`.
+//! - `Weight`'s `symbol` belongs to `asset` and not to `cash`, and
+//!   `RebalancingCondition`'s `percent` and `day` belong to `drift_band` and
+//!   `calendar` respectively. `Weight::validate` checks that an asset line
+//!   names a symbol, not that a cash line does not; `RebalancingCondition` has
+//!   no `validate` at all.
 //! - `CreateRecipientBankRequest`'s `routing_code` and `routing_code_type` go
 //!   together because a routing code without its scheme is ambiguous.
 //! - `EventStreamRequest`'s `since_id` is documented mutually exclusive with

@@ -925,7 +925,11 @@ pub struct Weight {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
-    #[setters(into)]
+    #[setters(skip = "`asset` sets this with the type that gives it meaning, \
+                      and `cash` sets neither. `validate` checks that an asset \
+                      line names a symbol, not that a cash line does not — so \
+                      a setter would build a cash weight carrying a symbol, \
+                      and nothing would say so")]
     pub symbol: Option<String>,
     /// The share of the portfolio, as a percentage.
     ///
@@ -1061,6 +1065,10 @@ pub struct RebalancingCondition {
         with = "crate::types::option_decimal",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(skip = "written by `drift_band` with the type that gives it \
+                      meaning. This struct has no `validate` at all, so a \
+                      `percent` on a calendar condition would reach Alpaca \
+                      with nothing between")]
     pub percent: Option<Decimal>,
     /// The day the calendar condition fires on.
     #[serde(
@@ -1068,7 +1076,9 @@ pub struct RebalancingCondition {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
-    #[setters(into)]
+    #[setters(skip = "written by `calendar`, and the sibling of `percent`: \
+                      each belongs to one of the two shapes, and the \
+                      constructors are what keep them apart")]
     pub day: Option<String>,
 }
 
