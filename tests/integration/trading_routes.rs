@@ -1084,3 +1084,82 @@ async fn get_all_orders_narrows_the_page_size_on_every_request() {
 
     assert_eq!(orders.len(), 600);
 }
+
+// ------------------------------------------------- validation before the wire
+
+/// The end-to-end form of the transport's promise, on a real route and a real
+/// request type.
+///
+/// The client method no longer calls `validate` — the bound on
+/// [`alpaca_sdk::RestClient`] does. `expect(0)` is what makes this test worth
+/// having over the unit tests on `OrderRequest::validate`: those prove the rule
+/// exists, and this proves it is reached, which is precisely what was held by
+/// review before.
+#[tokio::test]
+async fn an_invalid_order_is_refused_before_any_request_is_made() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v2/orders"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    // A bracket order with neither exit leg — the case `OrderRequest::validate`
+    // exists for.
+    let mut order = OrderRequest::market(
+        "AAPL",
+        OrderSide::Buy,
+        OrderAmount::Qty(Decimal::from(1)),
+        TimeInForce::Day,
+    );
+    order.order_class = Some(alpaca_sdk::trading::OrderClass::Bracket);
+
+    let err = client(&server).submit_order(&order).await.unwrap_err();
+
+    assert!(
+        matches!(err, alpaca_sdk::Error::InvalidRequest(ref reason)
+            if reason.contains("take_profit")),
+        "{err:?}"
+    );
+    assert!(
+        server.received_requests().await.unwrap().is_empty(),
+        "an order Alpaca would reject must not cost a round trip"
+    );
+}
+
+/// `get_corporate_announcements` flattens its filter into query pairs, which
+/// have no rules of their own — so the transport's bound cannot see the 90-day
+/// window. `to_query` returning a `Result` is what closes that, and this is the
+/// test that would go red if it were made infallible again.
+#[tokio::test]
+#[allow(deprecated)]
+async fn a_flattened_filter_still_has_its_rules_checked() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v2/corporate_actions/announcements"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let filter = alpaca_sdk::trading::GetCorporateAnnouncementsRequest::new(
+        vec![alpaca_sdk::trading::CorporateActionType::Dividend],
+        "2022-01-01".parse().unwrap(),
+        // 364 days, well past the 90 Alpaca accepts.
+        "2022-12-31".parse().unwrap(),
+    );
+
+    let err = client(&server)
+        .get_corporate_announcements(&filter)
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, alpaca_sdk::Error::InvalidRequest(_)),
+        "{err:?}"
+    );
+    assert!(server.received_requests().await.unwrap().is_empty());
+}

@@ -8,6 +8,7 @@
 #![cfg(feature = "broker")]
 
 use crate::common::{broker_client as client, fixture};
+use alpaca_sdk::Validated;
 use alpaca_sdk::broker::{
     ACHRelationship, ACHRelationshipStatus, Bank, BankAccountType, BankAddress,
     CreateACHRelationshipRequest, CreateACHTransferRequest, CreateBankRequest,

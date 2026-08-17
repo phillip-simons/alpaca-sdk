@@ -12,12 +12,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-**Slated for `0.2.0`.** `cargo semver-checks` agrees there is no type-level
-break, so a patch number would be defensible on the letter of it. A minor is the
-honest call anyway: this adds a second published crate, and two changes here are
-invisible to that tool — one behaviour change with no signature attached, and
-nine widened setters that can break a call site relying on inference. Read "The
-semver call" below before upgrading.
+**Slated for `0.2.0`.** Several things here are breaking and `cargo
+semver-checks` reports none of them.
+
+The largest is loud: every `RestClient` method now takes a `Validated` bound, so
+passing a bare `Serialize` type no longer compiles, and twenty-six
+`pub fn validate` inherent methods became trait methods, so `order.validate()`
+needs `use alpaca_sdk::Validated;`. Nine widened setters can break a call site
+relying on inference. Those three at least fail to compile.
+
+**One does not.** `TradeEvent` gained nine variants, so a `Unknown(s) if s ==
+"done_for_day"` arm still compiles and now never fires. Nothing points at it —
+not the compiler, not `cargo semver-checks` — which is what the preamble above
+means by these notes being the only mechanism. Read "The semver call" below
+before upgrading.
+
+This release also adds a second published crate.
 
 Cargo treats `0.1.1` as compatible and would deliver it without you choosing it.
 `0.2.0` it will not.
@@ -176,6 +186,14 @@ Cargo treats `0.1.1` as compatible and would deliver it without you choosing it.
 
 ### Fixed
 
+- **`CreateAccountRequest` never checked the documents it carries.** Its
+  `documents` field holds the same `UploadDocument` the upload route takes, and
+  those carry rules — a general document may not claim to be a W-8BEN, which
+  goes through `UploadW8BenDocumentRequest` instead. `create_account` would put
+  exactly the value `upload_documents_to_account` refuses onto the wire, because
+  the parent never asked. Found while writing the tests for the other five
+  parent-to-child delegations, all of which were correct.
+
 - **`TradeEvent` named twelve of the twenty-one documented `trade_updates`
   events**, and was ordered alphabetically because it had been ported from
   alpaca-py's `TradeEvent` rather than from Alpaca's own list. The port is the
@@ -209,6 +227,62 @@ Cargo treats `0.1.1` as compatible and would deliver it without you choosing it.
   `filled` is a status.
 
 ### Changed
+
+- **A request cannot be sent without being offered the chance to validate
+  itself.** `RestClient` takes a new `Validated` bound on every body and every
+  query — `get`, `post`, `put`, `patch`, `delete`, `delete_effectful`,
+  `request`, `request_raw` and `get_bytes` — and calls `validate` itself, before
+  the HTTP request is built. The event streams take the same bound on their
+  filter, before it is flattened into query parameters, so the eleven
+  server-sent-event routes are covered by the same rule rather than by a
+  separate convention.
+
+  **This is the breaking change**, and what a caller has to do about it is
+  import the trait:
+
+  ```rust
+  use alpaca_sdk::Validated;   // now needed to call `order.validate()` eagerly
+
+  assert!(order.validate().is_ok());
+  ```
+
+  Twenty-six request types had a `pub fn validate` inherent method; those bodies
+  moved verbatim into `impl Validated for T`, keeping their rules and their
+  documentation. *What* each type checks is unchanged, with one exception listed
+  under Fixed below — `CreateAccountRequest` now asks the documents it carries,
+  which it never did. Client methods no longer call `validate` — roughly thirty
+  such lines are gone — because the transport does it once for all of them.
+
+  **The point is what is now impossible.** Every one of those thirty lines was
+  correct, and nothing enforced that they existed. A new route that omitted one
+  compiled, passed `just check`, passed CI, passed its own wiremock routing test
+  — the mock answers whatever arrives — and shipped a body Alpaca would reject,
+  or accept as something the caller did not mean. That failure is now a compile
+  error at the call site, and
+  `tests/integration/rest_transport.rs::an_invalid_body_never_reaches_the_socket`
+  asserts an invalid request costs **zero** HTTP requests rather than one.
+
+  There is deliberately no attribute switching the derive between "no rules" and
+  "defer to a hand-written body". That would recreate the same bug one level up:
+  write the validator, forget the attribute, and it silently never runs. Instead
+  `#[derive(Validated)]` emits `impl Validated for T {}` and a type with rules
+  writes the impl by hand — so doing both is `E0119` and doing neither does not
+  compile. Coherence cannot be forgotten.
+
+  For a route this crate has not wrapped, the raw `RestClient` methods are still
+  one call away. A body or query of your own satisfies the bound with
+  `impl Validated for MyType {}`, or wrap it in the new `alpaca_sdk::Raw`, which
+  serializes transparently and validates nothing — the same opt-out, written at
+  the call site instead of on the type.
+
+- **`GetCorporateAnnouncementsRequest::to_query` returns
+  `Result<Vec<(&'static str, String)>>`** rather than the bare `Vec`. Flattening
+  a request into query pairs is the one way past the bound above: what reaches
+  the transport is a `Vec` of tuples, which has no rules, so this type's 90-day
+  window would never have been checked. It validates on the way out now, and the
+  `Result` is what makes that impossible to drop again.
+  `ClosePositionRequest::to_query` stays infallible — it has no rules, and the
+  enum is why.
 
 - **`alpaca-sdk` is now a workspace, and publishes a second crate** —
   `alpaca-sdk-macros`, holding the `Setters` derive above. A procedural macro
@@ -354,11 +428,30 @@ presented as a whole one:
 
 ### The semver call
 
-**The call is `0.2.0`**, and it was `0.1.1` until the setters work landed in the
-same release. `cargo semver-checks` reports no breakage for either change, and
-is right not to: the enum is `#[non_exhaustive]`, so every caller already needs
-a wildcard arm, and adding variants — or adding setters — is additive at the
-type level.
+**The call is `0.2.0`.** It was `0.1.1` until the setters work landed in the same
+release, and the `Validated` trait would have forced it regardless — that one is
+a genuine type-level break, where the enum and setter work are not.
+
+`cargo semver-checks` reports **none** of it: 196 checks, 196 pass, against both
+the published `0.1.0` and this release's own parent. It is right about the enum —
+`#[non_exhaustive]`, so every caller already needs a wildcard arm and adding
+variants is additive — and blind to the trait change, because an inherent method
+becoming a same-named trait method is outside what its rustdoc JSON can see.
+Worth stating plainly: `release.yml` gates publishing on that tool, and here the
+tool would have waved a `0.1.1` through. The version bump is a judgement rather
+than a report.
+
+What a caller has to change, in the order they will meet it:
+
+- Anything passing a bare `Serialize` type to a raw `RestClient` method — a
+  `serde_json::Value`, a `HashMap` — stops compiling. Add
+  `impl Validated for MyType {}`, or wrap the value in the new `Raw`.
+- `order.validate()` needs `use alpaca_sdk::Validated;` in that file.
+- `GetCorporateAnnouncementsRequest::to_query` returns a `Result`, so it needs a
+  `?`.
+
+Nothing else in the public surface moved: the derives stay crate-internal, and
+`Raw` and `Validated` are additions.
 
 Two things in this release are not additive, and no compiler points at either.
 The setter widenings are described under **Added** above. The other is here.
@@ -379,10 +472,10 @@ A `0.1.1` would have reached every `alpaca-sdk = "0.1"` dependant without them
 choosing it, which is why this note was written as plainly as it is: per the
 preamble at the top of this file, inside `0.x` these notes are the only
 mechanism there is. **`0.2.0` does not** — cargo treats a leading-zero minor
-bump as incompatible, so nobody takes this upgrade by accident. That is the
-better outcome and it is not why the number moved; it is a side effect of the
-setters work landing alongside. The note stands either way. **If you match on
-`TradeEvent::Unknown` by string, grep for it before taking this upgrade.**
+bump as incompatible, so nobody takes this upgrade by accident, and the trait
+import is the prompt to read this page. The note stands either way. **If you
+match on `TradeEvent::Unknown` by string, grep for it before taking this
+upgrade.**
 
 ### On the two values with weaker evidence
 

@@ -28,6 +28,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::auth::Credentials;
 use crate::error::{ApiError, Error, Result};
+use crate::types::Validated;
 use crate::types::setters::Setters;
 
 /// The window an event stream replays before going live.
@@ -42,7 +43,7 @@ use crate::types::setters::Setters;
 /// The cursor pair is a [ULID](https://github.com/ulid/spec), and `since_id`
 /// here means the ULID everywhere it is accepted — unlike the v1 broker
 /// streams, where that name belongs to a deprecated integer form.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct EventStreamRequest {
     /// Replay events emitted at or after this time.
@@ -306,16 +307,52 @@ pub(crate) fn download_client(
 /// Alpaca versions these endpoints individually and the version is therefore
 /// not the client's.
 ///
+/// # Why this takes the filter and a flattener rather than the query
+///
+/// This is the event streams' equivalent of `RestClient::send`, and the same
+/// problem applies: every one of these routes turns its filter into
+/// `Vec<(&'static str, String)>` before sending, and a list of pairs carries no
+/// rules — so a [`Validated`] bound on the flattened value would be satisfied
+/// by something that had never been asked. Taking `filter` and flattening it
+/// here puts the bound on the request itself, and no route can reach this
+/// function without one. Same argument that puts the REST validation in `send`
+/// rather than in each client method.
+///
+/// It costs each caller a function reference. It buys that a rule added to
+/// [`EventStreamRequest`] or `GetEventsRequest` tomorrow is enforced across all
+/// eleven event-stream routes — which reach this function through four call
+/// sites — with no line for any of them to have forgotten.
+///
+/// Ten of the eleven hand this function an [`EventStreamRequest`] or a
+/// `GetEventsRequest` directly. The eleventh, the corporate-actions stream,
+/// wraps one in a `window` field, so the bound lands on the wrapper; that type
+/// hand-writes its `Validated` impl to pass the question down. Nesting in
+/// general is not walked — see the note on `CorporateActionEventsRequest`.
+///
 /// # Errors
-/// Propagates transport failures and any non-success status the server answers
-/// the subscription with.
-pub(crate) async fn subscribe(
+/// Returns [`Error::InvalidRequest`] if `filter` does not satisfy its own rules,
+/// and propagates transport failures and any non-success status the server
+/// answers the subscription with.
+pub(crate) async fn subscribe<Q, F>(
     http: &reqwest::Client,
     url: &str,
     path: &str,
-    query: &[(&'static str, String)],
-) -> Result<impl Stream<Item = Result<Event>> + use<>> {
+    filter: Option<&Q>,
+    flatten: F,
+) -> Result<impl Stream<Item = Result<Event>> + use<Q, F>>
+where
+    Q: Validated + ?Sized,
+    F: FnOnce(&Q) -> Vec<(&'static str, String)>,
+{
     use eventsource_stream::Eventsource as _;
+
+    let query = match filter {
+        Some(filter) => {
+            filter.validate()?;
+            flatten(filter)
+        }
+        None => Vec::new(),
+    };
 
     let mut request = http
         .get(url)
@@ -325,7 +362,7 @@ pub(crate) async fn subscribe(
         .header(reqwest::header::CONTENT_TYPE, "text/event-stream")
         .header(reqwest::header::ACCEPT, "text/event-stream");
     if !query.is_empty() {
-        request = request.query(query);
+        request = request.query(&query);
     }
 
     let response = request.send().await.map_err(Error::transport)?;
@@ -383,6 +420,53 @@ mod tests {
         assert!(EventStreamRequest::default().query().is_empty());
     }
 
+    /// The event streams flatten their filter into query pairs, exactly as the
+    /// deprecated corporate-announcements route does, so a `Validated` bound on
+    /// what reaches the wire would be satisfied by a list of tuples that had
+    /// never been asked. `subscribe` therefore takes the filter itself.
+    ///
+    /// A locally-defined filter, for the same reason as the market data twin in
+    /// `data::pagination`: all three real filter types derive the no-op, so
+    /// using one would assert nothing about whether the call happens. The
+    /// flattener panics, which pins the ordering — validation first, then
+    /// flattening — rather than only the outcome.
+    #[tokio::test]
+    async fn an_invalid_filter_never_opens_the_stream() {
+        use wiremock::matchers::{method, path as path_matcher};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        struct RefusesToBeSent;
+
+        impl Validated for RefusesToBeSent {
+            fn validate(&self) -> Result<()> {
+                Err(Error::InvalidRequest("not sendable as built".to_owned()))
+            }
+        }
+
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_matcher("/v1/events/status"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(""))
+            .expect(0)
+            .mount(&server)
+            .await;
+
+        let http = reqwest::Client::new();
+        let url = format!("{}/v1/events/status", server.uri());
+
+        match subscribe(&http, &url, "/status", Some(&RefusesToBeSent), |_| {
+            panic!("the filter must be validated before it is flattened")
+        })
+        .await
+        {
+            Err(Error::InvalidRequest(_)) => {}
+            Err(other) => panic!("expected InvalidRequest, got {other:?}"),
+            Ok(_) => panic!("expected the invalid filter to be refused"),
+        }
+
+        assert!(server.received_requests().await.unwrap().is_empty());
+    }
+
     /// `path` labels the error, not `url` — the two differ deliberately (see
     /// [`subscribe`]'s doc comment), so a wrong implementation that reached for
     /// the request's own path instead would not be caught by asserting they
@@ -403,7 +487,11 @@ mod tests {
         let url = format!("{}/v1/events/status", server.uri());
         // The `Ok` side is a `Stream`, which is not `Debug`, so this cannot be
         // `unwrap_err()`.
-        match subscribe(&http, &url, "/status", &[]).await {
+        match subscribe(&http, &url, "/status", None::<&crate::rest::Empty>, |_| {
+            Vec::new()
+        })
+        .await
+        {
             Err(Error::Api(api)) => {
                 assert_eq!(api.status, 403);
                 assert_eq!(api.path, "/status");

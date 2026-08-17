@@ -10,6 +10,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
+use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
@@ -119,7 +120,7 @@ pub struct IpoOfferingResponse {
 }
 
 /// Filters for listing offerings.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetIpoOfferingsRequest {
     /// Only offerings in this state.

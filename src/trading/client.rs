@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::auth::Credentials;
 use crate::config::BaseUrl;
 use crate::error::Result;
-use crate::rest::{Empty, RestClient, RestConfig};
+use crate::rest::{Empty, Raw, RestClient, RestConfig};
 use crate::sse::EventStreamRequest;
 use crate::trading::enums::ActivityType;
 use crate::trading::locates::{
@@ -112,9 +112,9 @@ impl TradingClient {
     ///
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if the order fails
-    /// [`OrderRequest::validate`], or an API error if Alpaca rejects it.
+    /// [`OrderRequest`]'s [`Validated::validate`](crate::Validated::validate),
+    /// or an API error if Alpaca rejects it.
     pub async fn submit_order(&self, order: &OrderRequest) -> Result<Order> {
-        order.validate()?;
         self.rest.post("/orders", order).await
     }
 
@@ -198,7 +198,9 @@ impl TradingClient {
     ///
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if the replacement fails
-    /// [`ReplaceOrderRequest::validate`], or an API error if Alpaca rejects it.
+    /// [`ReplaceOrderRequest`]'s
+    /// [`Validated::validate`](crate::Validated::validate), or an API error if
+    /// Alpaca rejects it.
     pub async fn replace_order_by_id(
         &self,
         order_id: Uuid,
@@ -206,10 +208,7 @@ impl TradingClient {
     ) -> Result<Order> {
         let path = format!("/orders/{order_id}");
         match replacement {
-            Some(replacement) => {
-                replacement.validate()?;
-                self.rest.patch(&path, replacement).await
-            }
+            Some(replacement) => self.rest.patch(&path, replacement).await,
             None => self.rest.patch(&path, &Empty).await,
         }
     }
@@ -356,10 +355,7 @@ impl TradingClient {
         filter: Option<&GetAccountActivitiesRequest>,
     ) -> Result<Vec<Activity>> {
         match filter {
-            Some(filter) => {
-                filter.validate()?;
-                self.rest.get("/account/activities", filter).await
-            }
+            Some(filter) => self.rest.get("/account/activities", filter).await,
             None => self.rest.get("/account/activities", &Empty).await,
         }
     }
@@ -445,7 +441,6 @@ impl TradingClient {
         watchlist_id: Uuid,
         update: &UpdateWatchlistRequest,
     ) -> Result<Watchlist> {
-        update.validate()?;
         self.rest
             .put(&format!("/watchlists/{watchlist_id}"), update)
             .await
@@ -463,7 +458,7 @@ impl TradingClient {
         self.rest
             .post(
                 &format!("/watchlists/{watchlist_id}"),
-                &serde_json::json!({ "symbol": symbol }),
+                &Raw(serde_json::json!({ "symbol": symbol })),
             )
             .await
     }
@@ -510,9 +505,8 @@ impl TradingClient {
         &self,
         filter: &GetCorporateAnnouncementsRequest,
     ) -> Result<Vec<CorporateActionAnnouncement>> {
-        filter.validate()?;
         self.rest
-            .get("/corporate_actions/announcements", &filter.to_query())
+            .get("/corporate_actions/announcements", &filter.to_query()?)
             .await
     }
 
@@ -602,10 +596,7 @@ impl TradingClient {
     ) -> Result<Vec<Activity>> {
         let path = format!("/account/activities/{}", segment(activity_type)?);
         match filter {
-            Some(filter) => {
-                filter.validate()?;
-                self.rest.get(&path, filter).await
-            }
+            Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
         }
     }
@@ -634,7 +625,6 @@ impl TradingClient {
         name: &str,
         update: &UpdateWatchlistRequest,
     ) -> Result<Watchlist> {
-        update.validate()?;
         self.rest
             .request(
                 Method::PUT,
@@ -661,7 +651,7 @@ impl TradingClient {
                 crate::rest::Replay::ByMethod,
                 "/watchlists:by_name",
                 Some(&[("name", name)]),
-                Some(&serde_json::json!({ "symbol": symbol })),
+                Some(&Raw(serde_json::json!({ "symbol": symbol }))),
             )
             .await
     }
@@ -750,9 +740,9 @@ impl TradingClient {
     ///
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if the request contradicts
-    /// itself; see [`CreateLocateRequest::validate`].
+    /// itself; see [`CreateLocateRequest`]'s
+    /// [`Validated::validate`](crate::Validated::validate).
     pub async fn create_locate(&self, request: &CreateLocateRequest) -> Result<Locate> {
-        request.validate()?;
         self.rest.at_version("v1").post("/locates", request).await
     }
 
@@ -763,7 +753,6 @@ impl TradingClient {
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if `qty` is not positive.
     pub async fn mint_token(&self, request: &MintTokenRequest) -> Result<TokenizationRequest> {
-        request.validate()?;
         self.rest.post("/tokenization/mint", request).await
     }
 
@@ -917,8 +906,7 @@ impl TradingClient {
             "{}/v2beta1{path}",
             self.rest.config().base_url.trim_end_matches('/')
         );
-        let query = filter.map(EventStreamRequest::query).unwrap_or_default();
-        crate::sse::subscribe(&self.raw, &url, path, &query).await
+        crate::sse::subscribe(&self.raw, &url, path, filter, EventStreamRequest::query).await
     }
 }
 

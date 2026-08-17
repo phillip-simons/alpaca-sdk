@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::broker::settlements::TransmitterInfo;
+use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
@@ -202,7 +203,7 @@ pub struct InstantFundingReport {
 }
 
 /// Filters for listing instant funding requests.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetInstantFundingRequest {
     /// Only requests in this state.
@@ -273,7 +274,9 @@ impl CreateInstantFundingRequest {
             amount,
         }
     }
+}
 
+impl Validated for CreateInstantFundingRequest {
     /// The one check a request cannot pass without contradicting itself.
     ///
     /// This guards a money-movement route, so it catches a sign error before it
@@ -282,7 +285,7 @@ impl CreateInstantFundingRequest {
     /// # Errors
     /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if
     /// `amount` is not positive.
-    pub fn validate(&self) -> crate::Result<()> {
+    fn validate(&self) -> crate::Result<()> {
         if self.amount <= Decimal::ZERO {
             return Err(crate::Error::InvalidRequest(
                 "amount must be greater than zero".to_owned(),
@@ -334,13 +337,15 @@ impl CreateInstantFundingSettlementRequest {
             additional_info: None,
         }
     }
+}
 
+impl Validated for CreateInstantFundingSettlementRequest {
     /// Rejects a settlement that would settle nothing.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if no
     /// transfers are named.
-    pub fn validate(&self) -> crate::Result<()> {
+    fn validate(&self) -> crate::Result<()> {
         if self.transfers.is_empty() {
             return Err(crate::Error::InvalidRequest(
                 "a settlement must name at least one transfer".to_owned(),
@@ -351,7 +356,7 @@ impl CreateInstantFundingSettlementRequest {
 }
 
 /// Filters for the instant funding report.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetInstantFundingReportRequest {
     /// Which report to run.
@@ -364,7 +369,7 @@ pub struct GetInstantFundingReportRequest {
 }
 
 /// A request for several accounts' instant funding limits.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetAccountLimitsRequest {
     /// The accounts to ask about, sent as one comma-separated parameter.

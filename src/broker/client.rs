@@ -63,9 +63,10 @@ use crate::broker::requests::{
 use crate::broker::settlements::{GetSettlementsRequest, Settlement, Settlements};
 use crate::config::BaseUrl;
 use crate::error::Result;
-use crate::rest::{Empty, RestClient, RestConfig};
+use crate::rest::{Empty, Raw, RestClient, RestConfig};
 use crate::sse::EventStreamRequest;
 use crate::trading::{Activity, Position, Watchlist};
+use crate::types::Validated;
 use crate::types::path::segment;
 use crate::types::serde_util::OneOrMany;
 
@@ -213,7 +214,7 @@ impl BrokerClient {
     ///
     /// Several broker routes answer `204 No Content`, and the exercise route
     /// answers with a bare string that is not JSON.
-    async fn send_void<B: serde::Serialize + ?Sized>(
+    async fn send_void<B: serde::Serialize + Validated + ?Sized>(
         &self,
         method: Method,
         path: &str,
@@ -264,9 +265,9 @@ impl BrokerClient {
     ///
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if a field Alpaca requires on a
-    /// new account is missing; see [`CreateAccountRequest::validate`].
+    /// new account is missing; see [`CreateAccountRequest`]'s
+    /// [`Validated::validate`](crate::Validated::validate).
     pub async fn create_account(&self, account: &CreateAccountRequest) -> Result<Account> {
-        account.validate()?;
         self.rest.post("/accounts", account).await
     }
 
@@ -396,13 +397,13 @@ impl BrokerClient {
     ///
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if the address fields do not
-    /// match the bank code type; see [`CreateBankRequest::validate`].
+    /// match the bank code type; see [`CreateBankRequest`]'s
+    /// [`Validated::validate`](crate::Validated::validate).
     pub async fn create_bank_for_account(
         &self,
         account_id: Uuid,
         bank: &CreateBankRequest,
     ) -> Result<Bank> {
-        bank.validate()?;
         self.rest
             .post(&format!("/accounts/{account_id}/recipient_banks"), bank)
             .await
@@ -440,7 +441,6 @@ impl BrokerClient {
         account_id: Uuid,
         transfer: &CreateTransferRequest,
     ) -> Result<Transfer> {
-        transfer.validate()?;
         self.rest
             .post(&format!("/accounts/{account_id}/transfers"), transfer)
             .await
@@ -743,10 +743,10 @@ impl BrokerClient {
         );
         // Rendered per version: the cursor parameter is named differently on
         // each, and means something different under the v1 name.
-        let query = filter
-            .map(|filter| version.query(filter))
-            .unwrap_or_default();
-        crate::sse::subscribe(&self.events, &url, path, &query).await
+        crate::sse::subscribe(&self.events, &url, path, filter, move |filter| {
+            version.query(filter)
+        })
+        .await
     }
 
     /// Opens one of the timestamp-bounded event streams.
@@ -765,8 +765,7 @@ impl BrokerClient {
             self.rest.config().base_url.trim_end_matches('/'),
             version.segment()
         );
-        let query = filter.map(EventStreamRequest::query).unwrap_or_default();
-        crate::sse::subscribe(&self.events, &url, path, &query).await
+        crate::sse::subscribe(&self.events, &url, path, filter, EventStreamRequest::query).await
     }
 
     // ------------------------------------------------- account activities
@@ -786,10 +785,7 @@ impl BrokerClient {
         filter: Option<&GetAccountActivitiesRequest>,
     ) -> Result<Vec<Activity>> {
         match filter {
-            Some(filter) => {
-                filter.validate()?;
-                self.rest.get("/accounts/activities", filter).await
-            }
+            Some(filter) => self.rest.get("/accounts/activities", filter).await,
             None => self.rest.get("/accounts/activities", &Empty).await,
         }
     }
@@ -816,7 +812,6 @@ impl BrokerClient {
         max_items: Option<usize>,
     ) -> Result<Vec<Activity>> {
         let mut filter = filter.cloned().unwrap_or_default();
-        filter.validate()?;
 
         let mut collected: Vec<Activity> = Vec::new();
         let mut seen: HashSet<String> = HashSet::new();
@@ -907,10 +902,7 @@ impl BrokerClient {
     ) -> Result<Vec<TradeDocument>> {
         let path = format!("/accounts/{account_id}/documents");
         match filter {
-            Some(filter) => {
-                filter.validate()?;
-                self.rest.get(&path, filter).await
-            }
+            Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
         }
     }
@@ -1056,16 +1048,12 @@ impl BrokerClient {
     ///
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if any document fails
-    /// [`UploadDocument::validate`].
+    /// [`UploadDocument`]'s [`Validated::validate`](crate::Validated::validate).
     pub async fn upload_documents_to_account(
         &self,
         account_id: Uuid,
         documents: &[UploadDocument],
     ) -> Result<()> {
-        for document in documents {
-            document.validate()?;
-        }
-
         self.send_void(
             Method::POST,
             &format!("/accounts/{account_id}/documents/upload"),
@@ -1082,7 +1070,6 @@ impl BrokerClient {
     /// Returns [`crate::Error::InvalidRequest`] if any weight is not positive
     /// or an asset weight names no symbol.
     pub async fn create_portfolio(&self, portfolio: &CreatePortfolioRequest) -> Result<Portfolio> {
-        portfolio.validate()?;
         self.rest.post("/rebalancing/portfolios", portfolio).await
     }
 
@@ -1126,7 +1113,6 @@ impl BrokerClient {
         portfolio_id: Uuid,
         update: &UpdatePortfolioRequest,
     ) -> Result<Portfolio> {
-        update.validate()?;
         self.rest
             .patch(&format!("/rebalancing/portfolios/{portfolio_id}"), update)
             .await
@@ -1268,7 +1254,6 @@ impl BrokerClient {
     /// Returns [`crate::Error::InvalidRequest`] if any weight is not positive
     /// or an asset weight names no symbol.
     pub async fn create_manual_run(&self, run: &CreateRunRequest) -> Result<RebalancingRun> {
-        run.validate()?;
         self.rest.post("/rebalancing/runs", run).await
     }
 
@@ -1369,9 +1354,9 @@ impl BrokerClient {
     ///
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if the fields set do not match
-    /// the entry type; see [`CreateJournalRequest::validate`].
+    /// the entry type; see [`CreateJournalRequest`]'s
+    /// [`Validated::validate`](crate::Validated::validate).
     pub async fn create_journal(&self, journal: &CreateJournalRequest) -> Result<Journal> {
-        journal.validate()?;
         self.rest.post("/journals", journal).await
     }
 
@@ -1575,14 +1560,14 @@ impl BrokerClient {
     ///
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if the order fails
-    /// [`crate::trading::OrderRequest::validate`], or an API error if Alpaca
-    /// rejects it.
+    /// [`OrderRequest`](crate::trading::OrderRequest)'s
+    /// [`Validated::validate`](crate::Validated::validate), or an API error if
+    /// Alpaca rejects it.
     pub async fn submit_order_for_account(
         &self,
         account_id: Uuid,
         order: &OrderRequest,
     ) -> Result<Order> {
-        order.validate()?;
         self.rest
             .post(&format!("/trading/accounts/{account_id}/orders"), order)
             .await
@@ -1682,7 +1667,8 @@ impl BrokerClient {
     ///
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if the replacement fails
-    /// [`crate::trading::ReplaceOrderRequest::validate`], or an API error if
+    /// [`ReplaceOrderRequest`](crate::trading::ReplaceOrderRequest)'s
+    /// [`Validated::validate`](crate::Validated::validate), or an API error if
     /// Alpaca rejects it.
     pub async fn replace_order_for_account_by_id(
         &self,
@@ -1692,10 +1678,7 @@ impl BrokerClient {
     ) -> Result<Order> {
         let path = format!("/trading/accounts/{account_id}/orders/{order_id}");
         match replacement {
-            Some(replacement) => {
-                replacement.validate()?;
-                self.rest.patch(&path, replacement).await
-            }
+            Some(replacement) => self.rest.patch(&path, replacement).await,
             None => self.rest.patch(&path, &Empty).await,
         }
     }
@@ -1822,7 +1805,6 @@ impl BrokerClient {
         watchlist_id: Uuid,
         update: &crate::trading::UpdateWatchlistRequest,
     ) -> Result<Watchlist> {
-        update.validate()?;
         self.rest
             .put(
                 &format!("/trading/accounts/{account_id}/watchlists/{watchlist_id}"),
@@ -1844,7 +1826,7 @@ impl BrokerClient {
         self.rest
             .post(
                 &format!("/trading/accounts/{account_id}/watchlists/{watchlist_id}"),
-                &serde_json::json!({ "symbol": symbol }),
+                &Raw(serde_json::json!({ "symbol": symbol })),
             )
             .await
     }
@@ -1935,9 +1917,8 @@ impl BrokerClient {
         &self,
         filter: &crate::trading::GetCorporateAnnouncementsRequest,
     ) -> Result<Vec<crate::trading::CorporateActionAnnouncement>> {
-        filter.validate()?;
         self.rest
-            .get("/corporate_actions/announcements", &filter.to_query())
+            .get("/corporate_actions/announcements", &filter.to_query()?)
             .await
     }
 
@@ -2046,10 +2027,7 @@ impl BrokerClient {
     ) -> Result<Vec<Activity>> {
         let path = format!("/accounts/activities/{}", segment(activity_type)?);
         match filter {
-            Some(filter) => {
-                filter.validate()?;
-                self.rest.get(&path, filter).await
-            }
+            Some(filter) => self.rest.get(&path, filter).await,
             None => self.rest.get(&path, &Empty).await,
         }
     }
@@ -2140,7 +2118,6 @@ impl BrokerClient {
         &self,
         request: &CreateInstantFundingRequest,
     ) -> Result<InstantFunding> {
-        request.validate()?;
         self.rest.post("/instant_funding", request).await
     }
 
@@ -2227,7 +2204,6 @@ impl BrokerClient {
         &self,
         request: &CreateInstantFundingSettlementRequest,
     ) -> Result<Settlement> {
-        request.validate()?;
         self.rest
             .post("/instant_funding/settlements", request)
             .await
@@ -2316,7 +2292,6 @@ impl BrokerClient {
         &self,
         request: &CreateJitSettlementRequest,
     ) -> Result<Settlement> {
-        request.validate()?;
         self.rest.post("/jit/settlements", request).await
     }
 
@@ -2604,7 +2579,6 @@ impl BrokerClient {
         account_id: Uuid,
         request: &CreateWithdrawalRequest,
     ) -> Result<FundingWalletTransfer> {
-        request.validate()?;
         let path = format!("/accounts/{account_id}/funding_wallet/withdrawal");
         self.rest.at_version("v1beta").post(&path, request).await
     }
@@ -2780,7 +2754,6 @@ impl BrokerClient {
         account_id: Uuid,
         request: &crate::trading::MintTokenRequest,
     ) -> Result<crate::trading::TokenizationRequest> {
-        request.validate()?;
         let path = format!("/accounts/{account_id}/tokenization/mint");
         self.rest.post(&path, request).await
     }
@@ -2858,14 +2831,14 @@ impl BrokerClient {
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if the body does not name
     /// exactly one account; see
-    /// [`TokenizationMintCallback::validate`](crate::trading::TokenizationMintCallback::validate).
+    /// [`TokenizationMintCallback`](crate::trading::TokenizationMintCallback)'s
+    /// [`Validated::validate`](crate::Validated::validate).
     /// Otherwise propagates transport, API, and decoding failures.
     pub async fn tokenization_mint_callback(
         &self,
         account_id: Uuid,
         body: &crate::trading::TokenizationMintCallback,
     ) -> Result<crate::trading::TokenizationRequest> {
-        body.validate()?;
         let path = format!("/accounts/{account_id}/tokenization/callback/mint");
         self.rest.post(&path, body).await
     }
@@ -2883,14 +2856,14 @@ impl BrokerClient {
     /// # Errors
     /// Returns [`crate::Error::InvalidRequest`] if the body does not name
     /// exactly one account; see
-    /// [`TokenizationRedeemRequest::validate`](crate::trading::TokenizationRedeemRequest::validate).
+    /// [`TokenizationRedeemRequest`](crate::trading::TokenizationRedeemRequest)'s
+    /// [`Validated::validate`](crate::Validated::validate).
     /// Otherwise propagates transport, API, and decoding failures.
     pub async fn tokenization_redeem_callback(
         &self,
         account_id: Uuid,
         body: &crate::trading::TokenizationRedeemRequest,
     ) -> Result<crate::trading::TokenizationRedeemResponse> {
-        body.validate()?;
         let path = format!("/accounts/{account_id}/tokenization/callback/redeem");
         self.rest.post(&path, body).await
     }

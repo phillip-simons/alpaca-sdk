@@ -13,8 +13,9 @@
 //!   being no way to set it on one
 //!
 //! What remains — the bracket/OCO/OTO leg requirements and the multi-leg rules —
-//! is checked in [`OrderRequest::validate`], which the client calls before
-//! sending.
+//! is checked in [`OrderRequest`]'s [`Validated`](crate::Validated) impl, which
+//! the transport calls before sending — a bound on
+//! [`RestClient`](crate::RestClient), so no route can skip it.
 //!
 //! Optional fields are skipped when absent rather than sent as null: Alpaca
 //! treats an explicit null differently from an omitted key on several routes.
@@ -30,6 +31,7 @@ use crate::trading::enums::{
     CorporateActionDateType, CorporateActionType, ExerciseStyle, OrderClass, OrderSide, OrderType,
     PositionIntent, QueryOrderStatus, TimeInForce,
 };
+use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::{ContractType, Sort};
 
@@ -95,7 +97,7 @@ pub enum Trail {
 }
 
 /// The profit-taking leg of a bracket, OCO, or OTO order.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct TakeProfitRequest {
     /// The limit price to exit a profitable trade at.
@@ -112,7 +114,7 @@ impl TakeProfitRequest {
 }
 
 /// The loss-limiting leg of a bracket, OCO, or OTO order.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct StopLossRequest {
     /// The stop price to exit a losing trade at.
@@ -140,7 +142,7 @@ impl StopLossRequest {
 }
 
 /// One leg of a multi-leg option order.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct OptionLegRequest {
     /// The option contract symbol.
@@ -196,9 +198,15 @@ impl OptionLegRequest {
 /// [`OrderRequest::trailing_stop`], or [`OrderRequest::multi_leg`], then chain
 /// the optional setters.
 ///
+/// The transport checks the leg and multi-leg rules before sending, so nothing
+/// below has to. Checking eagerly is still available — it is a trait method
+/// now, so it needs the import:
+///
 /// ```
 /// # use alpaca_sdk::trading::{OrderAmount, OrderRequest, OrderSide, TimeInForce};
 /// # use rust_decimal::Decimal;
+/// use alpaca_sdk::Validated;
+///
 /// let order = OrderRequest::market(
 ///     "AAPL",
 ///     OrderSide::Buy,
@@ -511,14 +519,16 @@ impl OrderRequest {
         self.take_profit = None;
         self
     }
+}
 
+impl Validated for OrderRequest {
     /// Checks the combinations Alpaca rejects, before the request is sent.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] when a bracket or OCO order is missing
     /// an exit, an OTO order has neither, or the multi-leg rules are violated:
     /// wrong order type, missing or duplicate legs, or a leg count outside 2 to 4.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         let invalid = |reason: String| Err(Error::InvalidRequest(reason));
 
         match self.order_class {
@@ -643,13 +653,15 @@ impl ReplaceOrderRequest {
     pub fn new() -> Self {
         Self::default()
     }
+}
 
+impl Validated for ReplaceOrderRequest {
     /// Checks that the supplied values are positive.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if `qty`, `stop_price`, or `trail` is
     /// zero or negative.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         for (name, value) in [
             ("qty", self.qty),
             ("stop_price", self.stop_price),
@@ -671,7 +683,26 @@ impl ReplaceOrderRequest {
 ///
 /// A quantity or a percentage, never both and never neither — an enum rather
 /// than two optional fields and a runtime check.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// It derives [`Validated`](crate::Validated) rather than implementing it,
+/// which is what lets [`to_query`](Self::to_query) stay infallible where
+/// [`GetCorporateAnnouncementsRequest::to_query`] cannot.
+///
+/// **That is not the same as having no rules.** The enum removes the
+/// both-or-neither rule, and nothing here checks that a percentage is in
+/// `0..=100` or that a quantity is positive — `Percentage(Decimal::from(500))`
+/// is sent as `percentage=500` and refused by Alpaca rather than here. Both
+/// predate the [`Validated`](crate::Validated) bound and are left to the server
+/// on the reasoning `CreateRecipientBankRequest::new` sets out — not linked,
+/// because this module builds without the `broker` feature.
+///
+/// Worth naming rather than leaving implied by the derive: a reader who takes
+/// the derive as proof that there is nothing to check would be wrong, and
+/// because `to_query` flattens the enum into pairs, the bound cannot tell them
+/// otherwise. That is the same shape as
+/// [`GetCorporateAnnouncementsRequest`], which does have a rule and therefore
+/// does return a `Result`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Validated)]
 #[non_exhaustive]
 pub enum ClosePositionRequest {
     /// Close this number of shares.
@@ -692,7 +723,7 @@ impl ClosePositionRequest {
 }
 
 /// Filters for listing orders.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetOrdersRequest {
     /// Which orders to return: open, closed, or all. Defaults to open.
@@ -840,7 +871,7 @@ pub struct GetAccountActivitiesRequest {
     pub page_token: Option<String>,
 }
 
-impl GetAccountActivitiesRequest {
+impl Validated for GetAccountActivitiesRequest {
     /// Rejects the one combination the reference forbids.
     ///
     /// `category` and `activity_types` cannot be sent together: "Cannot be used
@@ -849,7 +880,7 @@ impl GetAccountActivitiesRequest {
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if both are set.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         if self.category.is_some() && self.activity_types.is_some() {
             return Err(Error::InvalidRequest(
                 "activity_types and category cannot be combined".to_owned(),
@@ -865,7 +896,9 @@ impl GetAccountActivitiesRequest {
 /// own default. It is an `Option` for that reason: a plain `bool` would have
 /// serialized `?nested=false` from a default request, which is a different
 /// thing to ask for than not asking.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated,
+)]
 #[non_exhaustive]
 pub struct GetOrderByIdRequest {
     /// Whether to roll multi-leg orders up under their parent's `legs`.
@@ -874,7 +907,7 @@ pub struct GetOrderByIdRequest {
 }
 
 /// Filters for listing assets.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetAssetsRequest {
     /// Only assets with this status.
@@ -893,7 +926,7 @@ pub struct GetAssetsRequest {
 }
 
 /// Filters for the market calendar.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetCalendarRequest {
     /// The first day to return.
@@ -905,7 +938,7 @@ pub struct GetCalendarRequest {
 }
 
 /// Filters for portfolio history.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetPortfolioHistoryRequest {
     /// Duration of the data, as a number and unit such as `1D`, `1W`, `1M`, `1A`.
@@ -943,7 +976,7 @@ pub struct GetPortfolioHistoryRequest {
 }
 
 /// A new watchlist.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct CreateWatchlistRequest {
     /// The watchlist name, up to 64 characters.
@@ -965,9 +998,10 @@ impl CreateWatchlistRequest {
 
 /// Changes to apply to a watchlist.
 ///
-/// At least one field must be set; [`UpdateWatchlistRequest::validate`] checks
-/// it, because a `PATCH` with an empty body changes nothing and Alpaca's answer
-/// to one is not documented.
+/// At least one field must be set; [`UpdateWatchlistRequest`]'s
+/// [`Validated::validate`](crate::Validated::validate) checks it, because a
+/// `PATCH` with an empty body changes nothing and Alpaca's answer to one is not
+/// documented.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct UpdateWatchlistRequest {
@@ -987,12 +1021,14 @@ impl UpdateWatchlistRequest {
     pub fn new() -> Self {
         Self::default()
     }
+}
 
+impl Validated for UpdateWatchlistRequest {
     /// Checks that at least one field is set.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if neither `name` nor `symbols` is set.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         if self.name.is_none() && self.symbols.is_none() {
             return Err(Error::InvalidRequest(
                 "one of name or symbols must be defined".to_owned(),
@@ -1046,8 +1082,24 @@ impl GetCorporateAnnouncementsRequest {
     /// than comma-separated, which is what this route expects. It cannot go
     /// through the normal query serializer at all: `serde_urlencoded` has no
     /// representation for a sequence and fails the whole request.
-    #[must_use]
-    pub fn to_query(&self) -> Vec<(&'static str, String)> {
+    ///
+    /// # Why this one returns a `Result`
+    ///
+    /// Flattening a request into pairs is the one way past the transport's
+    /// [`Validated`](crate::Validated) bound: what reaches
+    /// [`RestClient::get`](crate::RestClient::get) is a `Vec<(&str, String)>`,
+    /// which has no rules of its own, so the 90-day window would never be
+    /// checked. Validating here closes that, and returning a `Result` is what
+    /// makes it impossible to skip.
+    ///
+    /// [`ClosePositionRequest::to_query`] stays infallible for the same reason
+    /// inverted — it has no rules, and a `Result` there would be noise.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`] if the window exceeds 90 days.
+    pub fn to_query(&self) -> Result<Vec<(&'static str, String)>> {
+        self.validate()?;
+
         let mut query: Vec<(&'static str, String)> = self
             .ca_types
             .iter()
@@ -1067,14 +1119,16 @@ impl GetCorporateAnnouncementsRequest {
             query.push(("date_type", date_type.to_string()));
         }
 
-        query
+        Ok(query)
     }
+}
 
+impl Validated for GetCorporateAnnouncementsRequest {
     /// Checks the range Alpaca accepts.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if the window exceeds 90 days.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         if (self.until - self.since).num_days() > 90 {
             return Err(Error::InvalidRequest(
                 "the date range between since and until must be no more than 90 days".to_owned(),
@@ -1085,7 +1139,7 @@ impl GetCorporateAnnouncementsRequest {
 }
 
 /// Filters for listing option contracts.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetOptionContractsRequest {
     /// Only contracts on these underlying symbols.

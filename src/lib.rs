@@ -116,6 +116,10 @@ pub use rust_decimal::Decimal;
 pub use auth::Credentials;
 pub use config::{BaseUrl, RetryBackoff, RetryConfig};
 pub use error::{ApiError, Error, Result, TransportError};
-pub use rest::{Replay, RestClient, RestConfig};
+pub use rest::{Raw, Replay, RestClient, RestConfig};
 #[cfg(feature = "_sse")]
 pub use sse::{Event as SseEvent, EventStreamRequest};
+// Through the module, not `types::Validated`, which also names the
+// crate-internal derive — see that re-export in `types/mod.rs` for why the
+// shorter path gives a downstream caller a worse error.
+pub use types::validated::Validated;

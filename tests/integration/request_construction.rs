@@ -13,6 +13,7 @@
 
 #![cfg(all(feature = "broker", feature = "trading"))]
 
+use alpaca_sdk::Validated;
 use alpaca_sdk::broker::{
     BankAddress, CIPDocument, CIPIdentity, CIPInfo, CIPKycInfo, CIPPhoto, CIPWatchlist,
     CalendarSubType, CreateBankRequest, CreateWithdrawalRequest, DriftBandSubType, IdentifierType,

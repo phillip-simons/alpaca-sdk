@@ -10,11 +10,12 @@
 //! `403 Subscription does not permit querying logos`, so logos are a separate
 //! entitlement rather than part of a data plan.
 
+use crate::types::Validated;
 use crate::types::setters::Setters;
 use serde::{Deserialize, Serialize};
 
 /// A request for a company logo.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct LogoRequest {
     /// Whether to answer with a generated placeholder when no logo exists.

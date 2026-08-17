@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
+use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
@@ -163,7 +164,7 @@ pub struct LocateQuotes {
 /// The date window filters on the *locate trading date*, which rolls at 20:00
 /// `America/New_York` rather than at midnight UTC, and `end` is exclusive where
 /// `start` is inclusive.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetLocatesRequest {
     /// Only locates in this state.
@@ -213,7 +214,7 @@ impl GetLocatesRequest {
 }
 
 /// A request for locate quotes.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetLocateQuotesRequest {
     /// The symbols to quote, sent as one comma-separated parameter.
@@ -262,7 +263,9 @@ impl CreateLocateRequest {
             all_or_none: None,
         }
     }
+}
 
+impl Validated for CreateLocateRequest {
     /// The coherence checks a request cannot pass without contradicting itself.
     ///
     /// Alpaca decides everything else — how many shares are available, what a
@@ -272,7 +275,7 @@ impl CreateLocateRequest {
     /// # Errors
     /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if `qty`
     /// is not positive, or `limit_price` is negative.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         if self.qty <= 0 {
             return Err(Error::InvalidRequest(
                 "qty must be greater than zero".to_owned(),

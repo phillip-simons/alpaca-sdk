@@ -8,6 +8,7 @@
 #![cfg(feature = "broker")]
 
 use crate::common::{broker_client as client, fixture};
+use alpaca_sdk::Validated;
 use alpaca_sdk::broker::{CreateOptionExerciseRequest, Order, OrderRequest};
 use alpaca_sdk::trading::{
     ClosePositionRequest, GetOrderByIdRequest, GetOrdersRequest, OrderAmount, OrderSide,

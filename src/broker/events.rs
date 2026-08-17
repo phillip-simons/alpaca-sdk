@@ -14,6 +14,7 @@
 //! payloads exist to model these from, so [`BrokerEvent::json`] deserializes it
 //! into a type of the caller's choosing rather than into a guess.
 
+use crate::types::Validated;
 use crate::types::setters::Setters;
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -42,7 +43,7 @@ pub type BrokerEvent = crate::sse::Event;
 ///
 /// The derived `Serialize` uses the v2 spelling. The client does not use it —
 /// it builds the query itself, because it knows which stream it is calling.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetEventsRequest {
     /// Resume after this event id.

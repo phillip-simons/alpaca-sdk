@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
+use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
@@ -178,13 +179,15 @@ impl MintTokenRequest {
             wallet_address: wallet_address.into(),
         }
     }
+}
 
+impl Validated for MintTokenRequest {
     /// The one check a request cannot pass without contradicting itself.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if `qty`
     /// is not positive.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         if self.qty <= Decimal::ZERO {
             return Err(Error::InvalidRequest(
                 "qty must be greater than zero".to_owned(),
@@ -195,7 +198,7 @@ impl MintTokenRequest {
 }
 
 /// Filters for listing tokenization requests.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetTokenizationRequestsRequest {
     /// Only mints, or only redemptions.
@@ -304,7 +307,9 @@ impl TokenizationMintCallback {
             wallet_address: None,
         }
     }
+}
 
+impl Validated for TokenizationMintCallback {
     /// Checks that the body names exactly one account.
     ///
     /// [`new`](Self::new) sets neither identifier, because the schema does not
@@ -316,7 +321,7 @@ impl TokenizationMintCallback {
     /// neither `client_account_id` nor `client_external_account_id` is set, or
     /// if both are. The deprecated [`client_id`](Self::client_id) counts as
     /// `client_external_account_id`, which is what Alpaca still accepts it as.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         exactly_one_account(
             self.client_account_id.is_some(),
             self.client_external_account_id.is_some() || self.client_id.is_some(),
@@ -405,7 +410,9 @@ impl TokenizationRedeemRequest {
             client_id: None,
         }
     }
+}
 
+impl Validated for TokenizationRedeemRequest {
     /// Checks that the body names exactly one account.
     ///
     /// [`new`](Self::new) sets neither identifier, because the schema does not
@@ -418,7 +425,7 @@ impl TokenizationRedeemRequest {
     /// neither `client_account_id` nor `client_external_account_id` is set, or
     /// if both are. The deprecated [`client_id`](Self::client_id) counts as
     /// `client_external_account_id`, which is what Alpaca still accepts it as.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         exactly_one_account(
             self.client_account_id.is_some(),
             self.client_external_account_id.is_some() || self.client_id.is_some(),
@@ -480,7 +487,7 @@ pub struct TokenizationRedeemResponse {
 }
 
 /// A lookup by the caller's own request id.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct ByClientRequestId {
     /// The identifier the caller sent with the request.

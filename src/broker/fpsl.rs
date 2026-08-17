@@ -14,6 +14,7 @@
 //!
 //! [`Decimal`]: rust_decimal::Decimal
 
+use crate::types::Validated;
 use crate::types::setters::Setters;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
@@ -115,7 +116,7 @@ pub struct FpslAnalytics {
 }
 
 /// Filters for listing loans.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetFpslLoansRequest {
     /// Only loans from this account.
@@ -161,7 +162,7 @@ impl GetFpslLoansRequest {
 }
 
 /// A window over one account's lending analytics.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetFpslAnalyticsRequest {
     /// The first day.

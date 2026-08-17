@@ -10,6 +10,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
@@ -131,7 +132,7 @@ pub struct OptionsApprovalsPage {
 }
 
 /// A request for a given options level.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct RequestOptionsApprovalRequest {
     /// The level to ask for.
@@ -157,7 +158,7 @@ impl RequestOptionsApprovalRequest {
 }
 
 /// Filters for listing options approval requests.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetOptionsApprovalsRequest {
     /// Only this account.
@@ -199,7 +200,7 @@ pub struct OnfidoToken {
 }
 
 /// Filters for an Onfido SDK token.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetOnfidoTokenRequest {
     /// The origin the SDK will run on, which Onfido checks.
@@ -213,7 +214,7 @@ pub struct GetOnfidoTokenRequest {
 }
 
 /// What Onfido's SDK concluded, reported back to Alpaca.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct UpdateOnfidoOutcomeRequest {
     /// The token the verification ran under.
@@ -314,7 +315,7 @@ pub struct TradingLimits {
 }
 
 /// A hypothetical order, to be costed rather than placed.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct EstimateOrderRequest {
     /// The symbol.

@@ -1,0 +1,5 @@
+error: `Validated` takes no options: a type either has no rules, which is what this derive says, or it has rules, which are hand-written as `impl Validated for T`. Deriving it and implementing it are conflicting implementations, so the two cannot drift apart — an attribute switching between them could be forgotten, which is the failure the trait exists to remove
+  --> tests/compile_fail/validated_with_an_option_fails.rs:21:1
+   |
+21 | #[validated(nested)]
+   | ^^^^^^^^^^^^^^^^^^^^

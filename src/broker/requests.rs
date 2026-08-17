@@ -26,6 +26,7 @@ use crate::trading::ActivityType;
 use crate::trading::{AccountStatus, AssetClass};
 use crate::types::Sort;
 use crate::types::SupportedCurrencies;
+use crate::types::Validated;
 use crate::types::setters::Setters;
 
 /// An order submitted on behalf of a brokerage account.
@@ -63,7 +64,9 @@ impl OrderRequest {
             currency: None,
         }
     }
+}
 
+impl Validated for OrderRequest {
     /// Checks the rules Alpaca enforces on the order before it is sent.
     ///
     /// Local currency orders are **not** restricted to market orders here, on
@@ -78,7 +81,7 @@ impl OrderRequest {
     /// Returns [`Error::InvalidRequest`] if the wrapped order is invalid.
     ///
     /// [lct]: https://docs.alpaca.markets/us/docs/local-currency-trading-lct
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         self.order.validate()
     }
 }
@@ -153,7 +156,9 @@ impl CreateAccountRequest {
             primary_account_holder_id: None,
         }
     }
+}
 
+impl Validated for CreateAccountRequest {
     /// Checks the sub-fields Alpaca requires on a new account.
     ///
     /// The required set is [the reference's][createaccount]. It is worth saying
@@ -165,7 +170,7 @@ impl CreateAccountRequest {
     /// Returns [`Error::InvalidRequest`] naming the first missing field.
     ///
     /// [createaccount]: https://docs.alpaca.markets/us/reference/createaccount
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         fn require(present: bool, field: &str) -> Result<()> {
             if present {
                 Ok(())
@@ -227,6 +232,16 @@ impl CreateAccountRequest {
             require(agreement.ip_address.is_some(), "agreements[].ip_address")?;
         }
 
+        // The documents submitted with the application are the same
+        // `UploadDocument` the upload route takes, and they carry the same
+        // rules — so a W-8BEN sent as a general document has to be refused
+        // here for the same reason it is refused there. It was not: this
+        // request could put on the wire the exact value
+        // `upload_documents_to_account` rejects.
+        //
+        // The slice impl of `Validated` does the walking.
+        self.documents.as_deref().unwrap_or_default().validate()?;
+
         Ok(())
     }
 }
@@ -235,7 +250,7 @@ impl CreateAccountRequest {
 ///
 /// The response [`Contact`] requires an email address; an update that only
 /// changes a postal code should not have to restate one.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct UpdatableContact {
     /// Primary email address.
@@ -282,7 +297,7 @@ pub struct UpdatableContact {
 /// `investment_experience_with_options`, `investment_experience_with_stocks`.
 ///
 /// [patchaccount]: https://docs.alpaca.markets/us/reference/patchaccount
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct UpdatableIdentity {
     /// Given name.
@@ -392,7 +407,7 @@ pub struct UpdatableIdentity {
 /// — because they belong to broker features this crate has not modelled yet.
 ///
 /// [patchaccount]: https://docs.alpaca.markets/us/reference/patchaccount
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct UpdateAccountRequest {
     /// New contact details.
@@ -418,7 +433,7 @@ pub struct UpdateAccountRequest {
 }
 
 /// Filters for listing accounts.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct ListAccountsRequest {
     /// Space-delimited tokens, matched against the account number, phone
@@ -467,7 +482,7 @@ pub struct ListAccountsRequest {
 /// Alpaca accepts two shapes here: bank details entered by hand, or a Plaid
 /// processor token. They are one Rust type rather than two so the client method
 /// takes one parameter and the choice is checked at compile time.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Validated)]
 #[serde(untagged)]
 #[non_exhaustive]
 pub enum CreateACHRelationshipRequest {
@@ -608,7 +623,9 @@ impl CreateBankRequest {
             street_address: Some(address.street_address),
         }
     }
+}
 
+impl Validated for CreateBankRequest {
     /// Checks the address rules Alpaca documents for bank connections.
     ///
     /// Only one direction is enforced. [The reference][createrecipientbank]
@@ -623,7 +640,7 @@ impl CreateBankRequest {
     /// address field.
     ///
     /// [createrecipientbank]: https://docs.alpaca.markets/us/reference/createrecipientbank
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         let address = [
             ("country", &self.country),
             ("state_province", &self.state_province),
@@ -686,12 +703,12 @@ pub enum CreateTransferRequest {
     Wire(CreateBankTransferRequest),
 }
 
-impl CreateTransferRequest {
+impl Validated for CreateTransferRequest {
     /// Checks the amount is positive.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if the amount is zero or negative.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         let amount = match self {
             Self::Ach(request) => request.amount,
             Self::Wire(request) => request.amount,
@@ -706,7 +723,7 @@ impl CreateTransferRequest {
 }
 
 /// Money moving over an ACH relationship.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct CreateACHTransferRequest {
     /// How much to move. Fees are deducted from this.
@@ -746,7 +763,7 @@ impl CreateACHTransferRequest {
 }
 
 /// Money moving by wire to a connected bank.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct CreateBankTransferRequest {
     /// How much to move. Fees are deducted from this.
@@ -791,7 +808,7 @@ impl CreateBankTransferRequest {
 }
 
 /// Filters for listing an account's transfers.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetTransfersRequest {
     /// Only transfers moving this way.
@@ -911,14 +928,16 @@ impl CreateJournalRequest {
         request.qty = Some(qty);
         request
     }
+}
 
+impl Validated for CreateJournalRequest {
     /// Checks that the fields set match the entry type.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if a cash journal carries a symbol or
     /// quantity or no amount, or a security journal carries an amount or is
     /// missing its symbol or quantity.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         match self.entry_type {
             JournalEntryType::Cash => {
                 if self.symbol.is_some() || self.qty.is_some() {
@@ -953,7 +972,7 @@ impl CreateJournalRequest {
 }
 
 /// One destination in a batch journal.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct BatchJournalRequestEntry {
     /// The account to fund.
@@ -1005,7 +1024,7 @@ impl BatchJournalRequestEntry {
 }
 
 /// One source in a reverse batch journal.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct ReverseBatchJournalRequestEntry {
     /// The account to draw from.
@@ -1060,7 +1079,7 @@ impl ReverseBatchJournalRequestEntry {
 ///
 /// Only cash batch journals are supported, so `entry_type` is always
 /// [`JournalEntryType::Cash`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct CreateBatchJournalRequest {
     /// Always [`JournalEntryType::Cash`].
@@ -1087,7 +1106,7 @@ impl CreateBatchJournalRequest {
 ///
 /// Only cash reverse batch journals are supported, so `entry_type` is always
 /// [`JournalEntryType::Cash`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct CreateReverseBatchJournalRequest {
     /// Always [`JournalEntryType::Cash`].
@@ -1111,7 +1130,7 @@ impl CreateReverseBatchJournalRequest {
 }
 
 /// Filters for listing journals.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetJournalsRequest {
     /// Only journals created on or after this date.
@@ -1149,12 +1168,12 @@ pub struct GetTradeDocumentsRequest {
     pub document_type: Option<TradeDocumentType>,
 }
 
-impl GetTradeDocumentsRequest {
+impl Validated for GetTradeDocumentsRequest {
     /// Checks the date window is the right way round.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if `start` is after `end`.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         if let (Some(start), Some(end)) = (self.start, self.end)
             && start > end
         {
@@ -1181,13 +1200,13 @@ pub enum UploadDocument {
     W8Ben(UploadW8BenDocumentRequest),
 }
 
-impl UploadDocument {
+impl Validated for UploadDocument {
     /// Checks the document is internally consistent.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if a general upload claims to be a
     /// W-8BEN, or a W-8BEN upload sets neither or both of its content fields.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         match self {
             Self::Document(document) => document.validate(),
             Self::W8Ben(document) => document.validate(),
@@ -1225,13 +1244,15 @@ impl UploadDocumentRequest {
             mime_type,
         }
     }
+}
 
+impl Validated for UploadDocumentRequest {
     /// Checks this is not a W-8BEN in disguise.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if the type or sub type says W-8BEN;
     /// those go through [`UploadW8BenDocumentRequest`].
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         if self.document_type == DocumentType::W8ben
             || self.document_sub_type == Some(UploadDocumentSubType::FormW8Ben)
         {
@@ -1290,7 +1311,9 @@ impl UploadW8BenDocumentRequest {
             mime_type: UploadDocumentMimeType::Json,
         }
     }
+}
 
+impl Validated for UploadW8BenDocumentRequest {
     /// Checks exactly one content form is set, and that the pieces agree.
     ///
     /// # Errors
@@ -1298,7 +1321,7 @@ impl UploadW8BenDocumentRequest {
     /// `content_data` are set, if the type or sub type has been changed, if
     /// `content_data` is paired with a mime type other than JSON, or if the
     /// form itself fails [`W8BenDocument::validate`].
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         match (&self.content, &self.content_data) {
             (None, None) => {
                 return Err(Error::InvalidRequest(
@@ -1368,13 +1391,15 @@ impl CreatePortfolioRequest {
             rebalance_conditions: None,
         }
     }
+}
 
+impl Validated for CreatePortfolioRequest {
     /// Checks every weight.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if any weight is not positive or an
     /// asset weight names no symbol.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         for weight in &self.weights {
             weight.validate()?;
         }
@@ -1410,13 +1435,13 @@ pub struct UpdatePortfolioRequest {
     pub rebalance_conditions: Option<Vec<RebalancingCondition>>,
 }
 
-impl UpdatePortfolioRequest {
+impl Validated for UpdatePortfolioRequest {
     /// Checks every weight the update sets.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if any weight is not positive or an
     /// asset weight names no symbol.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         for weight in self.weights.iter().flatten() {
             weight.validate()?;
         }
@@ -1425,7 +1450,7 @@ impl UpdatePortfolioRequest {
 }
 
 /// Filters for listing portfolios.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetPortfoliosRequest {
     /// Only portfolios with this name.
@@ -1449,7 +1474,7 @@ pub struct GetPortfoliosRequest {
 }
 
 /// The body that subscribes an account to a portfolio.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct CreateSubscriptionRequest {
     /// The account to rebalance.
@@ -1470,7 +1495,7 @@ impl CreateSubscriptionRequest {
 }
 
 /// Filters for listing subscriptions.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetSubscriptionsRequest {
     /// Only this account's subscription.
@@ -1511,13 +1536,15 @@ impl CreateRunRequest {
             weights,
         }
     }
+}
 
+impl Validated for CreateRunRequest {
     /// Checks every weight.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`] if any weight is not positive or an
     /// asset weight names no symbol.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         for weight in &self.weights {
             weight.validate()?;
         }
@@ -1526,7 +1553,7 @@ impl CreateRunRequest {
 }
 
 /// Filters for listing rebalancing runs.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetRunsRequest {
     /// Only this account's runs.
@@ -1614,7 +1641,7 @@ pub struct GetAccountActivitiesRequest {
     pub page_token: Option<String>,
 }
 
-impl GetAccountActivitiesRequest {
+impl Validated for GetAccountActivitiesRequest {
     /// Rejects the one combination the reference forbids.
     ///
     /// `category` and `activity_types` cannot be sent together: "Cannot be used
@@ -1630,7 +1657,7 @@ impl GetAccountActivitiesRequest {
     /// # Errors
     /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if both
     /// `category` and `activity_types` are set.
-    pub fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         if self.category.is_some() && self.activity_types.is_some() {
             return Err(crate::Error::InvalidRequest(
                 "category cannot be combined with activity_types".to_owned(),
@@ -1644,7 +1671,7 @@ impl GetAccountActivitiesRequest {
 ///
 /// Both fields are optional and unset ones are dropped, so an exercise with no
 /// commission posts `{}`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct CreateOptionExerciseRequest {
     /// The commission to charge the end user, in dollars.
@@ -1662,5 +1689,218 @@ impl CreateOptionExerciseRequest {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every parent that carries a [`W8BenDocument`] or a [`Weight`] must call
+    /// that type's inherent `validate` from its own [`Validated`] impl.
+    ///
+    /// This is the whole basis of the exemption those two types have. Neither
+    /// derives `Validated` and neither implements it, deliberately: both carry
+    /// real rules and are only ever sent nested, so a no-op impl would let one
+    /// be handed to the transport and checked by nothing.
+    /// `scripts/validated.py` records that decision and fails if either stops
+    /// declaring the `validate` it is about — but no script can check that the
+    /// *parent* still calls it, and until these tests existed nothing did.
+    /// Each of the delegations below could be deleted with the whole suite
+    /// still green.
+    ///
+    /// A nested type's rules are only worth having if the enclosing request
+    /// asks for them, so the assertion is on the parent, not on the child.
+    mod nested_rules_reach_their_parent {
+        use super::*;
+
+        /// A W-8BEN naming none of `foreign_tax_id`, `tax_id_ssn` or
+        /// `ftin_not_required` — the one combination `W8BenDocument::validate`
+        /// refuses. Every required field is filled so that the only thing wrong
+        /// with it is the thing under test.
+        fn unidentified_w8ben() -> crate::broker::W8BenDocument {
+            let mut document = crate::broker::W8BenDocument {
+                country_citizen: "DE".to_owned(),
+                date: "2024-01-01".parse().unwrap(),
+                date_of_birth: "1980-01-01".parse().unwrap(),
+                full_name: "A Person".to_owned(),
+                ip_address: "203.0.113.1".parse().unwrap(),
+                permanent_address_city_state: "Berlin".to_owned(),
+                permanent_address_country: "DE".to_owned(),
+                permanent_address_street: "1 Some Street".to_owned(),
+                revision: "October 2021".to_owned(),
+                signer_full_name: "A Person".to_owned(),
+                timestamp: "2024-01-01T00:00:00Z".parse().unwrap(),
+                additional_conditions: None,
+                foreign_tax_id: None,
+                ftin_not_required: None,
+                income_type: None,
+                mailing_address_city_state: None,
+                mailing_address_country: None,
+                mailing_address_street: None,
+                paragraph_number: None,
+                percent_rate_withholding: None,
+                reference_number: None,
+                residency: None,
+                tax_id_ssn: None,
+            };
+            // Belt and braces: the three fields the rule is about are already
+            // `None` above, and saying so here means a future field addition
+            // that defaults one of them cannot quietly make this document valid.
+            document.foreign_tax_id = None;
+            document.tax_id_ssn = None;
+            document.ftin_not_required = None;
+            document
+        }
+
+        /// An asset weight naming no symbol, which `Weight::validate` refuses.
+        /// Built through the field rather than `Weight::asset`, because that
+        /// constructor cannot produce this state — which is the point of it.
+        fn symbolless_asset_weight() -> crate::broker::Weight {
+            let mut weight = crate::broker::Weight::asset("AAPL", Decimal::from(100));
+            weight.symbol = None;
+            weight
+        }
+
+        #[test]
+        fn the_w8ben_upload_asks_its_document() {
+            let request = UploadW8BenDocumentRequest::from_fields(unidentified_w8ben());
+            assert!(request.validate().is_err());
+        }
+
+        /// And through the enum the upload route actually takes, which is one
+        /// delegation further out.
+        ///
+        /// Both arms, because they are separate delegations: covering only the
+        /// `W8Ben` one leaves `Document` free to return `Ok(())` with the suite
+        /// still green, and a general upload claiming to be a W-8BEN is exactly
+        /// what `UploadDocumentRequest`'s rule exists to refuse.
+        #[test]
+        fn the_upload_enum_asks_the_w8ben_variant_it_holds() {
+            let document = UploadDocument::W8Ben(UploadW8BenDocumentRequest::from_fields(
+                unidentified_w8ben(),
+            ));
+            assert!(document.validate().is_err());
+        }
+
+        /// An account application with every field the reference requires, so
+        /// that the only thing left to refuse is whatever is added to it.
+        fn otherwise_valid_application() -> CreateAccountRequest {
+            let contact = Contact {
+                email_address: "someone@example.com".to_owned(),
+                street_address: vec!["1 Some Street".to_owned()],
+                city: Some("Berlin".to_owned()),
+                ..Default::default()
+            };
+
+            let identity = Identity {
+                given_name: "A".to_owned(),
+                family_name: "Person".to_owned(),
+                date_of_birth: Some("1980-01-01".parse().unwrap()),
+                tax_id_type: Some(TaxIdType::UsaSsn),
+                country_of_tax_residence: Some("USA".to_owned()),
+                funding_source: vec![FundingSource::EmploymentIncome],
+                ..Default::default()
+            };
+
+            let disclosures = Disclosures {
+                is_control_person: Some(false),
+                is_affiliated_exchange_or_finra: Some(false),
+                is_politically_exposed: Some(false),
+                immediate_family_exposed: Some(false),
+                ..Default::default()
+            };
+
+            let mut agreement = Agreement::new(
+                crate::broker::AgreementType::Customer,
+                "2024-01-01T00:00:00Z".parse().unwrap(),
+            );
+            agreement.ip_address = Some("203.0.113.1".to_owned());
+
+            CreateAccountRequest::new(contact, identity, disclosures, vec![agreement])
+        }
+
+        /// The application itself has to be sound, or this test would pass on
+        /// the wrong error.
+        #[test]
+        fn the_baseline_application_is_accepted() {
+            otherwise_valid_application().validate().unwrap();
+        }
+
+        /// The same documents, reached through the field
+        /// `CreateAccountRequest` carries them in. This was the live gap:
+        /// `create_account` would send a W-8BEN disguised as a general document
+        /// — the exact value `upload_documents_to_account` refuses — because
+        /// the parent never asked.
+        #[test]
+        fn creating_an_account_asks_the_documents_it_carries() {
+            let mut request = otherwise_valid_application();
+            request.documents = Some(vec![UploadDocument::Document(UploadDocumentRequest::new(
+                DocumentType::W8ben,
+                "QQ==",
+                UploadDocumentMimeType::Pdf,
+            ))]);
+
+            let error = request.validate().unwrap_err();
+            assert!(
+                format!("{error}").contains("UploadW8BenDocumentRequest"),
+                "the document's own rule should be what fires, got: {error}"
+            );
+        }
+
+        #[test]
+        fn the_upload_enum_asks_the_document_variant_it_holds() {
+            let document = UploadDocument::Document(UploadDocumentRequest::new(
+                DocumentType::W8ben,
+                "QQ==",
+                UploadDocumentMimeType::Pdf,
+            ));
+            assert!(document.validate().is_err());
+        }
+
+        #[test]
+        fn creating_a_portfolio_asks_every_weight() {
+            let request = CreatePortfolioRequest::new(
+                "Growth",
+                "Mostly equities",
+                vec![symbolless_asset_weight()],
+                7,
+            );
+            assert!(request.validate().is_err());
+        }
+
+        #[test]
+        fn updating_a_portfolio_asks_every_weight() {
+            let request =
+                UpdatePortfolioRequest::default().weights(vec![symbolless_asset_weight()]);
+            assert!(request.validate().is_err());
+        }
+
+        #[test]
+        fn creating_a_run_asks_every_weight() {
+            let request = CreateRunRequest::new(
+                Uuid::nil(),
+                RunType::FullRebalance,
+                vec![symbolless_asset_weight()],
+            );
+            assert!(request.validate().is_err());
+        }
+
+        /// The broker's `OrderRequest` is a thin wrapper around the trading
+        /// one, and its `Validated` impl is a single delegating line. Deleting
+        /// it left every order route unchecked with the suite still green.
+        #[test]
+        fn the_broker_order_wrapper_asks_the_order_it_wraps() {
+            let mut order = crate::trading::OrderRequest::market(
+                "AAPL",
+                crate::trading::OrderSide::Buy,
+                crate::trading::OrderAmount::Qty(Decimal::from(1)),
+                crate::trading::TimeInForce::Day,
+            );
+            // A bracket order with neither exit leg.
+            order.order_class = Some(crate::trading::OrderClass::Bracket);
+
+            assert!(OrderRequest::new(order).validate().is_err());
+        }
     }
 }

@@ -127,11 +127,12 @@ doing when it found it.
    spec says what exists; the reference says what is still current.
 3. Add a test. If you have a real captured payload, add it under `fixtures/`
    and parse it — a fixture nothing reads proves nothing.
-4. Re-run `just parameters`, `just setters` and `just enums-drift` if you
-   touched a request struct or a wire enum. The first says whether the crate can
-   send a documented parameter at all, the second whether a caller can set it
-   without an assignment, the third whether a wire enum still matches its
-   schema.
+4. Re-run `just parameters`, `just setters`, `just validated` and
+   `just enums-drift` if you touched a request struct or a wire enum. The first
+   says whether the crate can send a documented parameter at all, the second
+   whether a caller can set it without an assignment, the third whether the
+   request's own rules can still be skipped, the fourth whether a wire enum
+   still matches its schema.
 
 ## Conventions worth knowing
 
@@ -216,7 +217,54 @@ doing when it found it.
   `flatten` of *every* wrapper, including any whose module cannot reach the
   helper.
 
-  The derive lives in `macros/`, a second published crate, because a procedural
+  **Every request type also implements `Validated`**, and there are exactly two
+  ways to do it. A type with no rules adds `Validated` to its derive list; a
+  type with rules writes `impl Validated for T { fn validate(&self) … }` by
+  hand. Doing both is `E0119`, and doing neither is a compile error at any call
+  site that sends the type. There are three such places, and each calls
+  `validate` itself so no route has to:
+
+  - `RestClient`, on every body and every query, before the request is built.
+  - `sse::subscribe`, on every event stream filter, before it is flattened into
+    query pairs.
+  - `get_marketdata`, on every market data request, before it is flattened into
+    a parameter map. This one is easy to forget when adding a data route: what
+    reaches `RestClient` on that surface is a `Raw`-wrapped map, so the
+    transport's own bound never sees that surface's request types at all.
+
+  The compiler cannot see a request type that nothing sends *yet* — that one is
+  the gate script's, below.
+
+  That bound replaced roughly thirty hand-written `request.validate()?` lines,
+  each of which a new route could silently omit. Do not add one back: validation
+  happens once, in the transport, before a socket is opened.
+
+  There is deliberately no `#[validated(…)]` attribute. An attribute switching
+  the derive between "no rules" and "defer to a hand-written body" would
+  recreate the failure exactly one level up — write the validator, forget the
+  attribute, and it never runs while everything still compiles. Coherence cannot
+  be forgotten.
+
+  `just validated` covers the four cases the bound cannot: a request type
+  nothing sends yet; a type that both derives and implements; a type that
+  derives the no-op while holding a field whose type *does* have rules, so the
+  transport asks the parent and the parent asks nobody; and a type with rules
+  whose `to_query` flattens it into query pairs — which satisfy the bound and
+  carry no rules of their own. That last one is why the gate exists;
+  `GetCorporateAnnouncementsRequest` was in exactly that shape, with a 90-day
+  window checked by a `validate` the transport would never have reached. A type
+  that hand-implements `Validated` must therefore both return a `Result` from
+  `to_query` and call `self.validate()?` inside it. The signature alone is not
+  the rule — `Ok(query)` satisfies it and asks nothing — and the gate checks for
+  both.
+
+  Two types implement neither half on purpose — `W8BenDocument` and `Weight`.
+  Both carry real rules, both are only ever sent nested inside a parent that
+  calls them, and deriving the no-op would let one be passed to the transport
+  directly and checked by nothing. `scripts/validated.py` records the exemption
+  and fails if either stops declaring the `validate` it is about.
+
+  Both derives live in `macros/`, a second published crate, because a procedural
   macro cannot live in the crate that uses it. See `RELEASING.md` — the two
   publish together.
 

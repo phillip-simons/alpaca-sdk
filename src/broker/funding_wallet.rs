@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::types::SupportedCurrencies;
+use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
@@ -308,7 +309,7 @@ pub struct RecipientBank {
 }
 
 /// A request to open funding wallets for several accounts at once.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct BatchCreateFundingWalletsRequest {
     /// The accounts to open wallets for.
@@ -328,7 +329,7 @@ impl BatchCreateFundingWalletsRequest {
 }
 
 /// Filters for an account's funding details.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetFundingDetailsRequest {
     /// Only details for this rail.
@@ -340,7 +341,7 @@ pub struct GetFundingDetailsRequest {
 }
 
 /// A request to register a bank a withdrawal may be sent to.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct CreateRecipientBankRequest {
     /// The account number.
@@ -399,9 +400,9 @@ impl CreateRecipientBankRequest {
     /// Alpaca's business: the reference marks all three optional, and enforcing
     /// a combination here would refuse requests it accepts. That is the rule
     /// throughout this crate — a documented constraint is checked locally, an
-    /// undocumented one is left to the server — and the same reasoning
-    /// [`CreateBankRequest::validate`](crate::broker::CreateBankRequest::validate)
-    /// applies to international bank addresses.
+    /// undocumented one is left to the server — and the same reasoning behind
+    /// [`CreateBankRequest`](crate::broker::CreateBankRequest)'s
+    /// [`Validated::validate`] applies to international bank addresses.
     #[must_use]
     pub fn new(
         account_number: impl Into<String>,
@@ -473,13 +474,15 @@ impl CreateWithdrawalRequest {
             payment_type: None,
         }
     }
+}
 
+impl Validated for CreateWithdrawalRequest {
     /// The one check a withdrawal cannot pass without contradicting itself.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if the
     /// amount is set and not positive.
-    pub fn validate(&self) -> crate::Result<()> {
+    fn validate(&self) -> crate::Result<()> {
         if self
             .usd_amount
             .is_some_and(|amount| amount <= Decimal::ZERO)
@@ -493,7 +496,7 @@ impl CreateWithdrawalRequest {
 }
 
 /// A sandbox-only deposit, for testing the funding path end to end.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct DemoFundingRequest {
     /// How much to deposit.

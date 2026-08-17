@@ -25,6 +25,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::types::Validated;
 use crate::types::wire::wire_enum;
 
 wire_enum! {
@@ -126,7 +127,7 @@ impl<'a> IntoIterator for &'a Codes {
 }
 
 /// The `tape` parameter, which the stock condition route requires.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Validated)]
 pub(crate) struct TapeQuery {
     pub tape: Tape,
 }

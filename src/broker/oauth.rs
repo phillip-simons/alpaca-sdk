@@ -15,6 +15,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
@@ -103,7 +104,7 @@ pub struct OAuthToken {
 /// A request to authorize an app against an account, or to issue it a token.
 ///
 /// Both routes take the same body, which is why one type serves them.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct OAuthRequest {
     /// The account being acted on behalf of.
@@ -138,7 +139,7 @@ impl OAuthRequest {
 }
 
 /// Filters for looking up a registered client.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetOAuthClientRequest {
     /// Which flow the app intends to use.

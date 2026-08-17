@@ -22,6 +22,7 @@ use crate::trading::enums::{
     TradeConfirmationEmail, TradeEvent,
 };
 use crate::types::ContractType;
+use crate::types::Validated;
 use crate::types::serde_util::empty_string_as_none;
 use crate::types::setters::Setters;
 
@@ -743,7 +744,7 @@ pub struct TradeAccount {
 /// change what you mean to change, and send it back. A constructor would invite
 /// building one from nothing and silently resetting every setting it did not
 /// name.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct AccountConfiguration {
     /// Day Trade Buying Power check.

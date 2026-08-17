@@ -17,6 +17,7 @@
 #![cfg(feature = "broker")]
 
 use crate::common::{broker_client as client, fixture};
+use alpaca_sdk::Validated;
 use alpaca_sdk::broker::{
     CreateInstantFundingRequest, CreateJitSettlementRequest, CreateRecipientBankRequest,
     CreateWithdrawalRequest, GetEntryRequirementsRequest, GetJitReportRequest,

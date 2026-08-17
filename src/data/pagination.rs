@@ -14,7 +14,8 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::error::{Error, Result};
-use crate::rest::RestClient;
+use crate::rest::{Raw, RestClient};
+use crate::types::Validated;
 
 /// The keys a market data response nests its payload under.
 ///
@@ -108,11 +109,18 @@ impl<'a> MarketDataRequest<'a> {
 ///
 /// The `limit` in `query`, if present, is the caller's cap on total items across
 /// all pages, not per page.
-pub(crate) async fn get_marketdata<Q: Serialize>(
+pub(crate) async fn get_marketdata<Q: Serialize + Validated>(
     rest: &RestClient,
     request: &MarketDataRequest<'_>,
     query: &Q,
 ) -> Result<Merged> {
+    // Every request on the data surface is flattened into a parameter map
+    // below, and what reaches the transport is that map — which has no rules of
+    // its own. So the bound on `RestClient::get` cannot see the request types
+    // on this surface at all, and this is the one place their rules can be
+    // asked for. Ask before flattening.
+    query.validate()?;
+
     // Round-trip the caller's request through a map so the loop can override
     // `limit` and `page_token` per page.
     let mut params = to_param_map(query)?;
@@ -206,7 +214,13 @@ pub(crate) async fn get_marketdata<Q: Serialize>(
             .filter_map(|(key, value)| Some((key.clone(), stringify(value)?)))
             .collect();
 
-        let response: Value = rest.get(request.path, &query).await?;
+        // `Raw`, and it is not optional: there is deliberately no
+        // `Validated for (String, String)`, so the bare pairs do not satisfy
+        // the bound. That is the right way round — it makes the call site say
+        // that the checking already happened, above, on the request this map
+        // was flattened from, rather than leaving a second silent no-op in the
+        // list of exempt shapes.
+        let response: Value = rest.get(request.path, &Raw(query)).await?;
 
         for (key, value) in entries(&response, request.unwrap, request.path)? {
             match value {
@@ -412,6 +426,68 @@ mod tests {
         // Ambiguous: picking one would silently discard the other.
         let response = json!({"bars": {}, "trades": {}});
         assert!(entries(&response, Unwrap::DataKey, "/stocks/bars").is_err());
+    }
+
+    /// The market data surface flattens every request into a parameter map
+    /// before sending, so `RestClient`'s `Validated` bound never sees the
+    /// request type — it sees the map, which has no rules. `get_marketdata` is
+    /// the only place those rules can be asked for, and this is the test that
+    /// goes red if the call is dropped.
+    ///
+    /// It needs a locally-defined type because every real data-surface request
+    /// type derives the no-op today: with any of them the assertion would hold
+    /// whether the call was there or not, which is the shape of test that reads
+    /// as coverage and is not.
+    #[tokio::test]
+    async fn a_market_data_request_is_validated_before_it_is_flattened() {
+        use wiremock::matchers::method as http_method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        #[derive(Serialize)]
+        struct RefusesToBeSent {
+            symbols: String,
+        }
+
+        impl Validated for RefusesToBeSent {
+            fn validate(&self) -> Result<()> {
+                Err(Error::InvalidRequest("not sendable as built".to_owned()))
+            }
+        }
+
+        let server = MockServer::start().await;
+        Mock::given(http_method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"bars": {}})))
+            .expect(0)
+            .mount(&server)
+            .await;
+
+        let credentials = crate::auth::Credentials::new("key", "secret").unwrap();
+        let rest = RestClient::new(
+            &credentials,
+            crate::rest::RestConfig::new(server.uri()).retry(crate::RetryConfig::none()),
+        )
+        .unwrap();
+
+        let outcome = get_marketdata(
+            &rest,
+            &MarketDataRequest::paged("/stocks/bars"),
+            &RefusesToBeSent {
+                symbols: "AAPL".to_owned(),
+            },
+        )
+        .await;
+
+        let error = match outcome {
+            // `Merged` is not `Debug`, so `unwrap_err()` is unavailable.
+            Ok(_) => panic!("expected the invalid request to be refused"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, Error::InvalidRequest(_)), "{error:?}");
+        assert!(
+            server.received_requests().await.unwrap().is_empty(),
+            "the rules must be asked for before the request is flattened, not after"
+        );
     }
 
     #[test]

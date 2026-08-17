@@ -1,14 +1,14 @@
-//! The derive's error paths, asserted on the message each produces.
+//! The derives' error paths, asserted on the message each produces.
 //!
 //! Every refusal in `expand` is a `compile_error!`, which is exactly the half of
 //! a derive an ordinary test cannot reach: the failure is that the code does not
 //! compile, so the only way to assert on it is to compile a file that should
 //! not and diff the output. The unit tests in `src/lib.rs` cover the parsing
-//! helpers; this covers what the derive says when it says no.
+//! helpers; this covers what the derives say when they say no.
 //!
 //! These messages are load-bearing. A derive that refuses without explaining is
 //! worse than one that has no opinion, because the caller's next move is to
-//! guess — and every one of the things this derive refuses is a case where the
+//! guess — and every one of the things these derives refuse is a case where the
 //! obvious guess is wrong. `#[setters(skip)]` on a required field is the
 //! sharpest: it reads as a settled decision about a real name collision when
 //! the field would never have had a setter either way.
@@ -22,6 +22,15 @@
 //! `a_skipped_field_has_no_setter_fails.rs`, which is not a refusal at all — it
 //! fails to compile because the method genuinely is not there, which is the
 //! assertion every `#[setters(skip)]` in the SDK rests on.
+//!
+//! # One case here is not a refusal at all
+//!
+//! `validated_derived_and_implemented` pins `E0119` — rustc's, not ours —
+//! because that coherence error *is* the `Validated` design: deriving the no-op
+//! and hand-writing a validator cannot both apply, so a real validator can never
+//! be shadowed by a generated one. Nothing in the derive's source says so, and a
+//! change that made it emit something other than a trait impl would lose the
+//! property silently.
 //!
 //! # Three of these failures are rustc's
 //!

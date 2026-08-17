@@ -1284,9 +1284,13 @@ impl CorporateActionsClient {
     ) -> Result<impl futures_util::Stream<Item = Result<crate::sse::Event>> + use<>> {
         let path = "/events/corporate-actions";
         let url = format!("{}/v1beta1{path}", self.base_url.trim_end_matches('/'));
-        let query = filter
-            .map(CorporateActionEventsRequest::query)
-            .unwrap_or_default();
-        crate::sse::subscribe(&self.raw, &url, path, &query).await
+        crate::sse::subscribe(
+            &self.raw,
+            &url,
+            path,
+            filter,
+            CorporateActionEventsRequest::query,
+        )
+        .await
     }
 }

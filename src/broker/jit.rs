@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::broker::settlements::{SettlementAssetClass, TransmitterInfo};
 use crate::types::SupportedCurrencies;
+use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
@@ -347,7 +348,7 @@ pub struct JitReportDownload {
 }
 
 /// Filters for a JIT report.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetJitReportRequest {
     /// Which report to run.
@@ -381,7 +382,7 @@ impl GetJitReportRequest {
 }
 
 /// A window over a ledger's balances.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetJitBalancesRequest {
     /// The first day.
@@ -472,14 +473,16 @@ impl CreateJitSettlementRequest {
             additional_info: None,
         }
     }
+}
 
+impl Validated for CreateJitSettlementRequest {
     /// The coherence checks a settlement cannot pass without contradicting
     /// itself.
     ///
     /// # Errors
     /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if no
     /// accounts are named, or one of them settles a non-positive amount.
-    pub fn validate(&self) -> crate::Result<()> {
+    fn validate(&self) -> crate::Result<()> {
         if self.accounts.is_empty() {
             return Err(crate::Error::InvalidRequest(
                 "a settlement must name at least one account".to_owned(),

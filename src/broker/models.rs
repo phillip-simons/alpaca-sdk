@@ -22,11 +22,12 @@ use crate::broker::enums::{
     TransferDirection, TransferStatus, TransferType, VisaType, WeightType,
 };
 use crate::trading::AccountStatus;
+use crate::types::Validated;
 use crate::types::serde_util::empty_string_as_none;
 use crate::types::setters::Setters;
 
 /// How to reach the account holder.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct Contact {
     /// Primary email address.
@@ -88,7 +89,7 @@ pub struct Contact {
 }
 
 /// Who the account holder is.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct Identity {
     /// Given name.
@@ -224,7 +225,7 @@ pub struct Identity {
 }
 
 /// Regulatory disclosures about the account holder.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct Disclosures {
     /// Whether the holder controls a public company.
@@ -286,7 +287,7 @@ pub struct Disclosures {
 }
 
 /// An agreement the account holder signed.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct Agreement {
     /// Which agreement was signed.
@@ -350,7 +351,7 @@ pub struct AccountDocument {
 }
 
 /// Someone to contact about the account other than the holder.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct TrustedContact {
     /// Given name.
@@ -431,7 +432,7 @@ pub struct TrustedContact {
 ///
 /// The per-check payloads vary by provider and are not modelled; they are kept
 /// as raw JSON rather than guessed at.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct KycResults {
     /// Checks that rejected.
@@ -886,6 +887,22 @@ pub struct W8BenDocument {
     pub tax_id_ssn: Option<String>,
 }
 
+// `validate` stays *inherent* here rather than becoming a `Validated` impl,
+// and the type deliberately does not derive one either.
+//
+// A `W8BenDocument` is never sent on its own — it reaches the wire inside an
+// `UploadW8BenDocumentRequest`, whose own `Validated` impl calls this method.
+// Deriving the no-op would let one be handed to the transport directly and
+// checked by nothing, which is the exact failure the trait exists to prevent;
+// implementing it by hand would give the parent two plausible ways to reach the
+// same rules. Leaving both off means the direct call does not compile.
+//
+// `scripts/validated.py` records this in its EXEMPT map and fails if this
+// method disappears. What no script can check is that the parent still calls
+// it, so that half is a test:
+// `broker::requests::tests::nested_rules_reach_their_parent`.
+//
+// `Weight`, below, is exempt for the same reasons.
 impl W8BenDocument {
     /// Checks that the form identifies the applicant for tax purposes.
     ///
@@ -938,6 +955,12 @@ pub struct Weight {
     pub percent: Decimal,
 }
 
+// Exempt from `Validated` for the reasons given above `impl W8BenDocument`: a
+// `Weight` is a line of a portfolio and is only ever sent inside
+// `CreatePortfolioRequest`, `UpdatePortfolioRequest` or `CreateRunRequest`, each
+// of which calls this method for every weight it carries. Those three
+// delegations are covered by
+// `broker::requests::tests::nested_rules_reach_their_parent`.
 impl Weight {
     /// A cash line holding `percent` of the portfolio.
     ///
@@ -1051,7 +1074,7 @@ impl<'de> Deserialize<'de> for RebalancingSubType {
 }
 
 /// When a portfolio should be rebalanced.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct RebalancingCondition {
     /// Whether the trigger is drift or the calendar.
@@ -1859,7 +1882,7 @@ impl CIPWatchlist {
 /// 404 for the CIP routes, so no fixture exists and none of these models has
 /// ever met a real payload. They follow the broker spec. Treat a
 /// decode failure here as a bug report rather than a surprise.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct CIPInfo {
     /// Alpaca's id for the record.

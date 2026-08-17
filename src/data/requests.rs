@@ -9,6 +9,7 @@ use crate::data::enums::{
 };
 use crate::data::timeframe::TimeFrame;
 
+use crate::types::Validated;
 use crate::types::serde_util::comma_separated;
 use crate::types::setters::Setters;
 use crate::types::{ContractType, Sort, SupportedCurrencies};
@@ -87,7 +88,7 @@ impl<const N: usize> From<[&str; N]> for Symbols {
 /// what that generates and for the ordering rule it depends on: each wrapper
 /// below is declared after this struct, and moving one above it is a compile
 /// error rather than a silently missing setter.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[setters(flattenable)]
 #[non_exhaustive]
 pub struct TimeseriesRequest {
@@ -132,7 +133,7 @@ impl TimeseriesRequest {
 }
 
 /// Historical bars for stocks.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct StockBarsRequest {
     /// The shared time series filters.
@@ -170,7 +171,7 @@ impl StockBarsRequest {
 }
 
 /// Historical bars for crypto.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct CryptoBarsRequest {
     /// The shared time series filters.
@@ -192,7 +193,7 @@ impl CryptoBarsRequest {
 }
 
 /// Historical bars for options.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct OptionBarsRequest {
     /// The shared time series filters.
@@ -214,7 +215,7 @@ impl OptionBarsRequest {
 }
 
 /// Historical quotes or trades for stocks.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct StockTimeseriesRequest {
     /// The shared time series filters.
@@ -243,7 +244,7 @@ impl StockTimeseriesRequest {
 }
 
 /// A request for the most recent stock data.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct StockLatestRequest {
     /// The symbols to query.
@@ -271,7 +272,7 @@ impl StockLatestRequest {
 }
 
 /// A request for the most recent crypto data.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct CryptoLatestRequest {
     /// The symbols to query.
@@ -289,7 +290,7 @@ impl CryptoLatestRequest {
 }
 
 /// A request for the most recent option data.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct OptionLatestRequest {
     /// The symbols to query.
@@ -321,7 +322,7 @@ pub type CryptoSnapshotRequest = CryptoLatestRequest;
 pub type OptionSnapshotRequest = OptionLatestRequest;
 
 /// A request for every contract in an underlying's option chain.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct OptionChainRequest {
     /// The underlying symbol.
@@ -402,7 +403,7 @@ impl OptionChainRequest {
 /// crate release.
 ///
 /// See <https://docs.alpaca.markets/us/reference/stockauctions-1>.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct StockAuctionsRequest {
     /// The shared time series filters.
@@ -436,7 +437,7 @@ impl StockAuctionsRequest {
 /// sibling sends is absent here rather than empty.
 ///
 /// See <https://docs.alpaca.markets/us/reference/stockbarsingle-1>.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct SingleSymbolRequest {
     /// The earliest timestamp to return.
@@ -488,7 +489,7 @@ impl SingleSymbolRequest {
 /// Historical forex rates for currency pairs.
 ///
 /// See <https://docs.alpaca.markets/us/reference/rates-1>.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct ForexRatesRequest {
     /// The pairs to query, sent as one comma-separated parameter.
@@ -539,7 +540,7 @@ impl ForexRatesRequest {
 }
 
 /// The latest forex rates for currency pairs.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct ForexLatestRatesRequest {
     /// The pairs to query.
@@ -557,7 +558,7 @@ impl ForexLatestRatesRequest {
 }
 
 /// A request for the most actively traded stocks.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct MostActivesRequest {
     /// How many to return.
@@ -589,7 +590,7 @@ fn default_market_type() -> MarketType {
 }
 
 /// A request for the day's biggest movers.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct MarketMoversRequest {
     /// How many of each direction to return.
@@ -619,7 +620,7 @@ impl Default for MarketMoversRequest {
 }
 
 /// A request for news articles.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct NewsRequest {
     /// The earliest article to return.
@@ -664,7 +665,7 @@ impl NewsRequest {
 }
 
 /// A request for corporate actions.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct CorporateActionsRequest {
     /// Only actions for these symbols.

@@ -221,6 +221,107 @@ pub fn derive_setters(input: TokenStream) -> TokenStream {
         .into()
 }
 
+/// Implements `Validated` with its defaulted no-op, for a request with no rules.
+///
+/// `alpaca-sdk`'s transport takes `Validated` as a bound on every body and
+/// every query it sends, so a request type that does not implement it cannot be
+/// sent at all. Most have nothing to check — their invalid states are already
+/// unrepresentable — and this derive is how they say so:
+///
+/// ```ignore
+/// #[derive(Debug, Default, Serialize, Setters, Validated)]
+/// #[non_exhaustive]
+/// pub struct GetOrdersRequest { /* … */ }
+/// ```
+///
+/// It expands to an empty `impl Validated for GetOrdersRequest {}`, under an
+/// `#[automatically_derived]` attribute, and nothing further.
+///
+/// The trait name in that expansion is **unqualified**, unlike the `::core`
+/// paths the `Setters` derive is careful to spell out, so it resolves to
+/// whatever `Validated` is in scope at the use site. That is deliberate and it
+/// is also the reason this derive is re-exported `pub(crate)` rather than
+/// publicly: inside `alpaca-sdk` the trait is in scope in every file that has
+/// request types, and outside it a downstream `Validated` of someone else's
+/// would be silently implemented instead. A downstream caller satisfying the
+/// bound writes the one-line impl by hand, or reaches for `Raw`.
+///
+/// Qualifying it is not available: this crate cannot name `alpaca-sdk`, which
+/// is the crate that depends on *it*.
+///
+/// # There are no options
+///
+/// A type with rules hand-writes `impl Validated for T { fn validate(…) }`
+/// instead, and doing both is `E0119` — a conflicting implementation, refused
+/// by the compiler.
+///
+/// That is the whole design. An attribute — `#[request(validate)]`, say,
+/// switching the derive between a no-op and a hand-written body — would
+/// reintroduce the failure the bound exists to remove: write a validator,
+/// forget the attribute, and it silently never runs. Coherence cannot be
+/// forgotten, so `#[validated(…)]` is a compile error rather than a no-op that
+/// reads as configuration.
+#[proc_macro_derive(Validated, attributes(validated))]
+pub fn derive_validated(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    expand_validated(&input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+fn expand_validated(input: &DeriveInput) -> syn::Result<TokenStream2> {
+    // The attribute is *declared* so that this error is the one a caller sees.
+    // Without declaring it, `#[validated(nested)]` is rustc's "cannot find
+    // attribute" — which is true, and says nothing about why there is none.
+    if let Some(attr) = validated_attribute(input) {
+        return Err(syn::Error::new_spanned(
+            attr,
+            "`Validated` takes no options: a type either has no rules, which is \
+             what this derive says, or it has rules, which are hand-written as \
+             `impl Validated for T`. Deriving it and implementing it are \
+             conflicting implementations, so the two cannot drift apart — an \
+             attribute switching between them could be forgotten, which is the \
+             failure the trait exists to remove",
+        ));
+    }
+
+    let ty = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    Ok(quote! {
+        #[automatically_derived]
+        impl #impl_generics Validated for #ty #ty_generics #where_clause {}
+    })
+}
+
+/// The first `#[validated(…)]` anywhere on the item, its fields or its variants.
+///
+/// All three positions are checked because all three are where someone would
+/// plausibly reach for one: `#[validated(nested)]` on a field holding a request
+/// of its own is the obvious next feature to ask for, and it should say no
+/// rather than be ignored.
+fn validated_attribute(input: &DeriveInput) -> Option<&Attribute> {
+    fn named(attrs: &[Attribute]) -> Option<&Attribute> {
+        attrs.iter().find(|attr| attr.path().is_ident("validated"))
+    }
+
+    if let Some(attr) = named(&input.attrs) {
+        return Some(attr);
+    }
+
+    match &input.data {
+        Data::Struct(data) => data.fields.iter().find_map(|field| named(&field.attrs)),
+        Data::Enum(data) => data.variants.iter().find_map(|variant| {
+            named(&variant.attrs).or_else(|| variant.fields.iter().find_map(|f| named(&f.attrs)))
+        }),
+        Data::Union(data) => data
+            .fields
+            .named
+            .iter()
+            .find_map(|field| named(&field.attrs)),
+    }
+}
+
 /// What a field's `#[setters(…)]` attributes asked for.
 #[derive(Default)]
 struct Options {
@@ -729,6 +830,68 @@ fn option_inner(ty: &Type) -> Option<&Type> {
 mod tests {
     use super::*;
     use quote::ToTokens;
+
+    /// The expansion is the whole design: because it is a trait impl, a type
+    /// that also hand-writes one gets `E0119`. A change that emitted an
+    /// inherent method instead would keep every trybuild case passing and lose
+    /// the property silently, so the shape is asserted here rather than only
+    /// implied by the compile-fail file that depends on it.
+    #[test]
+    fn the_expansion_is_an_empty_trait_impl() {
+        let input: DeriveInput = syn::parse_quote!(
+            pub struct Request {
+                pub limit: Option<u32>,
+            }
+        );
+
+        assert_eq!(
+            expand_validated(&input).unwrap().to_string(),
+            quote! {
+                #[automatically_derived]
+                impl Validated for Request {}
+            }
+            .to_string()
+        );
+    }
+
+    /// Generics, a `where` clause and a lifetime all have to survive into the
+    /// impl header, and `split_for_impl` is easy to use three-quarters right.
+    #[test]
+    fn generics_reach_the_impl_header() {
+        let input: DeriveInput = syn::parse_quote!(
+            pub struct Request<'a, T>
+            where
+                T: Clone,
+            {
+                pub name: &'a T,
+            }
+        );
+
+        assert_eq!(
+            expand_validated(&input).unwrap().to_string(),
+            quote! {
+                #[automatically_derived]
+                impl<'a, T> Validated for Request<'a, T> where T: Clone, {}
+            }
+            .to_string()
+        );
+    }
+
+    /// A union is the fourth position `validated_attribute` walks and the one
+    /// no other test reaches. The derive has no reason to refuse a union — it
+    /// generates nothing that touches fields — so what is asserted is that the
+    /// attribute is still seen there.
+    #[test]
+    fn a_union_field_attribute_is_still_refused() {
+        let input: DeriveInput = syn::parse_quote!(
+            pub union Request {
+                #[validated(nested)]
+                pub limit: u32,
+            }
+        );
+
+        assert!(expand_validated(&input).is_err());
+    }
 
     fn ty(text: &str) -> Type {
         syn::parse_str(text).expect("a type")

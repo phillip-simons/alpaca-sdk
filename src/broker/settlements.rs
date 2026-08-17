@@ -13,6 +13,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
@@ -46,7 +47,7 @@ wire_enum! {
 /// is not, so this validates nothing: what a given jurisdiction requires is
 /// Alpaca's business, and refusing a request it would have accepted is the
 /// worse failure.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct TransmitterInfo {
     /// The sender's full name.
@@ -138,7 +139,7 @@ pub struct Settlements {
 }
 
 /// Filters for listing settlements.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetSettlementsRequest {
     /// Only settlements in these states, comma-separated.

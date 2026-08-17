@@ -7,6 +7,12 @@
 //! [`RestClient::request_raw`] returns the body undecoded, which is the escape
 //! hatch for a route this crate has not wrapped or a response whose shape has
 //! changed.
+//!
+//! Every body and every query is bound by [`Validated`], and [`RestClient`]
+//! calls it before building the HTTP request. A type with no rules of its own
+//! satisfies that in one line; [`Raw`] is the same opt-out written at the call
+//! site instead. [`Validated`] itself carries the reasoning for why this is a
+//! bound rather than a convention.
 
 use std::time::Duration;
 
@@ -18,6 +24,7 @@ use serde::de::DeserializeOwned;
 use crate::auth::Credentials;
 use crate::config::{BaseUrl, RetryConfig, user_agent};
 use crate::error::{ApiError, Error, Result};
+use crate::types::Validated;
 
 /// Response bodies longer than this are truncated in [`Error::Decode`].
 const MAX_ERROR_BODY: usize = 2048;
@@ -94,6 +101,42 @@ pub enum Replay {
 /// A request with no query parameters or body.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct Empty;
+
+/// A body or query this crate has no rules for.
+///
+/// The raw [`RestClient`] methods are public so that a route this crate has not
+/// wrapped is still one call away, and they are bound by [`Validated`] so that
+/// a wrapped one cannot skip its own rules. `Raw` is how the first stays true
+/// without weakening the second: it serializes as the value inside it and
+/// validates nothing.
+///
+/// ```
+/// use alpaca_sdk::{Raw, Replay, RestClient, Result};
+/// use reqwest::Method;
+/// use serde_json::json;
+///
+/// async fn send(rest: &RestClient) -> Result<String> {
+///     rest.request_raw(
+///         Method::POST,
+///         Replay::Never,
+///         "/some/unwrapped/route",
+///         None::<&Raw<()>>,
+///         Some(&Raw(json!({ "symbol": "AAPL" }))),
+///     )
+///     .await
+/// }
+/// # let _ = send;
+/// ```
+///
+/// Reach for it deliberately. Wrapping a request type that *does* have rules
+/// puts the skip back — the difference being that it is now a word at the call
+/// site rather than a missing line nobody can see.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub struct Raw<T>(
+    /// The value to send, serialized exactly as if it were not wrapped.
+    pub T,
+);
 
 /// Configuration shared by every REST client.
 ///
@@ -252,11 +295,13 @@ impl RestClient {
     /// Issues a `GET`, sending `query` as URL parameters.
     ///
     /// # Errors
-    /// Propagates transport, API, and decoding failures.
+    /// Returns [`Error::InvalidRequest`] if the request does not satisfy its
+    /// own [`Validated`] rules, and propagates transport, API, and decoding
+    /// failures.
     pub async fn get<T, Q>(&self, path: &str, query: &Q) -> Result<T>
     where
         T: DeserializeOwned,
-        Q: Serialize + ?Sized,
+        Q: Serialize + Validated + ?Sized,
     {
         self.decode(
             path,
@@ -277,11 +322,13 @@ impl RestClient {
     /// the endpoints taking them (`cancel_orders`, `close_position`) expect.
     ///
     /// # Errors
-    /// Propagates transport, API, and decoding failures.
+    /// Returns [`Error::InvalidRequest`] if the request does not satisfy its
+    /// own [`Validated`] rules, and propagates transport, API, and decoding
+    /// failures.
     pub async fn delete<T, Q>(&self, path: &str, query: &Q) -> Result<T>
     where
         T: DeserializeOwned,
-        Q: Serialize + ?Sized,
+        Q: Serialize + Validated + ?Sized,
     {
         self.decode(
             path,
@@ -306,11 +353,13 @@ impl RestClient {
     /// still is, because the rate limiter refused it before anything acted.
     ///
     /// # Errors
-    /// Propagates transport, API, and decoding failures.
+    /// Returns [`Error::InvalidRequest`] if the request does not satisfy its
+    /// own [`Validated`] rules, and propagates transport, API, and decoding
+    /// failures.
     pub async fn delete_effectful<T, Q>(&self, path: &str, query: &Q) -> Result<T>
     where
         T: DeserializeOwned,
-        Q: Serialize + ?Sized,
+        Q: Serialize + Validated + ?Sized,
     {
         self.decode(
             path,
@@ -328,11 +377,13 @@ impl RestClient {
     /// Issues a `POST` with a JSON body.
     ///
     /// # Errors
-    /// Propagates transport, API, and decoding failures.
+    /// Returns [`Error::InvalidRequest`] if the request does not satisfy its
+    /// own [`Validated`] rules, and propagates transport, API, and decoding
+    /// failures.
     pub async fn post<T, B>(&self, path: &str, body: &B) -> Result<T>
     where
         T: DeserializeOwned,
-        B: Serialize + ?Sized,
+        B: Serialize + Validated + ?Sized,
     {
         self.decode(
             path,
@@ -350,11 +401,13 @@ impl RestClient {
     /// Issues a `PUT` with a JSON body.
     ///
     /// # Errors
-    /// Propagates transport, API, and decoding failures.
+    /// Returns [`Error::InvalidRequest`] if the request does not satisfy its
+    /// own [`Validated`] rules, and propagates transport, API, and decoding
+    /// failures.
     pub async fn put<T, B>(&self, path: &str, body: &B) -> Result<T>
     where
         T: DeserializeOwned,
-        B: Serialize + ?Sized,
+        B: Serialize + Validated + ?Sized,
     {
         self.decode(
             path,
@@ -372,11 +425,13 @@ impl RestClient {
     /// Issues a `PATCH` with a JSON body.
     ///
     /// # Errors
-    /// Propagates transport, API, and decoding failures.
+    /// Returns [`Error::InvalidRequest`] if the request does not satisfy its
+    /// own [`Validated`] rules, and propagates transport, API, and decoding
+    /// failures.
     pub async fn patch<T, B>(&self, path: &str, body: &B) -> Result<T>
     where
         T: DeserializeOwned,
-        B: Serialize + ?Sized,
+        B: Serialize + Validated + ?Sized,
     {
         self.decode(
             path,
@@ -404,7 +459,9 @@ impl RestClient {
     /// and folding the query into the path string would skip its encoding.
     ///
     /// # Errors
-    /// Propagates transport, API, and decoding failures.
+    /// Returns [`Error::InvalidRequest`] if the request does not satisfy its
+    /// own [`Validated`] rules, and propagates transport, API, and decoding
+    /// failures.
     pub async fn request<T, Q, B>(
         &self,
         method: Method,
@@ -415,8 +472,8 @@ impl RestClient {
     ) -> Result<T>
     where
         T: DeserializeOwned,
-        Q: Serialize + ?Sized,
-        B: Serialize + ?Sized,
+        Q: Serialize + Validated + ?Sized,
+        B: Serialize + Validated + ?Sized,
     {
         self.decode(path, self.send(method, replay, path, query, body).await?)
     }
@@ -428,11 +485,15 @@ impl RestClient {
     /// putting it through [`RestClient::get`] would try to parse a PNG as JSON.
     ///
     /// # Errors
-    /// Propagates transport and API failures.
+    /// Returns [`Error::InvalidRequest`] if the request does not satisfy its
+    /// own [`Validated`] rules, and propagates transport and API failures.
     pub async fn get_bytes<Q>(&self, path: &str, query: &Q) -> Result<Vec<u8>>
     where
-        Q: Serialize + ?Sized,
+        Q: Serialize + Validated + ?Sized,
     {
+        // The one public method that does not go through `send`, so it has to
+        // ask for itself.
+        query.validate()?;
         let request = self.http.get(self.url(path)).query(query);
         self.execute_bytes(&Method::GET, Replay::ByMethod, request, path)
             .await
@@ -446,7 +507,8 @@ impl RestClient {
     /// — a replayed liquidation sells twice.
     ///
     /// # Errors
-    /// Propagates transport and API failures.
+    /// Returns [`Error::InvalidRequest`] if the request does not satisfy its
+    /// own [`Validated`] rules, and propagates transport and API failures.
     pub async fn request_raw<Q, B>(
         &self,
         method: Method,
@@ -456,8 +518,8 @@ impl RestClient {
         body: Option<&B>,
     ) -> Result<String>
     where
-        Q: Serialize + ?Sized,
-        B: Serialize + ?Sized,
+        Q: Serialize + Validated + ?Sized,
+        B: Serialize + Validated + ?Sized,
     {
         self.send(method, replay, path, query, body).await
     }
@@ -484,9 +546,21 @@ impl RestClient {
         body: Option<&B>,
     ) -> Result<String>
     where
-        Q: Serialize + ?Sized,
-        B: Serialize + ?Sized,
+        Q: Serialize + Validated + ?Sized,
+        B: Serialize + Validated + ?Sized,
     {
+        // Every wrapped route funnels through here, which is the whole point of
+        // validating here rather than in each client method: it happens once,
+        // in one place, and before the URL is built — so a request Alpaca would
+        // reject never reaches a socket, and there is no per-route line for a
+        // new route to forget.
+        if let Some(query) = query {
+            query.validate()?;
+        }
+        if let Some(body) = body {
+            body.validate()?;
+        }
+
         let mut request = self.http.request(method.clone(), self.url(path));
         if let Some(query) = query {
             request = request.query(query);

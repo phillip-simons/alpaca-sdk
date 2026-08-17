@@ -12,6 +12,7 @@
 
 #![cfg(feature = "trading")]
 
+use alpaca_sdk::Validated;
 use alpaca_sdk::trading::{
     GetCorporateAnnouncementsRequest, OptionLegRequest, OrderAmount, OrderClass, OrderRequest,
     OrderSide, OrderType, PositionIntent, StopLimit, StopLossRequest, TakeProfitRequest,
@@ -499,7 +500,7 @@ fn corporate_announcements_repeat_their_type_parameter() {
     .cusip("037833100")
     .date_type(CorporateActionDateType::ExDate);
 
-    let query = request.to_query();
+    let query = request.to_query().unwrap();
 
     assert_eq!(
         query

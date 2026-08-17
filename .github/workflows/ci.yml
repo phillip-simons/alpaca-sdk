@@ -41,6 +41,7 @@ jobs:
       coverage_doc: ${{ steps.filter.outputs.coverage_doc }}
       scripts: ${{ steps.filter.outputs.scripts }}
       setters: ${{ steps.filter.outputs.setters }}
+      validated: ${{ steps.filter.outputs.validated }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -97,6 +98,12 @@ jobs:
               # scope list. Renaming or deleting it disables that check, so a
               # change to it has to run the job that would notice.
               - 'tests/integration/request_construction.rs'
+              - '.github/workflows/ci.yml'
+            validated:
+              # Which request types could still be sent unchecked. Same scope as
+              # `setters`, for the same reasons.
+              - 'src/**'
+              - 'scripts/validated.py'
               - '.github/workflows/ci.yml'
 
   fmt:
@@ -337,6 +344,24 @@ jobs:
       # stays true for a field added by someone who has never seen this file.
       - run: python3 scripts/setters.py
 
+  validated:
+    name: no request type can be sent unchecked
+    needs: changes
+    if: needs.changes.outputs.validated == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # No toolchain, same as `setters`: the script reads `src/` as text.
+      #
+      # Most of this rule is the compiler's — `RestClient` bounds every body and
+      # every query by `Validated`, so a route that forgets to validate does not
+      # build. This job covers the four cases that bound cannot see: a request
+      # type nothing sends yet; a type that both derives the trait and
+      # hand-implements it; a type with rules whose `to_query` flattens it into
+      # query pairs that satisfy the bound while carrying no rules; and a type
+      # that derives the no-op while holding a field whose type has rules.
+      - run: python3 scripts/validated.py
+
   secret-scan:
     name: no credentials in the tree
     # No `changes` gate and no `if`. Every other job is allowed to skip on a
@@ -443,6 +468,7 @@ jobs:
         coverage-doc,
         scripts,
         setters,
+        validated,
         secret-scan,
       ]
     if: always()

@@ -5,7 +5,7 @@
 
 use std::time::{Duration, Instant};
 
-use alpaca_sdk::{Credentials, Error, RestClient, RestConfig, RetryBackoff, RetryConfig};
+use alpaca_sdk::{Credentials, Error, Raw, RestClient, RestConfig, RetryBackoff, RetryConfig};
 use serde::Deserialize;
 use serde_json::json;
 use wiremock::matchers::{body_json, header, method, path, query_param};
@@ -84,7 +84,7 @@ async fn post_sends_a_json_body() {
         .await;
 
     let order: Account = client(&server, RetryConfig::none())
-        .post("/orders", &json!({"symbol": "AAPL", "qty": "1"}))
+        .post("/orders", &Raw(json!({"symbol": "AAPL", "qty": "1"})))
         .await
         .unwrap();
 
@@ -482,7 +482,7 @@ async fn a_post_is_not_replayed_on_a_gateway_timeout() {
         .await;
 
     let err = client(&server, instant_retry())
-        .post::<Account, _>("/orders", &json!({"symbol": "AAPL"}))
+        .post::<Account, _>("/orders", &Raw(json!({"symbol": "AAPL"})))
         .await
         .unwrap_err();
 
@@ -507,7 +507,7 @@ async fn a_patch_is_not_replayed_on_a_gateway_timeout() {
         .await;
 
     let err = client(&server, instant_retry())
-        .patch::<Account, _>("/account/configurations", &json!({}))
+        .patch::<Account, _>("/account/configurations", &Raw(json!({})))
         .await
         .unwrap_err();
 
@@ -537,7 +537,7 @@ async fn a_post_is_replayed_on_a_rate_limit() {
         .await;
 
     let account: Account = client(&server, instant_retry())
-        .post("/orders", &json!({"symbol": "AAPL"}))
+        .post("/orders", &Raw(json!({"symbol": "AAPL"})))
         .await
         .unwrap();
 
@@ -618,6 +618,217 @@ async fn a_rate_limited_effectful_delete_is_still_replayed() {
 
     let account: Account = client(&server, instant_retry())
         .delete_effectful("/positions/AAPL", &())
+        .await
+        .unwrap();
+
+    assert_eq!(account.id, "abc");
+}
+
+// ------------------------------------------------------------- validation
+
+/// A body whose rules always fail, standing in for any request type that
+/// carries them. The transport only knows the trait, so what refuses here is
+/// what refuses for a real `OrderRequest`.
+#[derive(serde::Serialize)]
+struct AlwaysInvalid {
+    symbol: String,
+}
+
+impl alpaca_sdk::Validated for AlwaysInvalid {
+    fn validate(&self) -> alpaca_sdk::Result<()> {
+        Err(Error::InvalidRequest("not sendable as built".to_owned()))
+    }
+}
+
+/// The guarantee, stated at the only level it can be checked at: an invalid
+/// request costs **zero** HTTP requests.
+///
+/// Validating in each client method left this open in a way no assertion
+/// caught. A route that forgot the call still compiled, still passed its
+/// wiremock routing test — the mock answers whatever arrives — and the failure
+/// only showed up as Alpaca's own rejection, one round trip and possibly one
+/// side effect later. `expect(0)` is the difference: it fails if anything
+/// reaches the socket at all.
+#[tokio::test]
+async fn an_invalid_body_never_reaches_the_socket() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v2/orders"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "abc"})))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let err = client(&server, instant_retry())
+        .post::<Account, _>(
+            "/orders",
+            &AlwaysInvalid {
+                symbol: "AAPL".to_owned(),
+            },
+        )
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, Error::InvalidRequest(_)), "{err:?}");
+    assert!(
+        server.received_requests().await.unwrap().is_empty(),
+        "validation must run before the request is built, not after it is sent"
+    );
+}
+
+/// The same for a query, which travels a different path into `send`.
+#[tokio::test]
+async fn an_invalid_query_never_reaches_the_socket() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v2/orders"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "abc"})))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let err = client(&server, instant_retry())
+        .get::<Account, _>(
+            "/orders",
+            &AlwaysInvalid {
+                symbol: "AAPL".to_owned(),
+            },
+        )
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, Error::InvalidRequest(_)), "{err:?}");
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+/// `get_bytes` is the one public method that does not go through `send`, so it
+/// validates on its own line — which is exactly the kind of duplicate that
+/// stops being run.
+#[tokio::test]
+async fn get_bytes_validates_too() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v2/logos/AAPL"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("png"))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let err = client(&server, instant_retry())
+        .get_bytes(
+            "/logos/AAPL",
+            &AlwaysInvalid {
+                symbol: "AAPL".to_owned(),
+            },
+        )
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, Error::InvalidRequest(_)), "{err:?}");
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+/// A slice is validated element by element, and the failing element is not the
+/// first — an impl that checked only `[0]` would pass a version of this test
+/// that used a one-element slice.
+#[tokio::test]
+async fn a_slice_body_is_validated_element_by_element() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v2/documents"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!(null)))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    #[derive(serde::Serialize)]
+    #[serde(untagged)]
+    enum Document {
+        Fine { name: String },
+        Broken(AlwaysInvalid),
+    }
+
+    impl alpaca_sdk::Validated for Document {
+        fn validate(&self) -> alpaca_sdk::Result<()> {
+            match self {
+                Self::Fine { .. } => Ok(()),
+                Self::Broken(inner) => alpaca_sdk::Validated::validate(inner),
+            }
+        }
+    }
+
+    let documents = [
+        Document::Fine {
+            name: "ok".to_owned(),
+        },
+        Document::Broken(AlwaysInvalid {
+            symbol: "AAPL".to_owned(),
+        }),
+    ];
+
+    let err = client(&server, instant_retry())
+        .post::<(), _>("/documents", &documents)
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, Error::InvalidRequest(_)), "{err:?}");
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+/// `Raw` has to serialize as the value inside it, not as a newtype wrapper.
+///
+/// This is the whole escape hatch. A `Raw` that wrapped its payload in another
+/// layer would corrupt every body sent through it — silently, because the
+/// request would still be well-formed JSON and Alpaca's rejection would name a
+/// missing field rather than the wrapper.
+///
+/// What this pins is the *behaviour*, not the mechanism. `#[serde(transparent)]`
+/// on `Raw` is belt-and-braces: a plain newtype derive already forwards in both
+/// serializers this crate uses, so removing the attribute leaves these tests
+/// green. It stays because forwarding is a property of each format's
+/// `serialize_newtype_struct`, and the attribute does not depend on one.
+#[tokio::test]
+async fn raw_serializes_transparently_as_a_body() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/v2/orders"))
+        .and(body_json(json!({"symbol": "AAPL"})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "abc"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let account: Account = client(&server, RetryConfig::none())
+        .post("/orders", &Raw(json!({"symbol": "AAPL"})))
+        .await
+        .unwrap();
+
+    assert_eq!(account.id, "abc");
+}
+
+/// And as a query, which goes through a different serializer entirely —
+/// `serde_urlencoded` rather than `serde_json`. It is the stricter of the two
+/// by a long way, rejecting most shapes outright, so a body that round-trips
+/// says little about a query that has to.
+#[tokio::test]
+async fn raw_serializes_transparently_as_a_query() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/v2/orders"))
+        .and(query_param("symbol", "AAPL"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "abc"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let account: Account = client(&server, RetryConfig::none())
+        .get("/orders", &Raw(vec![("symbol", "AAPL")]))
         .await
         .unwrap();
 

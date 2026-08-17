@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::trading::Position;
+use crate::types::Validated;
 use crate::types::serde_util::comma_separated;
 use crate::types::setters::Setters;
 
@@ -184,7 +185,7 @@ pub struct AprTiers {
 }
 
 /// Filters for the end-of-day positions report.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetEodPositionsRequest {
     /// Only this account.
@@ -218,7 +219,7 @@ impl GetEodPositionsRequest {
 ///
 /// `date` is required, so it is a constructor argument rather than a builder
 /// step: the route has no default.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetAggregatePositionsRequest {
     /// The close to report as of.
@@ -256,7 +257,7 @@ impl GetAggregatePositionsRequest {
 }
 
 /// Filters for the cash interest report.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetCashInterestRequest {
     /// Only this account.

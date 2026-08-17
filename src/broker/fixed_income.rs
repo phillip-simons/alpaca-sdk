@@ -14,6 +14,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
+use crate::types::Validated;
 use crate::types::serde_util::comma_separated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
@@ -386,7 +387,7 @@ pub struct EntryRequirement {
 }
 
 /// Filters for the corporates list.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetUsCorporatesRequest {
     /// Only bonds in this state.
@@ -427,7 +428,7 @@ impl GetUsCorporatesRequest {
 }
 
 /// Filters for the treasuries list.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetUsTreasuriesRequest {
     /// Only this kind of instrument.
@@ -463,7 +464,7 @@ impl GetUsTreasuriesRequest {
 }
 
 /// A request for entry requirements.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters, Validated)]
 #[non_exhaustive]
 pub struct GetEntryRequirementsRequest {
     /// The symbols to ask about, sent as one comma-separated parameter.

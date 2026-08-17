@@ -35,7 +35,7 @@ default: check
 # difference with Alpaca that it cannot.
 #
 # The gate. Run before every commit.
-check: fmt-check clippy doc test test-scripts setters
+check: fmt-check clippy doc test test-scripts setters validated
 
 # Rewrite formatting in place.
 fmt:
@@ -318,6 +318,22 @@ parameters:
 # and which fields hold a `#[setters(flattenable)]` base without flattening it.
 setters:
     python3 scripts/setters.py
+
+# Which request types could still be sent without their rules being checked.
+#
+# Mostly the compiler's job now: `RestClient` bounds every body and every query
+# by `Validated` and calls it, so forgetting the old `request.validate()?` line
+# in a new route no longer compiles. What is left is the four cases the bound
+# cannot see — a request type nothing sends yet; a type that both derives the
+# trait and implements it; a type with rules whose `to_query` flattens it into
+# query pairs, which satisfy the bound and carry no rules of their own; and a
+# type that derives the no-op while holding a field whose type has rules, so
+# the transport asks the parent and the parent asks nobody.
+#
+# A gate for the same reason `setters` is: it checks a rule this repository sets
+# for itself and can always satisfy, and the fix is a word in a derive list.
+validated:
+    python3 scripts/validated.py
 
 # ---------------------------------------------------------------------------
 # Live API

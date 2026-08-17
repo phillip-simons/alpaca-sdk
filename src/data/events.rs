@@ -15,6 +15,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::sse::EventStreamRequest;
+use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
@@ -121,6 +122,39 @@ impl CorporateActionEventsRequest {
             query.push(("region", region.as_str().to_owned()));
         }
         query
+    }
+}
+
+impl Validated for CorporateActionEventsRequest {
+    /// Asks the replay window it wraps.
+    ///
+    /// Three filter types serve the eleven event-stream routes, and this is
+    /// the only one that *contains* another. Five routes hand
+    /// `sse::subscribe` a `GetEventsRequest`, which carries its own flat
+    /// window fields; five hand it an [`EventStreamRequest`] directly, and the
+    /// bound checks it. Here it arrives one level down, behind a
+    /// `#[serde(flatten)]`, so the bound lands on the wrapper — and a derived
+    /// no-op here would swallow it. A rule added to [`EventStreamRequest`]
+    /// would then hold for those five routes and silently not for this one.
+    ///
+    /// It is hand-written rather than derived because that is what the two
+    /// spellings mean: the derive says "this type has no rules", and this one
+    /// has its window's.
+    ///
+    /// **No test asserts this, and none can yet.** The window has no rules, so
+    /// a test would compare `Ok(())` with `Ok(())` and pass whether the line
+    /// below were here or not — the shape of test that reads as coverage and
+    /// is not, so one was written and then declined. What holds it instead is
+    /// `just validated`: its fourth rule refuses a type that derives the no-op
+    /// while holding a field whose type has rules, so on the day
+    /// `EventStreamRequest` gains a validator, reverting this impl to a derive
+    /// fails the gate. That is the same day the delegation starts mattering.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidRequest`](crate::Error::InvalidRequest) if the
+    /// replay window is not one Alpaca accepts.
+    fn validate(&self) -> crate::Result<()> {
+        self.window.validate()
     }
 }
 
