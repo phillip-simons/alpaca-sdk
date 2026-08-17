@@ -1,20 +1,15 @@
-alpaca-sdk
+alpaca-sdk-macros
 Copyright 2026 Phillip Simons
 
-This product includes software derived from alpaca-py
-(https://github.com/alpacahq/alpaca-py), Copyright 2022 Alpaca,
-licensed under the Apache License, Version 2.0.
+This crate contains the `Setters` derive macro and nothing else. It is original
+work and derives from no other project.
 
-The type definitions, request and response models, endpoint paths, retry
-policy, and streaming reconnection semantics in this crate began as a port of
-that project. The captured API responses under fixtures/ are extracted from its
-test suite and are used as test data.
-
-The response payloads under fixtures/go/ are derived from alpaca-trade-api-go
-(https://github.com/alpacahq/alpaca-trade-api-go), Copyright 2021 Alpaca,
-licensed under the Apache License, Version 2.0. They are used as test data.
+The root crate's NOTICE records that `alpaca-sdk` began as a port of alpaca-py
+and that its test fixtures are extracted from that project's test suite. None of
+that applies here — no ported types, no fixtures, no captured payloads — so this
+file deliberately does not repeat it.
 
 This is an unofficial, community-maintained crate. It is not affiliated with,
 authorized by, endorsed by, or sponsored by Alpaca Securities LLC or any of
 its affiliates. "Alpaca" is a trademark of its respective owner and is used
-here only to identify the API this crate connects to.
+here only to identify the API the crate this supports connects to.

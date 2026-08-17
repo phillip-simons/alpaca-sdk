@@ -35,14 +35,19 @@ rule cannot see — `Identity` and `Disclosures` are fields of the account
 them. `EXCLUSIONS` carries the one false positive: `TokenizationRequest` is
 named like a request and appears only in return position.
 
-**`ADDITIONS` is the weak point, and it fails silently.** A caller-built type
+**`ADDITIONS` is the weak point, because it fails silently.** A caller-built type
 that is not named there is not reported as uncovered; it is not reported at all,
 and this script says "every request type derives `Setters`" with a straight
 face. That is not hypothetical: `CIPInfo` was listed and the five check types
 nested inside it were not, so 68 of its fields sat uncovered under a clean
-report. `tests/integration/request_construction.rs` is the cross-check — its
-import list is every type a caller has to build, written down for a different
-reason, and anything there with an optional field belongs here.
+report.
+
+So the cross-check *runs*. `tests/integration/request_construction.rs` imports
+every type a caller has to build — written down for an unrelated reason, since
+that test exists to prove they are all still constructible from outside the
+crate — and any of them with an optional field that the scope rule does not
+reach fails this run. It was a note in this docstring first, and a note would
+not have caught the five.
 
 Both maps are claims, not conveniences, and each entry says which. An entry that
 stops matching a struct fails the run rather than going quiet, for the same
@@ -375,9 +380,43 @@ def parse(path: pathlib.Path) -> dict[str, tuple[bool, list[str], list[tuple[str
     return found
 
 
+def buildable(path: pathlib.Path) -> set[str]:
+    """The types `request_construction.rs` imports, as the cross-check on scope.
+
+    `ADDITIONS` is where this script fails silently: a caller-built type that is
+    not named there is not reported as uncovered, it is not reported at all.
+    That test's import list is the same set written down for an unrelated
+    reason — it exists to prove every input type is still constructible from
+    outside the crate — so disagreeing with it is a question worth asking on
+    every run rather than a note in a docstring.
+
+    Returns an empty set if the file has moved, and says so: silently skipping
+    the cross-check would restore exactly the blindness it exists to remove.
+    """
+    if not path.is_file():
+        print(
+            f"{path} is missing — it is the cross-check on `ADDITIONS`, so "
+            f"losing it costs this script the one thing it cannot see itself. "
+            f"Point `--buildable` at wherever the buildability test moved to.",
+            file=sys.stderr,
+        )
+        return set()
+
+    imported: set[str] = set()
+    for block in re.findall(r"use alpaca_sdk::\w+::\{(.*?)\};", path.read_text(), re.S):
+        imported |= {name.strip() for name in block.split(",") if name.strip()}
+    return imported
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--src", type=pathlib.Path, default=pathlib.Path("src"))
+    parser.add_argument(
+        "--buildable",
+        type=pathlib.Path,
+        default=pathlib.Path("tests/integration/request_construction.rs"),
+        help="the test whose import list cross-checks ADDITIONS",
+    )
     parser.add_argument(
         "--report",
         action="store_true",
@@ -395,6 +434,7 @@ def main() -> int:
     skips: list[tuple[str, str, str]] = []
     seen_additions: set[str] = set()
     seen_exclusions: set[str] = set()
+    declared: dict[str, int] = {}
     types = 0
     optional_fields = 0
     covered = 0
@@ -408,6 +448,7 @@ def main() -> int:
             print(unreadable, file=sys.stderr)
             return 1
         for name, (derives, optional, skipped) in parsed.items():
+            declared[name] = len(optional)
             if name in EXCLUSIONS:
                 seen_exclusions.add(name)
                 continue
@@ -443,6 +484,26 @@ def main() -> int:
             )
             return 1
 
+    # The cross-check the docstring calls for. A type the buildability test
+    # imports is a type a caller has to build; if it has optional fields and the
+    # scope rule does not reach it, this script would say nothing about it at
+    # all. That is how `CIPInfo`'s five nested check types sat uncovered under a
+    # clean report — they were in that test's import list the whole time.
+    unreached = sorted(
+        name
+        for name in buildable(args.buildable)
+        if declared.get(name) and not in_scope(name)
+    )
+    if unreached:
+        print(
+            f"{', '.join(unreached)} — built by a caller (they are in "
+            f"{args.buildable}) and have optional fields, but no name rule "
+            f"reaches them. Add each to ADDITIONS, or this script has no "
+            f"opinion on whether they derive `Setters`.",
+            file=sys.stderr,
+        )
+        return 1
+
     print(f"{types} request types, {optional_fields} optional fields")
     print(f"{covered} have a setter, {optional_fields - covered} do not\n")
 
@@ -465,9 +526,15 @@ def main() -> int:
 
     if args.report:
         return 0
+    # Counted in types, not fields. A type with no optional fields is still
+    # required to derive it — so that the day one is added the setter follows —
+    # and summarising in fields said "0 optional fields have no setter" while
+    # exiting 1, which reads as the script contradicting itself.
+    missing = sum(len(entries) for entries in gaps.values())
     print(
-        f"\n{sum(c for e in gaps.values() for _, c in e)} optional fields have "
-        f"no setter. Add `Setters` to the derive list on each type above.",
+        f"\n{missing} request {'type' if missing == 1 else 'types'} "
+        f"{'does' if missing == 1 else 'do'} not derive `Setters`. Add it to "
+        f"the derive list on each type above.",
         file=sys.stderr,
     )
     return 1
