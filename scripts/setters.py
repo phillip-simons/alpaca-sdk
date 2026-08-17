@@ -88,6 +88,12 @@ EMPTY_STRUCT = re.compile(r"^pub struct (\w+)(?:<[^>]*>)?\s*\{\s*\}\s*$")
 # declaration rustfmt wrapped across lines can be rejoined — see `fields`.
 FIELD_START = re.compile(r"^    pub (\w+):")
 
+# A rejoined field of any type. Not used to classify — `OPTION_FIELD` does that
+# — but to tell "this is a required field" from "the rejoin produced something
+# this script does not understand". Without the distinction the second case
+# looks exactly like the first, which is how a field goes missing quietly.
+REQUIRED_FIELD = re.compile(r"^pub (\w+): .+,$")
+
 # A rejoined `pub field: Option<T>,`. Only optional fields: a required field is
 # a constructor argument, and the derive leaves it alone.
 #
@@ -245,6 +251,16 @@ def fields(lines: list[str], start: int) -> tuple[list[str], list[tuple[str, str
         declaration = " ".join(part for part in parts if part)
 
         found = OPTION_FIELD.match(declaration)
+        if not found and not REQUIRED_FIELD.match(declaration):
+            # Neither shape. Silently filing it under "required" is how a field
+            # disappears from the count, and every hole this script has had was
+            # of that kind: the pattern did not match, nothing said so, and the
+            # type stopped being checked. Refuse instead.
+            raise SyntaxError(
+                f"cannot classify `{declaration}` — this script decides which "
+                f"fields need a setter, so a declaration it cannot read is one "
+                f"it would pass in silence. Teach it the shape."
+            )
         if found:
             optional.append(found.group(1))
             skip = SKIP_ATTR.search("\n".join(pending))
