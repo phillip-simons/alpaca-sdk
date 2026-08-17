@@ -1,0 +1,11 @@
+error: `Buy` is already a variant of this enum
+  --> tests/compile_fail/two_variants_with_one_name_fails.rs:10:5
+   |
+10 |     Buy,
+   |     ^^^
+
+error: `Buy` is first defined here, carrying "buy"
+ --> tests/compile_fail/two_variants_with_one_name_fails.rs:7:5
+  |
+7 |     Buy,
+  |     ^^^

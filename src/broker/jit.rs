@@ -21,36 +21,44 @@ use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// Which JIT report to run.
-    pub enum JitReportType {
-        /// Every transaction.
-        Detail => "detail",
-        /// Net position by account.
-        NetSummary => "net_summary",
-        /// The net payment due.
-        NetPayment => "net_payment",
-        /// The net payment, final.
-        NetPaymentFinal => "net_payment_final",
-        /// Gross position by account.
-        GrossSummary => "gross_summary",
-        /// The gross payment due.
-        GrossPayment => "gross_payment",
-        /// The gross payment, final.
-        GrossPaymentFinal => "gross_payment_final",
-        /// What is owed.
-        Obligation => "obligation",
-    }
+/// Which JIT report to run.
+#[wire_enum]
+pub enum JitReportType {
+    /// Every transaction.
+    #[wire = "detail"]
+    Detail,
+    /// Net position by account.
+    #[wire = "net_summary"]
+    NetSummary,
+    /// The net payment due.
+    #[wire = "net_payment"]
+    NetPayment,
+    /// The net payment, final.
+    #[wire = "net_payment_final"]
+    NetPaymentFinal,
+    /// Gross position by account.
+    #[wire = "gross_summary"]
+    GrossSummary,
+    /// The gross payment due.
+    #[wire = "gross_payment"]
+    GrossPayment,
+    /// The gross payment, final.
+    #[wire = "gross_payment_final"]
+    GrossPaymentFinal,
+    /// What is owed.
+    #[wire = "obligation"]
+    Obligation,
 }
 
-wire_enum! {
-    /// Whether a report comes back inline or as a link.
-    pub enum JitResponseType {
-        /// In the response body.
-        Inline => "inline",
-        /// As a presigned URL to fetch.
-        DownloadUrl => "download_url",
-    }
+/// Whether a report comes back inline or as a link.
+#[wire_enum]
+pub enum JitResponseType {
+    /// In the response body.
+    #[wire = "inline"]
+    Inline,
+    /// As a presigned URL to fetch.
+    #[wire = "download_url"]
+    DownloadUrl,
 }
 
 /// A JIT ledger.

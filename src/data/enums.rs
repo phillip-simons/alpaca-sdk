@@ -8,168 +8,215 @@
 //! Hand-written `impl` blocks belong in the sibling `enums_ext.rs`.
 
 use crate::types::wire::wire_enum;
-wire_enum! {
-    /// The exchanges that provide data feeds to Alpaca.
-    pub enum Exchange {
-        /// Cboe BZ
-        Z => "Z",
-        /// International Securities Exchange
-        I => "I",
-        /// Chicago Stock Exchange
-        M => "M",
-        /// Members Exchange
-        U => "U",
-        /// Long Term Stock Exchange
-        L => "L",
-        /// CBOE
-        W => "W",
-        /// NASDAQ OMX PSX
-        X => "X",
-        /// NASDAQ OMX BX
-        B => "B",
-        /// FINRA ADF
-        D => "D",
-        /// Cboe EDGA
-        J => "J",
-        /// NYSE Arca
-        P => "P",
-        /// NASDAQ OMX
-        Q => "Q",
-        /// NASDAQ Small Cap
-        S => "S",
-        /// IEX
-        V => "V",
-        /// NYSE American (AMEX)
-        A => "A",
-        /// Market Independent
-        E => "E",
-        /// New York Stock Exchange
-        N => "N",
-        /// NASDAQ Int
-        T => "T",
-        /// Cboe BYX
-        Y => "Y",
-        /// National Stock Exchange
-        C => "C",
-        /// MIAX
-        H => "H",
-        /// Cboe EDGX
-        K => "K",
-    }
+
+/// The exchanges that provide data feeds to Alpaca.
+#[wire_enum]
+pub enum Exchange {
+    /// Cboe BZ
+    #[wire = "Z"]
+    Z,
+    /// International Securities Exchange
+    #[wire = "I"]
+    I,
+    /// Chicago Stock Exchange
+    #[wire = "M"]
+    M,
+    /// Members Exchange
+    #[wire = "U"]
+    U,
+    /// Long Term Stock Exchange
+    #[wire = "L"]
+    L,
+    /// CBOE
+    #[wire = "W"]
+    W,
+    /// NASDAQ OMX PSX
+    #[wire = "X"]
+    X,
+    /// NASDAQ OMX BX
+    #[wire = "B"]
+    B,
+    /// FINRA ADF
+    #[wire = "D"]
+    D,
+    /// Cboe EDGA
+    #[wire = "J"]
+    J,
+    /// NYSE Arca
+    #[wire = "P"]
+    P,
+    /// NASDAQ OMX
+    #[wire = "Q"]
+    Q,
+    /// NASDAQ Small Cap
+    #[wire = "S"]
+    S,
+    /// IEX
+    #[wire = "V"]
+    V,
+    /// NYSE American (AMEX)
+    #[wire = "A"]
+    A,
+    /// Market Independent
+    #[wire = "E"]
+    E,
+    /// New York Stock Exchange
+    #[wire = "N"]
+    N,
+    /// NASDAQ Int
+    #[wire = "T"]
+    T,
+    /// Cboe BYX
+    #[wire = "Y"]
+    Y,
+    /// National Stock Exchange
+    #[wire = "C"]
+    C,
+    /// MIAX
+    #[wire = "H"]
+    H,
+    /// Cboe EDGX
+    #[wire = "K"]
+    K,
 }
 
-wire_enum! {
-    /// Equity market data feeds. OTC and SIP are available with premium data subscriptions.
-    pub enum DataFeed {
-        /// Investor's exchange data feed
-        Iex => "iex",
-        /// Securities Information Processor feed
-        Sip => "sip",
-        /// SIP data with a 15 minute delay
-        DelayedSip => "delayed_sip",
-        /// Over the counter feed
-        Otc => "otc",
-        /// Blue Ocean, overnight US trading data
-        Boats => "boats",
-        /// derived overnight US trading data
-        Overnight => "overnight",
-    }
+/// Equity market data feeds. OTC and SIP are available with premium data subscriptions.
+#[wire_enum]
+pub enum DataFeed {
+    /// Investor's exchange data feed
+    #[wire = "iex"]
+    Iex,
+    /// Securities Information Processor feed
+    #[wire = "sip"]
+    Sip,
+    /// SIP data with a 15 minute delay
+    #[wire = "delayed_sip"]
+    DelayedSip,
+    /// Over the counter feed
+    #[wire = "otc"]
+    Otc,
+    /// Blue Ocean, overnight US trading data
+    #[wire = "boats"]
+    Boats,
+    /// derived overnight US trading data
+    #[wire = "overnight"]
+    Overnight,
 }
 
-wire_enum! {
-    /// Data normalization based on types of corporate actions.
-    pub enum Adjustment {
-        /// Unadjusted data
-        Raw => "raw",
-        /// Stock-split adjusted data
-        Split => "split",
-        /// Dividend adjusted data
-        Dividend => "dividend",
-        /// Data adjusted for all corporate actions
-        All => "all",
-    }
+/// Data normalization based on types of corporate actions.
+#[wire_enum]
+pub enum Adjustment {
+    /// Unadjusted data
+    #[wire = "raw"]
+    Raw,
+    /// Stock-split adjusted data
+    #[wire = "split"]
+    Split,
+    /// Dividend adjusted data
+    #[wire = "dividend"]
+    Dividend,
+    /// Data adjusted for all corporate actions
+    #[wire = "all"]
+    All,
 }
 
-wire_enum! {
-    /// Crypto location
-    pub enum CryptoFeed {
-        /// United States crypto feed
-        Us => "us",
-    }
+/// Crypto location
+#[wire_enum(sorted)]
+pub enum CryptoFeed {
+    /// United States crypto feed
+    #[wire = "us"]
+    Us,
 }
 
-wire_enum! {
-    /// The source feed of the data.
-    /// `opra` requires subscription
-    pub enum OptionsFeed {
-        /// Options Price Reporting Authority
-        Opra => "opra",
-        /// Indicative data
-        Indicative => "indicative",
-    }
+/// The source feed of the data.
+/// `opra` requires subscription
+#[wire_enum]
+pub enum OptionsFeed {
+    /// Options Price Reporting Authority
+    #[wire = "opra"]
+    Opra,
+    /// Indicative data
+    #[wire = "indicative"]
+    Indicative,
 }
 
-wire_enum! {
-    /// Most actives possible filters.
-    pub enum MostActivesBy {
-        /// `volume`
-        Volume => "volume",
-        /// `trades`
-        Trades => "trades",
-    }
+/// Most actives possible filters.
+#[wire_enum]
+pub enum MostActivesBy {
+    /// `volume`
+    #[wire = "volume"]
+    Volume,
+    /// `trades`
+    #[wire = "trades"]
+    Trades,
 }
 
-wire_enum! {
-    /// Most actives possible filters.
-    pub enum MarketType {
-        /// `stocks`
-        Stocks => "stocks",
-        /// `crypto`
-        Crypto => "crypto",
-    }
+/// Most actives possible filters.
+#[wire_enum]
+pub enum MarketType {
+    /// `stocks`
+    #[wire = "stocks"]
+    Stocks,
+    /// `crypto`
+    #[wire = "crypto"]
+    Crypto,
 }
 
-wire_enum! {
-    /// The `NewsImageSize` values accepted by the API.
-    pub enum NewsImageSize {
-        /// `thumb`
-        Thumb => "thumb",
-        /// `small`
-        Small => "small",
-        /// `large`
-        Large => "large",
-    }
+/// The `NewsImageSize` values accepted by the API.
+#[wire_enum]
+pub enum NewsImageSize {
+    /// `thumb`
+    #[wire = "thumb"]
+    Thumb,
+    /// `small`
+    #[wire = "small"]
+    Small,
+    /// `large`
+    #[wire = "large"]
+    Large,
 }
 
-wire_enum! {
-    /// The type of corporate action.
-    /// ref. <https://docs.alpaca.markets/reference/corporateactions-1>
-    pub enum CorporateActionsType {
-        /// Reverse split
-        ReverseSplit => "reverse_split",
-        /// Forward split
-        ForwardSplit => "forward_split",
-        /// Unit split
-        UnitSplit => "unit_split",
-        /// Cash dividend
-        CashDividend => "cash_dividend",
-        /// Stock dividend
-        StockDividend => "stock_dividend",
-        /// Spin off
-        SpinOff => "spin_off",
-        /// Cash merger
-        CashMerger => "cash_merger",
-        /// Stock merger
-        StockMerger => "stock_merger",
-        /// Stock and cash merger
-        StockAndCashMerger => "stock_and_cash_merger",
-        /// Redemption
-        Redemption => "redemption",
-        /// Name change
-        NameChange => "name_change",
-        /// Worthless removal
-        WorthlessRemoval => "worthless_removal",
-        /// Rights distribution
-        RightsDistribution => "rights_distribution",
-    }
+/// The type of corporate action.
+/// ref. <https://docs.alpaca.markets/reference/corporateactions-1>
+#[wire_enum]
+pub enum CorporateActionsType {
+    /// Reverse split
+    #[wire = "reverse_split"]
+    ReverseSplit,
+    /// Forward split
+    #[wire = "forward_split"]
+    ForwardSplit,
+    /// Unit split
+    #[wire = "unit_split"]
+    UnitSplit,
+    /// Cash dividend
+    #[wire = "cash_dividend"]
+    CashDividend,
+    /// Stock dividend
+    #[wire = "stock_dividend"]
+    StockDividend,
+    /// Spin off
+    #[wire = "spin_off"]
+    SpinOff,
+    /// Cash merger
+    #[wire = "cash_merger"]
+    CashMerger,
+    /// Stock merger
+    #[wire = "stock_merger"]
+    StockMerger,
+    /// Stock and cash merger
+    #[wire = "stock_and_cash_merger"]
+    StockAndCashMerger,
+    /// Redemption
+    #[wire = "redemption"]
+    Redemption,
+    /// Name change
+    #[wire = "name_change"]
+    NameChange,
+    /// Worthless removal
+    #[wire = "worthless_removal"]
+    WorthlessRemoval,
+    /// Rights distribution
+    #[wire = "rights_distribution"]
+    RightsDistribution,
 }

@@ -1,4 +1,4 @@
-error: this field has no documentation to give its setter — document the field, or write the setter's own with `#[setters(doc = "…")]`
+error: this field has no documentation the setter can inherit — document it with a plain `///`, or write the setter's own with `#[setters(doc = "…")]`
  --> tests/compile_fail/an_undocumented_field_fails.rs:5:5
   |
 5 |     pub limit: Option<u32>,

@@ -1,0 +1,5 @@
+error: a wire enum variant's value is its `#[wire = "…"]` string, and this discriminant would be dropped rather than used — delete it
+ --> tests/compile_fail/a_variant_discriminant_fails.rs:7:11
+  |
+7 |     Buy = 3,
+  |           ^

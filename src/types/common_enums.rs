@@ -11,64 +11,82 @@
 
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// Sort direction for endpoints that accept one.
-    pub enum Sort {
-        /// Oldest first.
-        Asc => "asc",
-        /// Newest first.
-        Desc => "desc",
-    }
+/// Sort direction for endpoints that accept one.
+#[wire_enum(sorted)]
+pub enum Sort {
+    /// Oldest first.
+    #[wire = "asc"]
+    Asc,
+    /// Newest first.
+    #[wire = "desc"]
+    Desc,
 }
 
-wire_enum! {
-    /// Currencies supported for local currency trading.
-    ///
-    /// See <https://docs.alpaca.markets/us/docs/local-currency-trading-lct>.
-    pub enum SupportedCurrencies {
-        /// United States dollar.
-        Usd => "USD",
-        /// Pound sterling.
-        Gbp => "GBP",
-        /// Swiss franc.
-        Chf => "CHF",
-        /// Euro.
-        Eur => "EUR",
-        /// Canadian dollar.
-        Cad => "CAD",
-        /// Japanese yen.
-        Jpy => "JPY",
-        /// Turkish lira.
-        Try => "TRY",
-        /// Australian dollar.
-        Aud => "AUD",
-        /// Czech koruna.
-        Czk => "CZK",
-        /// Swedish krona.
-        Sek => "SEK",
-        /// Danish krone.
-        Dkk => "DKK",
-        /// Singapore dollar.
-        Sgd => "SGD",
-        /// Hong Kong dollar.
-        Hkd => "HKD",
-        /// Hungarian forint.
-        Huf => "HUF",
-        /// New Zealand dollar.
-        Nzd => "NZD",
-        /// Norwegian krone.
-        Nok => "NOK",
-        /// Polish złoty.
-        Pln => "PLN",
-    }
+/// Currencies supported for local currency trading.
+///
+/// See <https://docs.alpaca.markets/us/docs/local-currency-trading-lct>.
+#[wire_enum]
+pub enum SupportedCurrencies {
+    /// United States dollar.
+    #[wire = "USD"]
+    Usd,
+    /// Pound sterling.
+    #[wire = "GBP"]
+    Gbp,
+    /// Swiss franc.
+    #[wire = "CHF"]
+    Chf,
+    /// Euro.
+    #[wire = "EUR"]
+    Eur,
+    /// Canadian dollar.
+    #[wire = "CAD"]
+    Cad,
+    /// Japanese yen.
+    #[wire = "JPY"]
+    Jpy,
+    /// Turkish lira.
+    #[wire = "TRY"]
+    Try,
+    /// Australian dollar.
+    #[wire = "AUD"]
+    Aud,
+    /// Czech koruna.
+    #[wire = "CZK"]
+    Czk,
+    /// Swedish krona.
+    #[wire = "SEK"]
+    Sek,
+    /// Danish krone.
+    #[wire = "DKK"]
+    Dkk,
+    /// Singapore dollar.
+    #[wire = "SGD"]
+    Sgd,
+    /// Hong Kong dollar.
+    #[wire = "HKD"]
+    Hkd,
+    /// Hungarian forint.
+    #[wire = "HUF"]
+    Huf,
+    /// New Zealand dollar.
+    #[wire = "NZD"]
+    Nzd,
+    /// Norwegian krone.
+    #[wire = "NOK"]
+    Nok,
+    /// Polish złoty.
+    #[wire = "PLN"]
+    Pln,
 }
 
-wire_enum! {
-    /// Whether an options contract is a call or a put.
-    pub enum ContractType {
-        /// The right to buy the underlying.
-        Call => "call",
-        /// The right to sell the underlying.
-        Put => "put",
-    }
+/// Whether an options contract is a call or a put.
+#[wire_enum(sorted)]
+pub enum ContractType {
+    /// The right to buy the underlying.
+    #[wire = "call"]
+    Call,
+    /// The right to sell the underlying.
+    #[wire = "put"]
+    Put,
 }

@@ -1,0 +1,5 @@
+error: `sorted` says this enum's wire values are in byte order, and "buy" is not: it sorts before "sell", so it belongs first — move the variant, or drop `sorted`
+ --> tests/compile_fail/an_unsorted_wire_enum_fails.rs:9:14
+  |
+9 |     #[wire = "buy"]
+  |              ^^^^^

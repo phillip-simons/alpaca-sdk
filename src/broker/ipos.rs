@@ -14,16 +14,18 @@ use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// Whether an offering is open to orders.
-    pub enum IpoAvailability {
-        /// Taking orders.
-        Available => "available",
-        /// Not taking orders, but still listed.
-        NotAvailable => "not_available",
-        /// Finished.
-        Closed => "closed",
-    }
+/// Whether an offering is open to orders.
+#[wire_enum]
+pub enum IpoAvailability {
+    /// Taking orders.
+    #[wire = "available"]
+    Available,
+    /// Not taking orders, but still listed.
+    #[wire = "not_available"]
+    NotAvailable,
+    /// Finished.
+    #[wire = "closed"]
+    Closed,
 }
 
 /// An initial public offering.

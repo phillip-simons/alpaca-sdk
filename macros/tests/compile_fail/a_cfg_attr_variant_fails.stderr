@@ -1,0 +1,5 @@
+error: `cfg_attr` is refused on a wire enum variant because this macro runs before it expands, so it cannot tell a `cfg` — which has to be copied onto the generated `WIRE_VALUES` element and `match` arms — from something that must not be. Write a plain `#[cfg]`, which is supported, or gate the whole enum
+ --> tests/compile_fail/a_cfg_attr_variant_fails.rs:9:5
+  |
+9 |     #[cfg_attr(all(), cfg(feature = "selling"))]
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

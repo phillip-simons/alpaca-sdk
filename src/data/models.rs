@@ -315,7 +315,7 @@ pub struct ForexRate {
 // these is ever sent as a request.
 //
 // Written out rather than derived because `DateTime<Utc>`, `NaiveDate` and the
-// `wire_enum!` exchange codes have no `Default` of their own. The epoch is the
+// `wire_enum` exchange codes have no `Default` of their own. The epoch is the
 // neutral timestamp: deterministic, and obviously a placeholder if one is ever
 // left unset by mistake.
 

@@ -6,7 +6,7 @@ name = "alpaca-sdk-macros"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
-description = "Derive macros for alpaca-sdk. Not intended for direct use."
+description = "Macros for alpaca-sdk. Not intended for direct use."
 authors = ["Phillip Simons <phillip@simons.gg>"]
 license = "Apache-2.0"
 # Its own, not the SDK's: a caller who lands on this crate's page arrived by
@@ -26,14 +26,23 @@ proc-macro = true
 # crate's cost to a downstream build is its own compilation and nothing else.
 proc-macro2 = "1.0.107"
 quote = "1.0.47"
-syn = "2.0.119"
+# `full` is for `wire_enum`, which parses whole items rather than a derive's
+# input. Without it `syn::Item` does not exist, and a `#[wire_enum]` on a struct
+# could not be told apart from one on an enum.
+syn = { version = "2.0.119", features = ["full"] }
 
 [dev-dependencies]
-# Compile-fail tests. A derive's error paths are the half of it a normal test
+# Compile-fail tests. A macro's error paths are the half of it a normal test
 # cannot reach: every one of them is a `compile_error!`, so the only way to
 # assert on the message is to compile a file that should not compile and diff
 # the output. See `tests/compile_fail.rs` for where this does and does not run.
 trybuild = "1.0.114"
+# Not used by this crate — used by the code it generates. `wire_enum` emits
+# `::serde::Serialize` and `::serde::Deserialize` impls, so the
+# `a_whole_wire_enum.rs` pass case needs serde in scope to compile at all. The failing
+# cases do not: a refusal replaces the item with `compile_error!` and emits
+# no impls, which is why their `.stderr` files are one message and no noise.
+serde = "1"
 
 [lints.rust]
 unsafe_code = "forbid"

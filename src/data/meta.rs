@@ -28,30 +28,33 @@ use serde::{Deserialize, Serialize};
 use crate::types::Validated;
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// Which kind of tick a condition-code table describes.
-    pub enum TickType {
-        /// Conditions that appear on trades.
-        Trade => "trade",
-        /// Conditions that appear on quotes.
-        Quote => "quote",
-    }
+/// Which kind of tick a condition-code table describes.
+#[wire_enum]
+pub enum TickType {
+    /// Conditions that appear on trades.
+    #[wire = "trade"]
+    Trade,
+    /// Conditions that appear on quotes.
+    #[wire = "quote"]
+    Quote,
 }
 
-wire_enum! {
-    /// The consolidated tape a stock reports on.
-    ///
-    /// Required on the stock condition-code route and rejected with a 400 when
-    /// absent — a requirement the vendored spec states and no other SDK
-    /// implements. The option route takes no tape at all.
-    pub enum Tape {
-        /// NYSE-listed securities.
-        A => "A",
-        /// NYSE American, NYSE Arca, and other regional listings.
-        B => "B",
-        /// Nasdaq-listed securities.
-        C => "C",
-    }
+/// The consolidated tape a stock reports on.
+///
+/// Required on the stock condition-code route and rejected with a 400 when
+/// absent — a requirement the vendored spec states and no other SDK
+/// implements. The option route takes no tape at all.
+#[wire_enum(sorted)]
+pub enum Tape {
+    /// NYSE-listed securities.
+    #[wire = "A"]
+    A,
+    /// NYSE American, NYSE Arca, and other regional listings.
+    #[wire = "B"]
+    B,
+    /// Nasdaq-listed securities.
+    #[wire = "C"]
+    C,
 }
 
 /// A code-to-name table, as the `meta` endpoints publish it.

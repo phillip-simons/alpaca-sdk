@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Diff this crate's wire enums against their spec schemas.
 
-The `wire_enum!` blocks are checked-in source; the specs are Alpaca's own. Where
+The `#[wire_enum]` enums are checked-in source; the specs are Alpaca's own. Where
 both describe the same type they should agree. The run prints how many do; no
 count is kept here, because every count kept here has gone stale. It is several
 numbers rather than one, because "has a schema" and "got a verdict" are
@@ -35,13 +35,17 @@ import pathlib
 import re
 import sys
 
-# `wire_enum! { … pub enum Name { Variant => "wire", … } }`.
+# `#[wire_enum]` above `pub enum Name {`, one `#[wire = "…"]` per variant.
+#
+# The attribute is not required here: a plain `pub enum` carries no
+# `#[wire]` lines, so it collects no values and the filter below drops it —
+# which is the same reasoning that lets this read every `.rs` file.
 ENUM_DECL = re.compile(r"^\s*pub enum (\w+) \{", re.M)
-# The trailing comma is optional: `wire_enum!` ends its variant list with
-# `),+ $(,)?`, so a block whose last variant omits it compiles fine. Requiring
-# one here dropped that value silently — as a phantom gap if the spec listed it,
-# and as nothing at all if it did not.
-VARIANT = re.compile(r'^\s*(\w+) => "([^"]*)",?\s*$')
+# One `#[wire = "…"]` per variant, above the ident it names. Matched on the
+# attribute rather than the ident because the value is what this report
+# compares, and a trailing comment is tolerated the way the closing brace
+# tolerates one below.
+VARIANT = re.compile(r'^\s*#\[wire = "([^"]*)"\]\s*(?://.*)?$')
 
 # A `cfg` attribute on the line before a `mod` — the two shapes it can guard.
 CFG_ATTRIBUTE = re.compile(r"^\s*#\[cfg\((?P<predicate>.*)\)\]\s*$")
@@ -288,7 +292,7 @@ def test_only_files(src: pathlib.Path) -> set[pathlib.Path]:
 def crate_enums(
     src: pathlib.Path,
 ) -> tuple[dict[str, list[str]], list[tuple[str, list[pathlib.Path]]]]:
-    """Every `wire_enum!` in the crate, as `{name: [wire values]}`.
+    """Every `#[wire_enum]` in the crate, as `{name: [wire values]}`.
 
     Returns the enums and any name declared by more than one block, since the
     mapping is keyed by name and cannot hold both.
@@ -301,7 +305,7 @@ def crate_enums(
     `broker/funding_wallet.rs`, `trading/wallets.rs` and a dozen others — and
     the narrower glob silently excluded them, which meant the report's headline
     counts described a subset while reading as though they described the crate.
-    A `pub enum` that is not a `wire_enum!` has no `Variant => "wire"` arms, so
+    A `pub enum` that is not a `#[wire_enum]` has no `#[wire = "…"]` lines, so
     it collects no values and the filter below drops it.
 
     Test code is excluded, both whole `#[cfg(test)]` modules and inline ones.
@@ -312,7 +316,7 @@ def crate_enums(
     excluded = test_only_files(src)
     enums: dict[str, list[str]] = {}
     # Only the declarations that carried wire values. A collision matters when
-    # two `wire_enum!`s share a name — each fills the other's gaps, so no
+    # two `#[wire_enum]`s share a name — each fills the other's gaps, so no
     # verdict is honest. An ordinary valueless `pub enum` that happens to share
     # one is a different thing entirely, and treating it as a collision would
     # suppress a real enum's verdict over a name it merely shares: strictly
@@ -370,12 +374,12 @@ def crate_enums(
                 elif current is not None:
                     variant = VARIANT.match(line)
                     if variant:
-                        enums[current].append(variant.group(2))
+                        enums[current].append(variant.group(1))
                         carried += 1
                     # `code`, not `line`: a closing brace with a trailing
                     # comment would otherwise leave the block open, and every
-                    # later `Ident => "wire",` in the file — an ordinary match
-                    # arm, say — would be filed as one of its values.
+                    # later `#[wire = "…"]` in the file would be filed as one of
+                    # its values.
                     elif re.match(r"^\s*\}\s*$", code):
                         if carried:
                             declared_in.setdefault(current, []).append(rs)

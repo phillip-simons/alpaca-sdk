@@ -15,7 +15,7 @@ use crate::error::{Error, Result};
 
 /// The feed's wire value, refusing one this crate does not recognise.
 ///
-/// Every `wire_enum!` carries an `Unknown(String)` so an unrecognised value
+/// Every `wire_enum` carries an `Unknown(String)` so an unrecognised value
 /// decodes rather than fails. That is right for a response and wrong for a URL:
 /// the string ends up as a path segment, where `..` addresses a different
 /// endpoint than the caller named. A feed the crate does not know has no live
@@ -33,7 +33,7 @@ where
     Ok(feed.wire())
 }
 
-/// The two `wire_enum!` accessors [`known_feed`] needs, so it can be written
+/// The two `wire_enum` accessors [`known_feed`] needs, so it can be written
 /// once rather than per feed type.
 trait AsUnknown {
     fn is_unknown(&self) -> bool;

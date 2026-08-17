@@ -18,78 +18,109 @@ use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// A market, by its ISO 10383 code or Alpaca's acronym for it.
-    ///
-    /// Alpaca's list mixes the two conventions — `NASDAQ` and `XNAS` are both
-    /// accepted and are the same venue — so this reproduces the list rather
-    /// than tidying it.
-    pub enum Market {
-        /// Before market open, US.
-        Bmo => "BMO",
-        /// BNY Mellon.
-        Bnym => "BNYM",
-        /// Blue Ocean overnight.
-        Boats => "BOATS",
-        /// Cboe Europe.
-        Ceux => "CEUX",
-        /// Cboe Chi-X.
-        Chix => "CHIX",
-        /// Hong Kong Exchanges.
-        Hkex => "HKEX",
-        /// Investors Exchange.
-        Iex => "IEX",
-        /// Investors Exchange, MIC.
-        Iexg => "IEXG",
-        /// International Securities Exchange.
-        Ise => "ISE",
-        /// London Stock Exchange.
-        Lse => "LSE",
-        /// Borsa Italiana.
-        Mta => "MTA",
-        /// Borsa Italiana, MIC.
-        Mtaa => "MTAA",
-        /// Nasdaq.
-        Nasdaq => "NASDAQ",
-        /// New York Stock Exchange.
-        Nyse => "NYSE",
-        /// Oceanview.
-        Ocea => "OCEA",
-        /// Options Price Reporting Authority.
-        Opra => "OPRA",
-        /// Over the counter.
-        Otc => "OTC",
-        /// OTC Markets.
-        Otcm => "OTCM",
-        /// SIFMA, for the bond market's holiday schedule.
-        Sifma => "SIFMA",
-        /// Saudi Exchange.
-        Tadawul => "TADAWUL",
-        /// Euronext Amsterdam.
-        Xams => "XAMS",
-        /// Euronext Brussels.
-        Xbru => "XBRU",
-        /// Euronext Dublin.
-        Xdub => "XDUB",
-        /// Deutsche Börse Xetra.
-        Xetr => "XETR",
-        /// Deutsche Börse Xetra, alternate spelling.
-        Xetra => "XETRA",
-        /// Hong Kong Exchanges, MIC.
-        Xhkg => "XHKG",
-        /// Euronext Lisbon.
-        Xlis => "XLIS",
-        /// London Stock Exchange, MIC.
-        Xlon => "XLON",
-        /// Nasdaq, MIC.
-        Xnas => "XNAS",
-        /// New York Stock Exchange, MIC.
-        Xnys => "XNYS",
-        /// Euronext Paris.
-        Xpar => "XPAR",
-        /// Saudi Exchange, MIC.
-        Xsau => "XSAU",
-    }
+/// A market, by its ISO 10383 code or Alpaca's acronym for it.
+///
+/// Alpaca's list mixes the two conventions — `NASDAQ` and `XNAS` are both
+/// accepted and are the same venue — so this reproduces the list rather
+/// than tidying it.
+#[wire_enum(sorted)]
+pub enum Market {
+    /// Before market open, US.
+    #[wire = "BMO"]
+    Bmo,
+    /// BNY Mellon.
+    #[wire = "BNYM"]
+    Bnym,
+    /// Blue Ocean overnight.
+    #[wire = "BOATS"]
+    Boats,
+    /// Cboe Europe.
+    #[wire = "CEUX"]
+    Ceux,
+    /// Cboe Chi-X.
+    #[wire = "CHIX"]
+    Chix,
+    /// Hong Kong Exchanges.
+    #[wire = "HKEX"]
+    Hkex,
+    /// Investors Exchange.
+    #[wire = "IEX"]
+    Iex,
+    /// Investors Exchange, MIC.
+    #[wire = "IEXG"]
+    Iexg,
+    /// International Securities Exchange.
+    #[wire = "ISE"]
+    Ise,
+    /// London Stock Exchange.
+    #[wire = "LSE"]
+    Lse,
+    /// Borsa Italiana.
+    #[wire = "MTA"]
+    Mta,
+    /// Borsa Italiana, MIC.
+    #[wire = "MTAA"]
+    Mtaa,
+    /// Nasdaq.
+    #[wire = "NASDAQ"]
+    Nasdaq,
+    /// New York Stock Exchange.
+    #[wire = "NYSE"]
+    Nyse,
+    /// Oceanview.
+    #[wire = "OCEA"]
+    Ocea,
+    /// Options Price Reporting Authority.
+    #[wire = "OPRA"]
+    Opra,
+    /// Over the counter.
+    #[wire = "OTC"]
+    Otc,
+    /// OTC Markets.
+    #[wire = "OTCM"]
+    Otcm,
+    /// SIFMA, for the bond market's holiday schedule.
+    #[wire = "SIFMA"]
+    Sifma,
+    /// Saudi Exchange.
+    #[wire = "TADAWUL"]
+    Tadawul,
+    /// Euronext Amsterdam.
+    #[wire = "XAMS"]
+    Xams,
+    /// Euronext Brussels.
+    #[wire = "XBRU"]
+    Xbru,
+    /// Euronext Dublin.
+    #[wire = "XDUB"]
+    Xdub,
+    /// Deutsche Börse Xetra.
+    #[wire = "XETR"]
+    Xetr,
+    /// Deutsche Börse Xetra, alternate spelling.
+    #[wire = "XETRA"]
+    Xetra,
+    /// Hong Kong Exchanges, MIC.
+    #[wire = "XHKG"]
+    Xhkg,
+    /// Euronext Lisbon.
+    #[wire = "XLIS"]
+    Xlis,
+    /// London Stock Exchange, MIC.
+    #[wire = "XLON"]
+    Xlon,
+    /// Nasdaq, MIC.
+    #[wire = "XNAS"]
+    Xnas,
+    /// New York Stock Exchange, MIC.
+    #[wire = "XNYS"]
+    Xnys,
+    /// Euronext Paris.
+    #[wire = "XPAR"]
+    Xpar,
+    /// Saudi Exchange, MIC.
+    #[wire = "XSAU"]
+    Xsau,
 }
 
 /// One trading day on a named market.

@@ -849,7 +849,7 @@ async fn a_slashed_underlying_symbol_stays_one_path_segment() {
         .unwrap();
 }
 
-/// `MarketType` is a `wire_enum!`, so `Unknown(String)` is publicly
+/// `MarketType` is a `wire_enum`, so `Unknown(String)` is publicly
 /// constructible and its `as_str()` hands back the caller's own text — which
 /// went straight into the screener path.
 #[tokio::test]

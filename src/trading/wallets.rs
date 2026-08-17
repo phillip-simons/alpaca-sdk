@@ -21,64 +21,73 @@ use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// The chain a wallet or address is on.
-    pub enum CryptoChain {
-        /// Solana.
-        Sol => "SOL",
-        /// Ethereum.
-        Eth => "ETH",
-        /// Bitcoin.
-        Btc => "BTC",
-        /// XRP Ledger.
-        Xrp => "XRP",
-        /// Arbitrum.
-        Arb => "ARB",
-    }
+/// The chain a wallet or address is on.
+#[wire_enum]
+pub enum CryptoChain {
+    /// Solana.
+    #[wire = "SOL"]
+    Sol,
+    /// Ethereum.
+    #[wire = "ETH"]
+    Eth,
+    /// Bitcoin.
+    #[wire = "BTC"]
+    Btc,
+    /// XRP Ledger.
+    #[wire = "XRP"]
+    Xrp,
+    /// Arbitrum.
+    #[wire = "ARB"]
+    Arb,
 }
 
-wire_enum! {
-    /// The network a wallet is on, where it differs from the chain.
-    pub enum CryptoNetwork {
-        /// Ethereum.
-        Ethereum => "ethereum",
-        /// Solana.
-        Solana => "solana",
-    }
+/// The network a wallet is on, where it differs from the chain.
+#[wire_enum(sorted)]
+pub enum CryptoNetwork {
+    /// Ethereum.
+    #[wire = "ethereum"]
+    Ethereum,
+    /// Solana.
+    #[wire = "solana"]
+    Solana,
 }
 
-wire_enum! {
-    /// Which way a transfer moves.
-    pub enum TransferDirection {
-        /// Into the Alpaca account.
-        Incoming => "INCOMING",
-        /// Out of it.
-        Outgoing => "OUTGOING",
-    }
+/// Which way a transfer moves.
+#[wire_enum(sorted)]
+pub enum TransferDirection {
+    /// Into the Alpaca account.
+    #[wire = "INCOMING"]
+    Incoming,
+    /// Out of it.
+    #[wire = "OUTGOING"]
+    Outgoing,
 }
 
-wire_enum! {
-    /// Where a crypto transfer stands.
-    ///
-    /// Upper-case on the wire, unlike the fiat transfer statuses.
-    pub enum CryptoTransferStatus {
-        /// In flight.
-        Processing => "PROCESSING",
-        /// Failed.
-        Failed => "FAILED",
-        /// Settled.
-        Complete => "COMPLETE",
-    }
+/// Where a crypto transfer stands.
+///
+/// Upper-case on the wire, unlike the fiat transfer statuses.
+#[wire_enum]
+pub enum CryptoTransferStatus {
+    /// In flight.
+    #[wire = "PROCESSING"]
+    Processing,
+    /// Failed.
+    #[wire = "FAILED"]
+    Failed,
+    /// Settled.
+    #[wire = "COMPLETE"]
+    Complete,
 }
 
-wire_enum! {
-    /// Whether an allowlisted address may be withdrawn to yet.
-    pub enum WhitelistStatus {
-        /// Usable.
-        Approved => "APPROVED",
-        /// Still in its cooling-off period.
-        Pending => "PENDING",
-    }
+/// Whether an allowlisted address may be withdrawn to yet.
+#[wire_enum(sorted)]
+pub enum WhitelistStatus {
+    /// Usable.
+    #[wire = "APPROVED"]
+    Approved,
+    /// Still in its cooling-off period.
+    #[wire = "PENDING"]
+    Pending,
 }
 
 /// A deposit wallet.

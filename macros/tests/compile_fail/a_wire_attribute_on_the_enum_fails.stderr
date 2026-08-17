@@ -1,0 +1,5 @@
+error: `wire` gives one *variant* its string on the wire, so it belongs on a variant — on the enum there is nothing for it to name
+ --> tests/compile_fail/a_wire_attribute_on_the_enum_fails.rs:4:1
+  |
+4 | #[wire = "side"]
+  | ^^^^^^^^^^^^^^^^

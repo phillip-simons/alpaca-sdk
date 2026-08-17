@@ -14,74 +14,85 @@ use crate::types::Validated;
 use crate::types::setters::Setters;
 use crate::types::wire::wire_enum;
 
-wire_enum! {
-    /// Which options level an account is approved for, or asking for.
-    ///
-    /// Zero is a real level — it means options trading is switched off — and it
-    /// appears on the approved side only. A request cannot ask for it.
-    pub enum OptionsLevel {
-        /// No options trading.
-        Zero => "0",
-        /// Covered calls and cash-secured puts.
-        One => "1",
-        /// Long calls and puts.
-        Two => "2",
-        /// Spreads.
-        Three => "3",
-    }
+/// Which options level an account is approved for, or asking for.
+///
+/// Zero is a real level — it means options trading is switched off — and it
+/// appears on the approved side only. A request cannot ask for it.
+#[wire_enum(sorted)]
+pub enum OptionsLevel {
+    /// No options trading.
+    #[wire = "0"]
+    Zero,
+    /// Covered calls and cash-secured puts.
+    #[wire = "1"]
+    One,
+    /// Long calls and puts.
+    #[wire = "2"]
+    Two,
+    /// Spreads.
+    #[wire = "3"]
+    Three,
 }
 
-wire_enum! {
-    /// Where an options approval request stands.
-    pub enum OptionsApprovalStatus {
-        /// Under review.
-        Pending => "PENDING",
-        /// Granted at the level asked for.
-        Approved => "APPROVED",
-        /// Granted, but at a lower level than asked for.
-        LowerLevelApproved => "LOWER_LEVEL_APPROVED",
-        /// Refused.
-        Rejected => "REJECTED",
-    }
+/// Where an options approval request stands.
+#[wire_enum]
+pub enum OptionsApprovalStatus {
+    /// Under review.
+    #[wire = "PENDING"]
+    Pending,
+    /// Granted at the level asked for.
+    #[wire = "APPROVED"]
+    Approved,
+    /// Granted, but at a lower level than asked for.
+    #[wire = "LOWER_LEVEL_APPROVED"]
+    LowerLevelApproved,
+    /// Refused.
+    #[wire = "REJECTED"]
+    Rejected,
 }
 
-wire_enum! {
-    /// Who asked for an options level.
-    pub enum OptionsApprovalRequester {
-        /// The correspondent.
-        Correspondent => "CORRESPONDENT",
-        /// Alpaca, on review.
-        AlpacaAdmin => "ALPACA_ADMIN",
-    }
+/// Who asked for an options level.
+#[wire_enum]
+pub enum OptionsApprovalRequester {
+    /// The correspondent.
+    #[wire = "CORRESPONDENT"]
+    Correspondent,
+    /// Alpaca, on review.
+    #[wire = "ALPACA_ADMIN"]
+    AlpacaAdmin,
 }
 
-wire_enum! {
-    /// The coarse split of account activities.
-    ///
-    /// Trade activities are fills; everything else — dividends, fees, journals,
-    /// transfers — is a non-trade activity. The same split
-    /// [`Activity`](crate::trading::Activity) makes in the response, offered as
-    /// a filter on the request.
-    pub enum ActivityCategory {
-        /// Fills.
-        TradeActivity => "trade_activity",
-        /// Everything else.
-        NonTradeActivity => "non_trade_activity",
-    }
+/// The coarse split of account activities.
+///
+/// Trade activities are fills; everything else — dividends, fees, journals,
+/// transfers — is a non-trade activity. The same split
+/// [`Activity`](crate::trading::Activity) makes in the response, offered as
+/// a filter on the request.
+#[wire_enum]
+pub enum ActivityCategory {
+    /// Fills.
+    #[wire = "trade_activity"]
+    TradeActivity,
+    /// Everything else.
+    #[wire = "non_trade_activity"]
+    NonTradeActivity,
 }
 
-wire_enum! {
-    /// How risky Alpaca considers a country.
-    pub enum RiskRating {
-        /// Low risk.
-        Low => "low",
-        /// Medium risk.
-        Medium => "medium",
-        /// High risk.
-        High => "high",
-        /// Not served at all.
-        Prohibited => "prohibited",
-    }
+/// How risky Alpaca considers a country.
+#[wire_enum]
+pub enum RiskRating {
+    /// Low risk.
+    #[wire = "low"]
+    Low,
+    /// Medium risk.
+    #[wire = "medium"]
+    Medium,
+    /// High risk.
+    #[wire = "high"]
+    High,
+    /// Not served at all.
+    #[wire = "prohibited"]
+    Prohibited,
 }
 
 /// An options level approval request and its outcome.

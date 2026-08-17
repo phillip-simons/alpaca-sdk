@@ -1,0 +1,11 @@
+error: `Buy` already carries "buy", so `From<&str>` matches it first and `Sell` can never come back off the wire — one of the two literals is wrong
+ --> tests/compile_fail/two_variants_with_one_wire_value_fails.rs:9:14
+  |
+9 |     #[wire = "buy"]
+  |              ^^^^^
+
+error: "buy" is first claimed here, by `Buy`
+ --> tests/compile_fail/two_variants_with_one_wire_value_fails.rs:6:14
+  |
+6 |     #[wire = "buy"]
+  |              ^^^^^

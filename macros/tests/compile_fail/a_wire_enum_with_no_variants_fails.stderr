@@ -1,0 +1,5 @@
+error: a wire enum with no variants is a type that is only ever `Unknown` — give it the values the API sends, or delete it
+ --> tests/compile_fail/a_wire_enum_with_no_variants_fails.rs:4:1
+  |
+4 | pub enum Side {}
+  | ^^^^^^^^^^^^^^^^

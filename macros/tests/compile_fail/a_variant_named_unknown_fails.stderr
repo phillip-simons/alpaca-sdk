@@ -1,0 +1,5 @@
+error: `Unknown` is the catch-all this macro injects, and two variants of one name cannot coexist — name this one for the value it carries
+ --> tests/compile_fail/a_variant_named_unknown_fails.rs:7:5
+  |
+7 |     Unknown,
+  |     ^^^^^^^

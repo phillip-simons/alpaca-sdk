@@ -1,0 +1,5 @@
+error: a wire enum's variants each map to one string, so they carry no fields — there is no `as_str()` this variant could return
+ --> tests/compile_fail/a_variant_with_fields_fails.rs:7:8
+  |
+7 |     Buy(String),
+  |        ^^^^^^^^
