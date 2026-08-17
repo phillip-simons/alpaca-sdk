@@ -293,7 +293,7 @@ impl CreateInstantFundingRequest {
 }
 
 /// One advance to settle, and who sent the money.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct SettlementTransfer {
     /// The advance being settled.

@@ -265,6 +265,16 @@ fn parse_options(attrs: &[Attribute]) -> syn::Result<Options> {
                 if options.into.is_some() {
                     return Err(meta.error("`into` is already set on this field"));
                 }
+                // `into` is a flag. Without this the value in
+                // `#[setters(into = "yes")]` is left for the surrounding parser
+                // to trip over, and the caller gets syn's bare "expected `,`"
+                // where every other mistake here gets a sentence.
+                if meta.input.peek(syn::Token![=]) {
+                    return Err(meta.error(
+                        "`into` takes no value — it is a flag, and the type it \
+                         converts to is the field's own",
+                    ));
+                }
                 options.into = Some(meta.path.span());
                 return Ok(());
             }

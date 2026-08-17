@@ -1,0 +1,5 @@
+error: `into` takes no value — it is a flag, and the type it converts to is the field's own
+ --> tests/compile_fail/into_with_a_value_fails.rs:6:15
+  |
+6 |     #[setters(into = "String")]
+  |               ^^^^

@@ -8,7 +8,9 @@ from any crate. What it is not is the idiom the rest of the surface reads in.
 them, and nothing said so: a missing setter is not a compile error, not a
 failing test, and not visible in a diff that adds a field. It is only visible by
 reading the struct and the impl side by side and noticing a name in one and not
-the other. Nobody does that for a hundred and twenty types.
+the other. Nobody does that for every type in this crate — the run prints how
+many there are, and no count is kept in this prose, because every count kept in
+prose here has gone stale.
 
 # What this checks, and what the compiler checks
 
@@ -392,7 +394,11 @@ def main() -> int:
             if derives:
                 covered += len(optional) - len(skipped)
                 skips.extend((rs.as_posix(), field, why) for field, why in skipped)
-            elif optional:
+            else:
+                # Demanded even with no optional fields, so that the report's
+                # own summary line is true. It also does the useful thing: a
+                # type carrying the derive picks up a setter the day someone
+                # adds an optional field to it, with nobody having to notice.
                 gaps.setdefault(rs.as_posix(), []).append((name, len(optional)))
 
     # An entry that no longer matches a struct is worse than a missing one: it

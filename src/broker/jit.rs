@@ -417,7 +417,7 @@ impl GetJitBalancesRequest {
 }
 
 /// One account's share of a JIT settlement.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
 #[non_exhaustive]
 pub struct JitSettlementAccount {
     /// The account.
