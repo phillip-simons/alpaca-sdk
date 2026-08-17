@@ -373,6 +373,19 @@ def parse(path: pathlib.Path) -> dict[str, tuple[bool, list[str], list[tuple[str
             pending = []
             index += 1
             continue
+
+        # A whole struct on one line — `pub struct X { pub a: Option<u32> }`.
+        # The body scan looks for a line that is exactly `}`, finds the *next*
+        # struct's, and eats it whole. `cargo fmt --check` does reject this
+        # shape, but that is a different job in a different workflow, and a gate
+        # that is only correct because another gate ran is not one.
+        if line.split("{", 1)[1].strip():
+            raise SyntaxError(
+                f"{path}:{index + 1}: `{line.strip()}` puts a struct body on the "
+                f"declaration line, which this script cannot read — and reading "
+                f"it wrong consumes the struct after it. Run `cargo fmt`."
+            )
+
         optional, skipped, index = fields(lines, index)
         found[declaration.group(1)] = (derives, optional, skipped)
         pending = []
@@ -381,31 +394,27 @@ def parse(path: pathlib.Path) -> dict[str, tuple[bool, list[str], list[tuple[str
 
 
 def buildable(path: pathlib.Path) -> set[str]:
-    """The types `request_construction.rs` imports, as the cross-check on scope.
+    """Every type named by `request_construction.rs`, as the cross-check on scope.
 
     `ADDITIONS` is where this script fails silently: a caller-built type that is
     not named there is not reported as uncovered, it is not reported at all.
-    That test's import list is the same set written down for an unrelated
-    reason — it exists to prove every input type is still constructible from
-    outside the crate — so disagreeing with it is a question worth asking on
-    every run rather than a note in a docstring.
+    That test names the same set for an unrelated reason — it exists to prove
+    every input type is still constructible from outside the crate — so
+    disagreeing with it is worth asking on every run rather than in a docstring.
 
-    Returns an empty set if the file has moved, and says so: silently skipping
-    the cross-check would restore exactly the blindness it exists to remove.
+    Every capitalised word in the file, not the import list. Parsing `use
+    alpaca_sdk::broker::{…}` groups was the first attempt and it reached eleven
+    of the twenty-five entries: it missed single-item imports, multi-segment
+    paths, and — the ones that mattered — `Disclosures`, `TrustedContact` and
+    `AccountConfiguration`, which that file writes fully qualified as
+    `alpaca_sdk::broker::Disclosures::default()` and never imports.
+
+    Over-collecting is the safe direction. A name that is not a struct with
+    optional fields is filtered out by the caller, so the cost of a stray match
+    is nothing, where the cost of a missed one is the silence this exists to
+    break.
     """
-    if not path.is_file():
-        print(
-            f"{path} is missing — it is the cross-check on `ADDITIONS`, so "
-            f"losing it costs this script the one thing it cannot see itself. "
-            f"Point `--buildable` at wherever the buildability test moved to.",
-            file=sys.stderr,
-        )
-        return set()
-
-    imported: set[str] = set()
-    for block in re.findall(r"use alpaca_sdk::\w+::\{(.*?)\};", path.read_text(), re.S):
-        imported |= {name.strip() for name in block.split(",") if name.strip()}
-    return imported
+    return set(re.findall(r"\b[A-Z]\w+\b", path.read_text()))
 
 
 def main() -> int:
@@ -484,11 +493,24 @@ def main() -> int:
             )
             return 1
 
-    # The cross-check the docstring calls for. A type the buildability test
-    # imports is a type a caller has to build; if it has optional fields and the
-    # scope rule does not reach it, this script would say nothing about it at
-    # all. That is how `CIPInfo`'s five nested check types sat uncovered under a
-    # clean report — they were in that test's import list the whole time.
+    # The cross-check. A type the buildability test names is a type a caller has
+    # to build; if it has optional fields and the scope rule does not reach it,
+    # this script would say nothing about it at all. That is how `CIPInfo`'s five
+    # nested check types sat uncovered under a clean report — they were in that
+    # test the whole time.
+    #
+    # Its absence is a failure, not a skip. Returning an empty set and carrying
+    # on would leave the run green with the cross-check quietly gone, which is
+    # the same shape of silence as the gap it closes.
+    if not args.buildable.is_file():
+        print(
+            f"{args.buildable} is missing — it is the cross-check on "
+            f"`ADDITIONS`, the one thing this script cannot see for itself. "
+            f"Point `--buildable` at wherever the buildability test moved to.",
+            file=sys.stderr,
+        )
+        return 1
+
     unreached = sorted(
         name
         for name in buildable(args.buildable)

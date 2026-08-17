@@ -82,10 +82,10 @@ jobs:
               - '.github/workflows/ci.yml'
             setters:
               # Which request types must derive `Setters`. Narrower than `code`
-              # on purpose: `tests/`, `fixtures/` and `examples/` cannot add a
-              # request type, and `macros/` cannot either — a change there
-              # alters what the derive *generates*, which is the compiler's
-              # question and not this report's.
+              # on purpose: `fixtures/` and `examples/` cannot add a request
+              # type, and `macros/` cannot either — a change there alters what
+              # the derive *generates*, which is the compiler's question and not
+              # this report's.
               #
               # Distinct from `scripts` above: that one asks whether the Python
               # still passes its own tests, this one whether `src/` still
@@ -93,6 +93,10 @@ jobs:
               # break the other's answer.
               - 'src/**'
               - 'scripts/setters.py'
+              # The buildability test, which is the cross-check on the script's
+              # scope list. Renaming or deleting it disables that check, so a
+              # change to it has to run the job that would notice.
+              - 'tests/integration/request_construction.rs'
               - '.github/workflows/ci.yml'
 
   fmt:
