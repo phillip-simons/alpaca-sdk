@@ -1,5 +1,5 @@
 error: unknown `setters` option on a struct — `flattenable` is the only one, and `into`, `skip`, `doc` and `flatten` configure a field rather than a type
- --> tests/compile_fail/setters_on_the_struct_fails.rs:9:11
+ --> tests/compile_fail/an_unknown_struct_option_fails.rs:5:11
   |
-9 | #[setters(into)]
-  |           ^^^^
+5 | #[setters(flatten)]
+  |           ^^^^^^^

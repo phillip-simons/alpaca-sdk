@@ -1,0 +1,7 @@
+error: cannot find macro `__setters_flatten_Base` in this scope
+  --> tests/compile_fail/flatten_before_the_base_fails.rs:11:15
+   |
+11 |     pub base: Base,
+   |               ^^^^
+   |
+   = help: have you added the `#[macro_use]` on the module/import?

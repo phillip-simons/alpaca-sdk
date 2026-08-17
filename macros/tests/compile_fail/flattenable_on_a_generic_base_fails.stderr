@@ -1,0 +1,5 @@
+error: `flattenable` writes this struct's field types into a helper macro, and a generic base would have to carry its parameters to every wrapper — write the delegating setters by hand
+ --> tests/compile_fail/flattenable_on_a_generic_base_fails.rs:4:11
+  |
+4 | #[setters(flattenable)]
+  |           ^^^^^^^^^^^

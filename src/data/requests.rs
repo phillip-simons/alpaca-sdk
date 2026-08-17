@@ -81,7 +81,14 @@ impl<const N: usize> From<[&str; N]> for Symbols {
 }
 
 /// Fields shared by every historical time series request.
+///
+/// `flattenable`, because five request types hold one of these and every one of
+/// them offers its filters as their own setters. See the `Setters` derive for
+/// what that generates and for the ordering rule it depends on: each wrapper
+/// below is declared after this struct, and moving one above it is a compile
+/// error rather than a silently missing setter.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
+#[setters(flattenable)]
 #[non_exhaustive]
 pub struct TimeseriesRequest {
     /// The symbols to query, sent as one comma-separated `symbols` parameter.
@@ -130,6 +137,7 @@ impl TimeseriesRequest {
 pub struct StockBarsRequest {
     /// The shared time series filters.
     #[serde(flatten)]
+    #[setters(flatten)]
     pub base: TimeseriesRequest,
     /// The bar interval.
     pub timeframe: TimeFrame,
@@ -167,6 +175,7 @@ impl StockBarsRequest {
 pub struct CryptoBarsRequest {
     /// The shared time series filters.
     #[serde(flatten)]
+    #[setters(flatten)]
     pub base: TimeseriesRequest,
     /// The bar interval.
     pub timeframe: TimeFrame,
@@ -188,6 +197,7 @@ impl CryptoBarsRequest {
 pub struct OptionBarsRequest {
     /// The shared time series filters.
     #[serde(flatten)]
+    #[setters(flatten)]
     pub base: TimeseriesRequest,
     /// The bar interval.
     pub timeframe: TimeFrame,
@@ -209,6 +219,7 @@ impl OptionBarsRequest {
 pub struct StockTimeseriesRequest {
     /// The shared time series filters.
     #[serde(flatten)]
+    #[setters(flatten)]
     pub base: TimeseriesRequest,
     /// Which data feed to read from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -230,55 +241,6 @@ impl StockTimeseriesRequest {
         }
     }
 }
-
-/// Generates delegating setters for requests that wrap [`TimeseriesRequest`],
-/// so callers write `.limit(50)` rather than reaching into `.base`.
-macro_rules! timeseries_delegates {
-    ($ty:ty) => {
-        impl $ty {
-            /// Restricts the window to `start` onwards.
-            #[must_use]
-            pub fn start(mut self, start: DateTime<Utc>) -> Self {
-                self.base = self.base.start(start);
-                self
-            }
-
-            /// Restricts the window to before `end`.
-            #[must_use]
-            pub fn end(mut self, end: DateTime<Utc>) -> Self {
-                self.base = self.base.end(end);
-                self
-            }
-
-            /// Caps the total number of items returned across all pages.
-            #[must_use]
-            pub fn limit(mut self, limit: u32) -> Self {
-                self.base = self.base.limit(limit);
-                self
-            }
-
-            /// Sets the chronological ordering.
-            #[must_use]
-            pub fn sort(mut self, sort: Sort) -> Self {
-                self.base = self.base.sort(sort);
-                self
-            }
-
-            /// Sets the denominating currency.
-            #[must_use]
-            pub fn currency(mut self, currency: SupportedCurrencies) -> Self {
-                self.base = self.base.currency(currency);
-                self
-            }
-        }
-    };
-}
-
-timeseries_delegates!(StockBarsRequest);
-timeseries_delegates!(CryptoBarsRequest);
-timeseries_delegates!(OptionBarsRequest);
-timeseries_delegates!(StockTimeseriesRequest);
-timeseries_delegates!(StockAuctionsRequest);
 
 /// A request for the most recent stock data.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Setters)]
@@ -445,6 +407,7 @@ impl OptionChainRequest {
 pub struct StockAuctionsRequest {
     /// The shared time series filters.
     #[serde(flatten)]
+    #[setters(flatten)]
     pub base: TimeseriesRequest,
     /// Which data feed to read from.
     #[serde(default, skip_serializing_if = "Option::is_none")]

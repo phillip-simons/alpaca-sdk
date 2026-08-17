@@ -1,0 +1,5 @@
+error: this base is already flattened by another field, and one type cannot have two delegates of every one of its names — flatten it once and reach the other through its own field
+  --> tests/compile_fail/flattening_one_base_twice_fails.rs:23:15
+   |
+23 |     #[setters(flatten)]
+   |               ^^^^^^^

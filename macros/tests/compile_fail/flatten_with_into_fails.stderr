@@ -1,0 +1,5 @@
+error: `into` configures a setter, and a flattened field gets none — the delegates follow whatever the base's own fields say
+  --> tests/compile_fail/flatten_with_into_fails.rs:13:24
+   |
+13 |     #[setters(flatten, into)]
+   |                        ^^^^

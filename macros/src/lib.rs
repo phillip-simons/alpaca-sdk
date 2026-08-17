@@ -8,7 +8,7 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{
-    Attribute, Data, DeriveInput, Expr, ExprLit, Fields, GenericArgument, Lit, LitStr, Meta,
+    Attribute, Data, DeriveInput, Expr, ExprLit, Fields, GenericArgument, Ident, Lit, LitStr, Meta,
     PathArguments, Type, parse_macro_input, spanned::Spanned,
 };
 
@@ -42,6 +42,10 @@ use syn::{
 /// drift a reviewer has to catch by eye. Reading the real fields means a field
 /// added tomorrow has a setter today.
 ///
+/// That holds for the types that *wrap* a shared base too, which is what
+/// `flatten` is for. It was the last place a field list was still written down
+/// twice.
+///
 /// # Attributes
 ///
 /// | Attribute | Effect |
@@ -49,6 +53,13 @@ use syn::{
 /// | `#[setters(into)]` | Takes `impl Into<T>` and calls `.into()` |
 /// | `#[setters(skip = "why")]` | Generates nothing, and records why in the source |
 /// | `#[setters(doc = "…")]` | Uses this as the setter's documentation |
+/// | `#[setters(flatten)]` | Delegates this field's base's setters to the wrapper |
+///
+/// And one on the struct itself:
+///
+/// | Attribute | Effect |
+/// |---|---|
+/// | `#[setters(flattenable)]` | Makes this struct a base another type can `flatten` |
 ///
 /// `into` is for the types a caller would otherwise have to name while only
 /// passing through: `String`, so a `&str` works, and `Vec<T>`, so an array
@@ -73,6 +84,117 @@ use syn::{
 ///
 /// A field with neither is a compile error rather than a `missing_docs` error
 /// pointing at a line nobody wrote.
+///
+/// # Flattening a shared base
+///
+/// Several request types hold one `TimeseriesRequest` and offer its filters as
+/// their own, so a caller writes `.limit(50)` rather than `.base.limit(50)`.
+/// Writing those delegates out is writing the base's field list down a second
+/// time, once per wrapper, which is the drift this derive exists to prevent.
+///
+/// ```ignore
+/// #[derive(Setters)]
+/// #[setters(flattenable)]
+/// pub struct TimeseriesRequest {
+///     /// Caps the total number of items returned across all pages.
+///     pub limit: Option<u32>,
+/// }
+///
+/// #[derive(Setters)]
+/// pub struct StockBarsRequest {
+///     /// The shared time series filters.
+///     #[setters(flatten)]
+///     pub base: TimeseriesRequest,
+///     /// The bar interval.
+///     pub timeframe: TimeFrame,
+/// }
+///
+/// StockBarsRequest::new("AAPL", TimeFrame::day()).limit(50);
+/// ```
+///
+/// `flattenable` emits an unexported `macro_rules!` carrying one delegate per
+/// optional field, generated from the same reading of the struct the inherent
+/// setters come from — so `into`, `skip` and `doc` all apply to the delegates
+/// exactly as they apply to the originals, and each delegate calls the base's
+/// own setter rather than assigning the field. `flatten` emits an invocation of
+/// that macro. The wrapper's source names no field of the base.
+///
+/// ## The base must be declared first
+///
+/// `macro_rules!` is textually scoped, so the base has to appear **before** the
+/// wrapper, in the same module or an ancestor of it. A module declared after the
+/// base inherits the scope; one declared before it does not.
+///
+/// Violating this fails loudly, spanned at the offending field:
+///
+/// ```text
+/// error: cannot find macro `__setters_flatten_TimeseriesRequest` in this scope
+///  --> src/data/requests.rs
+///   |
+///   |     pub base: TimeseriesRequest,
+///   |               ^^^^^^^^^^^^^^^^^
+/// ```
+///
+/// (The line and column are elided here so this example does not rot every time
+/// the file above it moves.)
+///
+/// The same `error:` line appears when the base exists but is not marked
+/// `flattenable`, which is the other way to reach it. Only the ordering case
+/// carries rustc's trailing `#[macro_use]` suggestion, since only there does a
+/// macro of that name exist — and it is not the right advice in either case.
+///
+/// ## A `skip` on the base reaches every wrapper
+///
+/// `skip` applies to the delegates as it applies to the inherent setters, which
+/// is the point — but it is the one attribute whose effect is felt somewhere
+/// other than where it is written. A `#[setters(skip = "…")]` added to a base
+/// field removes that method from *every* type flattening the base, and the
+/// reason is recorded only at the base. The wrappers lose a method with nothing
+/// beside them saying so, and nothing reports it.
+///
+/// A skip's reason is usually a fact about the base — a constructor holding the
+/// name — and then this is right. Where it is not, the base is the wrong place
+/// for it.
+///
+/// ## A wrapper must not repeat one of the base's names
+///
+/// A wrapper's own `Option` field sharing a name with one of the base's asks for
+/// two `pub fn` of that name on one type — one from the derive's own impl, one
+/// from the helper's. That is rustc's `E0592`, "duplicate definitions with name
+/// `limit`": duplicates *across* a type's impls rather than a plain redefinition
+/// inside one, which is why it is spanned at the two `#[derive(Setters)]`
+/// attributes and never mentions either field.
+///
+/// The derive cannot catch it — it reads one struct at a time and does not know
+/// what the base's fields are called. Adding a field to a wrapper is the way to
+/// reach it.
+///
+/// ## The base's types resolve at the wrapper
+///
+/// This is the sharp edge. A delegate's signature carries the field's type
+/// written as it appears in the *base's* source — `DateTime<Utc>`, `Sort` — and
+/// `macro_rules!` is not hygienic for type paths, so those names have to resolve
+/// where the **wrapper** is rather than where the base is. Same module, and this
+/// costs nothing. Move a wrapper to a module that does not import what the base
+/// imports and it stops compiling.
+///
+/// ## The helper is not exported
+///
+/// The natural design is `#[macro_export]` and an absolute path, and it does not
+/// compile: a `macro_export` macro produced *by* macro expansion — which this
+/// one is, it comes out of a derive — cannot be referred to by absolute path
+/// from within its own crate. That is
+/// [rust-lang/rust#52234](https://github.com/rust-lang/rust/issues/52234), a
+/// deny-by-default `future_incompatible` lint.
+///
+/// Bare-name invocation is the way around it, and it turns out to be the better
+/// design anyway: no export is needed at all, so the helper adds nothing to the
+/// public API — nothing at the crate root, nothing for `cargo-semver-checks` to
+/// see, and no question about what a `0.x` bump means for it.
+///
+/// Neither side accepts generics: the helper takes a bare `$wrapper:ident`, and
+/// a generic base would have to carry its parameters to every wrapper. Both are
+/// refused at the attribute.
 ///
 /// # Example
 ///
@@ -111,6 +233,15 @@ struct Options {
     /// The span of the first `doc`, kept so a misplaced one can be reported at
     /// itself rather than at the field.
     doc_span: Option<proc_macro2::Span>,
+    /// The span of `flatten`, kept for the same reason `into`'s is.
+    flatten: Option<proc_macro2::Span>,
+}
+
+/// What a struct's own `#[setters(…)]` attributes asked for.
+#[derive(Default)]
+struct ContainerOptions {
+    /// The span of `flattenable`, kept so a refusal lands on the word.
+    flattenable: Option<proc_macro2::Span>,
 }
 
 fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
@@ -130,28 +261,129 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         ));
     };
 
-    // `#[setters(…)]` is a per-field attribute, and one written on the struct
-    // parses cleanly, applies to nothing, and looks configured — the exact
-    // failure the `into`-on-a-required-field and `doc`-on-a-skipped-field
-    // refusals below exist to prevent. An `#[setters(into)]` one line too high
-    // is a plausible typo, and silence is the worst answer to it.
-    for attribute in &input.attrs {
-        if attribute.path().is_ident("setters") {
-            return Err(syn::Error::new_spanned(
-                attribute,
-                "`setters` applies to a field, not to the struct — there is no \
-                 whole-type option, so this configures nothing",
-            ));
-        }
+    // Struct-level `#[setters(…)]` used to be refused outright, on the grounds
+    // that there was no whole-type option and one written there parses cleanly,
+    // applies to nothing and looks configured — an `#[setters(into)]` a line too
+    // high being the plausible typo. `flattenable` is now that whole-type
+    // option, so the refusal moves into `parse_container_options` rather than
+    // going away: it accepts exactly one word and rejects every other, which
+    // keeps the typo loud while letting the one real option through.
+    let container = parse_container_options(&input.attrs)?;
+    let generic = !input.generics.params.is_empty();
+
+    // The helper macro takes `$wrapper:ident` and writes the base's field types
+    // out verbatim. Neither survives a type parameter, and no request type in
+    // this workspace has one.
+    if let Some(span) = container.flattenable
+        && generic
+    {
+        return Err(syn::Error::new(
+            span,
+            "`flattenable` writes this struct's field types into a helper macro, \
+             and a generic base would have to carry its parameters to every \
+             wrapper — write the delegating setters by hand",
+        ));
     }
 
     let mut setters = Vec::new();
+    let mut delegates = Vec::new();
+    let mut flattens = Vec::new();
+    let mut flattened_bases: Vec<Ident> = Vec::new();
 
     for field in &fields.named {
         // Guaranteed by `Fields::Named`.
         let name = field.ident.as_ref().expect("a named field has an ident");
         let options = parse_options(&field.attrs)?;
         let optional = option_inner(&field.ty);
+
+        // A flattened field takes no setter of its own: it takes the base's,
+        // one per optional field the base has, which is the entire point.
+        if let Some(span) = options.flatten {
+            if let Some(into) = options.into {
+                return Err(syn::Error::new(
+                    into,
+                    "`into` configures a setter, and a flattened field gets none \
+                     — the delegates follow whatever the base's own fields say",
+                ));
+            }
+            if let Some((_, skip)) = &options.skip {
+                return Err(syn::Error::new(
+                    *skip,
+                    "`flatten` and `skip` contradict each other: the field either \
+                     delegates the base's setters or it does not",
+                ));
+            }
+            if let Some(doc) = options.doc_span {
+                return Err(syn::Error::new(
+                    doc,
+                    "`doc` documents one setter, and `flatten` generates one per \
+                     optional field of the base — each takes its documentation \
+                     from that field",
+                ));
+            }
+            if optional.is_some() {
+                return Err(syn::Error::new(
+                    span,
+                    "`flatten` writes through to a base this type always holds, \
+                     and an `Option` one can be absent — make the field required, \
+                     or drop `flatten`",
+                ));
+            }
+            if generic {
+                return Err(syn::Error::new(
+                    span,
+                    "`flatten` generates an impl naming this type, so a generic \
+                     one would lose its parameters — write the delegating setters \
+                     by hand",
+                ));
+            }
+            // Flattening does not chain. A delegate is built from the loop below,
+            // which this `continue` skips, so a `flattenable` struct that also
+            // flattens would emit a helper carrying its own optional fields and
+            // silently not the inner base's — and every wrapper of it would be
+            // missing setters with nothing to say so. That is the exact silence
+            // this attribute exists to delete, so it is refused rather than
+            // documented.
+            if let Some(flattenable) = container.flattenable {
+                return Err(syn::Error::new(
+                    flattenable,
+                    "a `flattenable` base cannot itself flatten another: the \
+                     helper it emits would carry its own fields and not the \
+                     inner base's, so a wrapper would silently be missing \
+                     setters — flatten the inner base at each wrapper instead",
+                ));
+            }
+            let Some(base) = base_ident(&field.ty) else {
+                return Err(syn::Error::new_spanned(
+                    &field.ty,
+                    "`flatten` delegates to a base named by a plain path with \
+                     no generic arguments, and this type is not one — only a \
+                     struct carrying `#[setters(flattenable)]` can be \
+                     flattened, and the helper it emits carries no parameters",
+                ));
+            };
+            // Two fields flattening one base means two invocations of one helper
+            // and so two `pub fn` of every one of its names. That is `E0592`
+            // from rustc, spanned at the *base's* derive — the one item in the
+            // program that is right. This is the only collision the derive can
+            // see for itself, because both fields are in the struct in front of
+            // it, so it is the only one worth refusing here rather than leaving
+            // to a message that points somewhere else.
+            if flattened_bases.iter().any(|seen| seen == base) {
+                return Err(syn::Error::new(
+                    span,
+                    "this base is already flattened by another field, and one \
+                     type cannot have two delegates of every one of its names — \
+                     flatten it once and reach the other through its own field",
+                ));
+            }
+            flattened_bases.push(base.clone());
+
+            let helper = helper_ident(base);
+            let ty = &input.ident;
+            flattens.push(quote! { #helper!(#ty, #name); });
+            continue;
+        }
 
         if let Some((_, span)) = &options.skip {
             // A skip on a field that would never have had a setter anyway is
@@ -235,16 +467,62 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 self
             }
         });
+
+        if container.flattenable.is_some() {
+            // The delegate calls the setter directly above rather than
+            // assigning `self.$field.#name = Some(…)`, so `into` and every
+            // other decision about this field is made in exactly one place and
+            // a wrapper cannot disagree with the base.
+            delegates.push(quote! {
+                #(#[doc = #docs])*
+                #[must_use]
+                pub fn #name(mut self, #signature) -> Self {
+                    self.$field = self.$field.#name(#name);
+                    self
+                }
+            });
+        }
     }
 
     let ty = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    // Not `#[macro_export]`: a `macro_export` macro produced by macro expansion
+    // cannot be reached by absolute path from inside its own crate
+    // (rust-lang/rust#52234), so the invocation is by bare name — which means
+    // the helper needs no export at all, and adds nothing to the public API.
+    //
+    // `unused_macros` because a base may be marked `flattenable` before the
+    // first wrapper that flattens it exists, and this workspace denies warnings.
+    // No `#[doc(hidden)]`: rustdoc does not document a textually-scoped
+    // `macro_rules!` in the first place, so it would be decoration standing
+    // where a reason should be.
+    let helper = container.flattenable.map(|_| {
+        let helper = helper_ident(ty);
+        quote! {
+            #[allow(unused_macros)]
+            macro_rules! #helper {
+                ($wrapper:ident, $field:ident) => {
+                    // Deliberately no `#[automatically_derived]`: on an inherent
+                    // impl written by a `macro_rules!` expansion it is a
+                    // future-incompatibility warning, and warnings are denied.
+                    impl $wrapper {
+                        #(#delegates)*
+                    }
+                };
+            }
+        }
+    });
 
     Ok(quote! {
         #[automatically_derived]
         impl #impl_generics #ty #ty_generics #where_clause {
             #(#setters)*
         }
+
+        #helper
+
+        #(#flattens)*
     })
 }
 
@@ -314,14 +592,85 @@ fn parse_options(attrs: &[Attribute]) -> syn::Result<Options> {
                 options.doc_span.get_or_insert(meta.path.span());
                 return Ok(());
             }
+            if meta.path.is_ident("flatten") {
+                options.flatten = Some(meta.path.span());
+                return Ok(());
+            }
             Err(meta.error(
-                "unknown `setters` option — expected `into`, `skip = \"…\"` or \
-                 `doc = \"…\"`",
+                "unknown `setters` option on a field — expected `into`, \
+                 `skip = \"…\"`, `doc = \"…\"` or `flatten`, and `flattenable` \
+                 marks the base itself rather than the field holding it",
             ))
         })?;
     }
 
     Ok(options)
+}
+
+/// The `#[setters(…)]` options on the struct itself.
+///
+/// Struct-level `#[setters(…)]` went unread until `flattenable` existed, so
+/// anything written there was silently accepted and silently did nothing. This
+/// takes the field-level parser's stance instead: an attribute that looks
+/// configured has to be.
+fn parse_container_options(attrs: &[Attribute]) -> syn::Result<ContainerOptions> {
+    let mut options = ContainerOptions::default();
+
+    for attr in attrs {
+        if !attr.path().is_ident("setters") {
+            continue;
+        }
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("flattenable") {
+                options.flattenable = Some(meta.path.span());
+                return Ok(());
+            }
+            Err(meta.error(
+                "unknown `setters` option on a struct — `flattenable` is the \
+                 only one, and `into`, `skip`, `doc` and `flatten` configure a \
+                 field rather than a type",
+            ))
+        })?;
+    }
+
+    Ok(options)
+}
+
+/// The name of the helper macro a `flattenable` struct emits.
+///
+/// It is unexported and textually scoped, so a collision is confined to the
+/// module it is declared in — and the name is what a wrapper sees when it
+/// flattens a base that is not `flattenable`, or one declared after it, so it
+/// should read as an instruction rather than as an internal symbol that leaked.
+///
+/// A raw identifier loses its `r#`: `__setters_flatten_r#struct` is not a valid
+/// identifier and `Ident::new` *panics* on one, which is the one way out of this
+/// derive that would not be a sentence explaining itself. Both sides of the
+/// invocation come through here, so they still agree on the name.
+fn helper_ident(ty: &Ident) -> Ident {
+    let name = ty.to_string();
+    let name = name.strip_prefix("r#").unwrap_or(&name);
+    Ident::new(&format!("__setters_flatten_{name}"), ty.span())
+}
+
+/// The name a flattened field's type is known by, or `None` if it has none.
+///
+/// The last path segment, so both `TimeseriesRequest` and a qualified spelling
+/// of it find the same helper — mirroring how `option_inner` treats `Option`.
+/// A reference, a tuple, a slice or a generic base has no plain name to look
+/// for and is refused at the field.
+fn base_ident(ty: &Type) -> Option<&Ident> {
+    let Type::Path(path) = ty else {
+        return None;
+    };
+    if path.qself.is_some() {
+        return None;
+    }
+    let segment = path.path.segments.last()?;
+    if !matches!(segment.arguments, PathArguments::None) {
+        return None;
+    }
+    Some(&segment.ident)
 }
 
 /// The text of a field's `///` comments, one entry per line.
@@ -437,6 +786,50 @@ mod tests {
         assert!(inner_of("Option").is_none());
         assert!(inner_of("Option<'a>").is_none());
         assert!(inner_of("Option<u32, u32>").is_none());
+    }
+
+    fn base_of(text: &str) -> Option<String> {
+        base_ident(&ty(text)).map(ToString::to_string)
+    }
+
+    /// The spellings a `#[setters(flatten)]` field may legitimately use.
+    ///
+    /// The qualified case is the one that carries weight beyond this function:
+    /// `NAMED_FIELD` in `scripts/setters.py` allows an optional path prefix
+    /// *because* of it, so a wrapper spelling its base that way is one the gate
+    /// still checks. Without this test that regex rests on a promise in a doc
+    /// comment and nothing else.
+    #[test]
+    fn a_plain_or_qualified_path_yields_its_last_segment() {
+        assert_eq!(
+            base_of("TimeseriesRequest").as_deref(),
+            Some("TimeseriesRequest")
+        );
+        assert_eq!(
+            base_of("crate::data::TimeseriesRequest").as_deref(),
+            Some("TimeseriesRequest")
+        );
+        assert_eq!(base_of("self::Base").as_deref(), Some("Base"));
+    }
+
+    /// Each of these reaches a different `None` in `base_ident`, and every one
+    /// is refused at the field rather than generating an invocation of a helper
+    /// that could not exist. `Option<Base>` is deliberately absent: the
+    /// `optional.is_some()` guard fires before `base_ident` is ever called, so
+    /// it gets the message about an absent base instead of this one.
+    #[test]
+    fn anything_without_a_plain_name_yields_nothing() {
+        // Not a path at all.
+        assert!(base_of("(Base, u32)").is_none());
+        assert!(base_of("&'a Base").is_none());
+        assert!(base_of("[Base; 2]").is_none());
+        // A qualified-self path, whose last segment names an associated type
+        // rather than a struct that could carry `flattenable`.
+        assert!(base_of("<S as Trait>::Out").is_none());
+        // A generic base: the helper takes a bare `$wrapper:ident` and the
+        // parameters would have nowhere to go.
+        assert!(base_of("Base<u32>").is_none());
+        assert!(base_of("crate::data::Base<u32>").is_none());
     }
 
     #[test]

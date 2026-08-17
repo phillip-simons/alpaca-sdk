@@ -129,21 +129,114 @@ fn option_bars_take_a_timeframe_too() {
 }
 
 #[test]
-fn stock_time_series_requests_forward_the_shared_setters() {
+fn stock_time_series_requests_carry_their_own_two_filters() {
     let params = params(
         &StockTimeseriesRequest::new("AAPL")
             .feed(DataFeed::Sip)
-            .start(at("2022-01-01T00:00:00Z"))
-            .end(at("2022-01-02T00:00:00Z"))
-            .limit(10)
-            .sort(Sort::Desc)
-            .currency(SupportedCurrencies::Usd),
+            .asof("2022-01-01"),
     );
 
     assert_eq!(params["feed"], "sip");
-    assert_eq!(params["limit"], 10);
-    assert_eq!(params["sort"], "desc");
-    assert_eq!(params["currency"], "USD");
+    assert_eq!(params["asof"], "2022-01-01");
+}
+
+// ------------------------------------------------- the delegated shared five
+
+/// The five shared filters, as they arrive at `base`.
+fn written_through(base: &TimeseriesRequest) {
+    assert_eq!(base.start, Some(at("2022-01-01T00:00:00Z")));
+    assert_eq!(base.end, Some(at("2022-01-02T00:00:00Z")));
+    assert_eq!(base.limit, Some(42));
+    assert_eq!(base.sort, Some(Sort::Asc));
+    assert_eq!(base.currency, Some(SupportedCurrencies::Gbp));
+}
+
+/// The same five, as they arrive on the wire.
+fn serialized(request: &impl serde::Serialize) {
+    let params = params(request);
+
+    assert_eq!(params["start"], "2022-01-01T00:00:00Z");
+    assert_eq!(params["end"], "2022-01-02T00:00:00Z");
+    assert_eq!(params["limit"], 42);
+    assert_eq!(params["sort"], "asc");
+    assert_eq!(params["currency"], "GBP");
+    // The base is flattened on both sides: a nested `base` object would reach
+    // the transport as one parameter of that name and filter nothing.
+    assert!(params.get("base").is_none());
+}
+
+/// Every wrapper of [`TimeseriesRequest`], with all five delegates called.
+///
+/// No wrapper's source names these five methods — `#[setters(flatten)]` reads
+/// them off `TimeseriesRequest` — so this is where a delegate that writes the
+/// wrong field, or one that quietly stopped being generated, becomes visible.
+/// A missing delegate fails to compile here; a delegate writing the wrong field
+/// compiles and fails the assertion.
+///
+/// `CryptoBarsRequest` and `OptionBarsRequest` are the two to watch: they have
+/// no optional fields of their own, so before flattening every method they had
+/// came from the hand-written `timeseries_delegates!` and nothing else. If the
+/// delegates stop being generated for them, there is no second impl to hide it.
+#[test]
+fn every_wrapper_delegates_all_five_shared_filters() {
+    let start = at("2022-01-01T00:00:00Z");
+    let end = at("2022-01-02T00:00:00Z");
+
+    let stock_bars = StockBarsRequest::new("AAPL", TimeFrame::day())
+        .start(start)
+        .end(end)
+        .limit(42)
+        .sort(Sort::Asc)
+        .currency(SupportedCurrencies::Gbp);
+    written_through(&stock_bars.base);
+    serialized(&stock_bars);
+
+    let crypto_bars = CryptoBarsRequest::new("BTC/USD", TimeFrame::hour())
+        .start(start)
+        .end(end)
+        .limit(42)
+        .sort(Sort::Asc)
+        .currency(SupportedCurrencies::Gbp);
+    written_through(&crypto_bars.base);
+    serialized(&crypto_bars);
+
+    let option_bars = OptionBarsRequest::new("AAPL240119C00150000", TimeFrame::minute())
+        .start(start)
+        .end(end)
+        .limit(42)
+        .sort(Sort::Asc)
+        .currency(SupportedCurrencies::Gbp);
+    written_through(&option_bars.base);
+    serialized(&option_bars);
+
+    let stock_timeseries = StockTimeseriesRequest::new("AAPL")
+        .start(start)
+        .end(end)
+        .limit(42)
+        .sort(Sort::Asc)
+        .currency(SupportedCurrencies::Gbp);
+    written_through(&stock_timeseries.base);
+    serialized(&stock_timeseries);
+
+    let stock_auctions = StockAuctionsRequest::new("AAPL")
+        .start(start)
+        .end(end)
+        .limit(42)
+        .sort(Sort::Asc)
+        .currency(SupportedCurrencies::Gbp);
+    written_through(&stock_auctions.base);
+    serialized(&stock_auctions);
+}
+
+/// A delegate must not be the only way to reach a filter: the base keeps its own
+/// setters, and a wrapper's `.base` stays assignable.
+#[test]
+fn flattening_adds_a_second_route_rather_than_moving_the_first() {
+    let mut request = StockBarsRequest::new("AAPL", TimeFrame::day());
+    request.base = TimeseriesRequest::new("AAPL").limit(7);
+
+    assert_eq!(request.base.limit, Some(7));
+    assert_eq!(request.limit(9).base.limit, Some(9));
 }
 
 // ----------------------------------------------------------------- latest

@@ -1,0 +1,5 @@
+error: a `flattenable` base cannot itself flatten another: the helper it emits would carry its own fields and not the inner base's, so a wrapper would silently be missing setters — flatten the inner base at each wrapper instead
+  --> tests/compile_fail/a_flattenable_base_that_flattens_fails.rs:23:11
+   |
+23 | #[setters(flattenable)]
+   |           ^^^^^^^^^^^

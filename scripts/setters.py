@@ -17,14 +17,43 @@ prose here has gone stale.
 `#[derive(Setters)]` reads the real field list, so a type that derives it cannot
 have a field without a setter — that half is the compiler's, not this script's,
 and it stays true for a field added tomorrow by someone who never read this
-file. What is left is the one question a derive cannot ask about itself:
-**which types should be deriving it and are not.**
+file. What is left are the questions a derive cannot ask about itself:
+**which types should be deriving it and are not**, and **which fields hold a
+shared base and do not flatten it.**
 
 That is the whole job here. It is a much smaller question than the one the first
 version of this script answered, and deliberately so: an earlier design listed
 every field beside its struct in a macro, and needed this script to diff the two
 lists. Reading the fields directly deleted that entire class of drift, and most
 of this script with it.
+
+# The flattened base
+
+A request that wraps a shared base — `StockBarsRequest` and its
+`TimeseriesRequest` — offers that base's filters as its own, so a caller writes
+`.limit(50)` rather than reaching into `.base`. `#[setters(flatten)]` on the
+field generates one delegate per optional field the base has, read off the base
+itself; `#[setters(flattenable)]` on the base is what makes that possible.
+
+The field drift there is the compiler's now. What is left is the same silence
+one level up: **a wrapper that holds a flattenable base and does not flatten
+it** compiles, serializes correctly, and simply makes the caller write `.base`.
+Nothing says so, which is the shape this script exists to break.
+
+There is no exemption map for it, unlike `ADDITIONS`/`EXCLUSIONS` below, because
+the rule is one this repository can satisfy: a base is only a base once someone
+writes `flattenable` on it. Two shapes are worth knowing rather than
+pre-solving, and both announce themselves:
+
+- `src/types/setters.rs` names two wrappers whose bases sit in a *sibling*
+  module, where `macro_rules!` scope puts flattening out of reach. Neither base
+  carries `flattenable`, so neither is demanded here. If one is ever marked for
+  some same-module wrapper's sake, this check starts asking for a `flatten` that
+  cannot compile — and the answer then is an exemption map with a reason per
+  entry, in the shape of the two below.
+- A `pub(crate)` base is invisible, because `RESTRICTED_STRUCT` takes restricted
+  structs out of scope entirely and this check reads what `parse` recorded. That
+  is the existing scope rule rather than a new hole, and no base is restricted.
 
 # What counts as a request
 
@@ -164,6 +193,22 @@ BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
 # `#[setters(skip = "why")]`, and the field it sits above.
 SKIP_ATTR = re.compile(r'#\[setters\(skip = "(.+?)"\)\]', re.S)
 
+# A rejoined required field of a plain named type — `pub base: TimeseriesRequest,`
+# — capturing the last path segment. That is the only shape `#[setters(flatten)]`
+# accepts, and the capture matches what `base_ident` in the derive resolves: the
+# last segment, so a qualified spelling finds the same helper. A required field
+# of any other shape cannot be a flattened base, so it is not one this script has
+# an opinion about.
+NAMED_FIELD = re.compile(r"^pub ((?:r#)?\w+): (?:::)?(?:\w+::)*(\w+),$")
+
+# `#[setters(flattenable)]` on a struct: it makes the struct a base, by emitting
+# the helper macro a wrapper's `flatten` invokes.
+FLATTENABLE_ATTR = re.compile(r"#\[setters\([^)]*\bflattenable\b[^)]*\)\]", re.S)
+
+# `#[setters(flatten)]` on a field. `\b` on both sides so `flattenable` — which
+# ends in a word character and is the *struct* attribute — does not match here.
+FLATTEN_ATTR = re.compile(r"#\[setters\([^)]*\bflatten\b[^)]*\)\]", re.S)
+
 # Types a caller must build that the `*Request*` name rule cannot see. Every one
 # is a field of some request, or the body of a POST, and is reachable only by
 # construction. Naming a type here is a claim that a caller builds it.
@@ -244,8 +289,14 @@ def balance(text: str) -> int:
     return depth
 
 
-def fields(lines: list[str], start: int) -> tuple[list[str], list[tuple[str, str]], int]:
-    """One struct's optional fields and skips, plus the index of its closing `}`.
+def fields(
+    lines: list[str], start: int
+) -> tuple[list[str], list[tuple[str, str]], list[tuple[str, str, bool]], int]:
+    """One struct's fields and skips, plus the index of its closing `}`.
+
+    The third list is the required fields of a plain named type, each with the
+    type's last path segment and whether it carries `#[setters(flatten)]` — which
+    is what the flattened-base check reads.
 
     Read downwards, accumulating each field's attributes and clearing them at
     the field they belong to. Walking *up* from a field cannot work: fields are
@@ -261,6 +312,7 @@ def fields(lines: list[str], start: int) -> tuple[list[str], list[tuple[str, str
     """
     optional: list[str] = []
     skipped: list[tuple[str, str]] = []
+    named: list[tuple[str, str, bool]] = []
     pending: list[str] = []
 
     index = start + 1
@@ -295,21 +347,39 @@ def fields(lines: list[str], start: int) -> tuple[list[str], list[tuple[str, str
                 f"fields need a setter, so a declaration it cannot read is one "
                 f"it would pass in silence. Teach it the shape."
             )
+        # The attribute run, comment-free, for the same reason `parse` strips it
+        # before looking for a derive: a field *documented* "give this
+        # `#[setters(flatten)]` one day" and not carrying it would otherwise
+        # count as flattened, and the gate would pass on the gap it exists to
+        # report.
+        attributes = LINE_COMMENT_ANYWHERE.sub(
+            "", BLOCK_COMMENT.sub("", "\n".join(pending))
+        )
+
         if found:
             optional.append(found.group(1))
-            skip = SKIP_ATTR.search("\n".join(pending))
+            skip = SKIP_ATTR.search(attributes)
             if skip:
                 skipped.append((found.group(1), unwrap(skip.group(1))))
+        else:
+            wraps = NAMED_FIELD.match(declaration)
+            if wraps:
+                named.append(
+                    (wraps.group(1), wraps.group(2), bool(FLATTEN_ATTR.search(attributes)))
+                )
         pending = []
         index += 1
 
-    return optional, skipped, index
+    return optional, skipped, named, index
 
 
-def parse(path: pathlib.Path) -> dict[str, tuple[bool, list[str], list[tuple[str, str]]]]:
-    """Every struct in one file, as `{name: (derives, optional, skipped)}`.
+def parse(
+    path: pathlib.Path,
+) -> dict[str, tuple[bool, bool, list[str], list[tuple[str, str]], list[tuple[str, str, bool]]]]:
+    """Every struct in one file, as `{name: (derives, flattenable, optional, skipped, named)}`.
 
-    `skipped` pairs a field name with the reason recorded on it.
+    `skipped` pairs a field name with the reason recorded on it. `named` carries
+    the required fields of a plain named type, for the flattened-base check.
 
     One downward pass, carrying the attribute lines seen since the last item
     boundary. An earlier version walked *upwards* from each `pub struct` until a
@@ -318,7 +388,9 @@ def parse(path: pathlib.Path) -> dict[str, tuple[bool, list[str], list[tuple[str
     `#[derive(Setters)]`. That is a gate reporting coverage it did not find,
     which is the one way for this script to be worse than not existing.
     """
-    found: dict[str, tuple[bool, list[str], list[tuple[str, str]]]] = {}
+    found: dict[
+        str, tuple[bool, bool, list[str], list[tuple[str, str]], list[tuple[str, str, bool]]]
+    ] = {}
     lines = path.read_text().splitlines()
     pending: list[str] = []
 
@@ -366,10 +438,11 @@ def parse(path: pathlib.Path) -> dict[str, tuple[bool, list[str], list[tuple[str
             "", BLOCK_COMMENT.sub("", "\n".join(pending))
         )
         derives = bool(DERIVES_SETTERS.search(attributes))
+        flattenable = bool(FLATTENABLE_ATTR.search(attributes))
 
         empty = EMPTY_STRUCT.match(line)
         if empty:
-            found[empty.group(1)] = (derives, [], [])
+            found[empty.group(1)] = (derives, flattenable, [], [], [])
             pending = []
             index += 1
             continue
@@ -386,8 +459,8 @@ def parse(path: pathlib.Path) -> dict[str, tuple[bool, list[str], list[tuple[str
                 f"it wrong consumes the struct after it. Run `cargo fmt`."
             )
 
-        optional, skipped, index = fields(lines, index)
-        found[declaration.group(1)] = (derives, optional, skipped)
+        optional, skipped, named, index = fields(lines, index)
+        found[declaration.group(1)] = (derives, flattenable, optional, skipped, named)
         pending = []
 
     return found
@@ -440,6 +513,8 @@ def main() -> int:
     # Keyed by (file, name): four struct names are defined twice, and
     # `OrderRequest` in broker/ has different fields from the trading/ one.
     gaps: dict[str, list[tuple[str, int]]] = {}
+    unflattened: list[tuple[str, str, str, str]] = []
+    flattened = 0
     skips: list[tuple[str, str, str]] = []
     seen_additions: set[str] = set()
     seen_exclusions: set[str] = set()
@@ -448,15 +523,26 @@ def main() -> int:
     optional_fields = 0
     covered = 0
 
+    read: dict[pathlib.Path, dict[str, tuple]] = {}
     for rs in sorted(args.src.rglob("*.rs")):
         try:
-            parsed = parse(rs)
+            read[rs] = parse(rs)
         except SyntaxError as unreadable:
             # A traceback in a CI log reads as "the checker is broken" when what
             # it means is "the checker found source it will not guess about".
             print(unreadable, file=sys.stderr)
             return 1
-        for name, (derives, optional, skipped) in parsed.items():
+
+    # Every `flattenable` in the tree, before any wrapper is judged: a base and
+    # the wrappers that should flatten it need not share a file. Collected over
+    # all structs rather than the in-scope ones, because the derive consults no
+    # name rule — a base is whatever carries the attribute.
+    bases = {
+        name for structs in read.values() for name, info in structs.items() if info[1]
+    }
+
+    for rs, parsed in read.items():
+        for name, (derives, _flattenable, optional, skipped, named) in parsed.items():
             declared[name] = len(optional)
             if name in EXCLUSIONS:
                 seen_exclusions.add(name)
@@ -477,6 +563,17 @@ def main() -> int:
                 # type carrying the derive picks up a setter the day someone
                 # adds an optional field to it, with nobody having to notice.
                 gaps.setdefault(rs.as_posix(), []).append((name, len(optional)))
+
+            # The gap flattening cannot close by construction: a wrapper that
+            # holds a base and does not offer its filters. It compiles, it
+            # serializes correctly, and it just makes the caller write `.base`.
+            for field, ty, flattens in named:
+                if ty not in bases:
+                    continue
+                if flattens:
+                    flattened += 1
+                else:
+                    unflattened.append((rs.as_posix(), name, field, ty))
 
     # An entry that no longer matches a struct is worse than a missing one: it
     # reads as a settled decision while covering nothing.
@@ -527,7 +624,13 @@ def main() -> int:
         return 1
 
     print(f"{types} request types, {optional_fields} optional fields")
-    print(f"{covered} have a setter, {optional_fields - covered} do not\n")
+    print(f"{covered} have a setter, {optional_fields - covered} do not")
+    if bases:
+        print(
+            f"{len(bases)} flattenable {'base' if len(bases) == 1 else 'bases'}, "
+            f"flattened by {flattened} {'field' if flattened == 1 else 'fields'}"
+        )
+    print()
 
     if skips:
         print("No setter, by decision — each field says why:\n")
@@ -535,16 +638,24 @@ def main() -> int:
             print(f"  {path}: {field} — {why}")
         print()
 
-    if not gaps:
-        print("Every request type derives `Setters`.")
+    if not gaps and not unflattened:
+        print("Every request type derives `Setters`, and every base one holds is flattened.")
         return 0
 
-    print("Does not derive `Setters` — reachable only by assignment:\n")
-    for path, entries in sorted(gaps.items()):
-        subtotal = sum(count for _, count in entries)
-        print(f"  {path} ({subtotal})")
-        for name, count in sorted(entries):
-            print(f"    {name} ({count})")
+    if gaps:
+        print("Does not derive `Setters` — reachable only by assignment:\n")
+        for path, entries in sorted(gaps.items()):
+            subtotal = sum(count for _, count in entries)
+            print(f"  {path} ({subtotal})")
+            for name, count in sorted(entries):
+                print(f"    {name} ({count})")
+        print()
+
+    if unflattened:
+        print("Holds a flattenable base and does not flatten it:\n")
+        for path, name, field, ty in sorted(unflattened):
+            print(f"  {path}: {name}.{field}: {ty}")
+        print()
 
     if args.report:
         return 0
@@ -552,13 +663,22 @@ def main() -> int:
     # required to derive it — so that the day one is added the setter follows —
     # and summarising in fields said "0 optional fields have no setter" while
     # exiting 1, which reads as the script contradicting itself.
-    missing = sum(len(entries) for entries in gaps.values())
-    print(
-        f"\n{missing} request {'type' if missing == 1 else 'types'} "
-        f"{'does' if missing == 1 else 'do'} not derive `Setters`. Add it to "
-        f"the derive list on each type above.",
-        file=sys.stderr,
-    )
+    reasons = []
+    if gaps:
+        missing = sum(len(entries) for entries in gaps.values())
+        reasons.append(
+            f"{missing} request {'type' if missing == 1 else 'types'} "
+            f"{'does' if missing == 1 else 'do'} not derive `Setters` — add it "
+            f"to the derive list on each type above"
+        )
+    if unflattened:
+        count = len(unflattened)
+        reasons.append(
+            f"{count} {'field holds' if count == 1 else 'fields hold'} a "
+            f"flattenable base without `#[setters(flatten)]`, so its filters are "
+            f"reachable only through the base"
+        )
+    print("\n" + ". ".join(reasons) + ".", file=sys.stderr)
     return 1
 
 

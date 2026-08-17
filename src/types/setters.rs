@@ -23,6 +23,39 @@
 //! the other. `GetOrdersRequest` shipped 0.1.0 with fourteen filters and a
 //! setter for none of them inside exactly that silence.
 //!
+//! # Which types wrap a shared base
+//!
+//! **A request that wraps a shared base flattens it rather than restating it.**
+//! Five of the market data requests hold a `TimeseriesRequest`, and every one of
+//! them offers its five filters as their own, so a caller writes `.limit(50)`
+//! rather than `.base.limit(50)`. The base carries `#[setters(flattenable)]` and
+//! each wrapper's `base` field carries `#[setters(flatten)]`; the delegates are
+//! generated from the base's real fields, so no wrapper's source names one.
+//!
+//! Until the derive learned to do this, those delegates were a declarative macro
+//! in `data/requests.rs` listing all five fields and a second copy of each one's
+//! documentation. A sixth field added to `TimeseriesRequest` would have got no
+//! delegate, no compile error, no failing test and no line in the diff that
+//! added it — the same silence the rest of this module is about, one level up.
+//!
+//! What remains for `just setters` is the question flattening cannot ask of
+//! itself: which types hold a flattenable base and do not flatten it. There is
+//! one ordering rule, and it fails loudly rather than quietly — see the derive.
+//!
+//! **Two request types wrap a base and do not flatten it**, because the
+//! technique cannot reach across a module. `macro_rules!` is textually scoped,
+//! so a wrapper only sees a helper declared above it in the same module or an
+//! ancestor — and both of these are elsewhere in the tree from their base:
+//! `CorporateActionEventsRequest::window` holds an `EventStreamRequest` from
+//! `sse`, and `broker::OrderRequest::order` holds the `trading::OrderRequest`.
+//! Neither base carries `flattenable`, so `just setters` has nothing to say
+//! about them either, which is why they are written down here instead.
+//!
+//! Neither *restates* its base's fields, so neither is the drift this exists to
+//! delete — a caller reaches those filters through `.window` and `.order`. What
+//! would change it is moving a base to an ancestor module of its wrapper, and
+//! that is a larger question than a setter.
+//!
 //! # Which fields take `into`
 //!
 //! A field takes `#[setters(into)]` when a caller would otherwise have to name
