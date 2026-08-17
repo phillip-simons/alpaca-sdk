@@ -1,0 +1,5 @@
+error: `flatten` and `skip` contradict each other: the field either delegates the base's setters or it does not
+  --> tests/compile_fail/flatten_with_skip_fails.rs:13:24
+   |
+13 |     #[setters(flatten, skip = "a constructor holds the name")]
+   |                        ^^^^

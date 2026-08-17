@@ -1,4 +1,4 @@
-error: unknown `setters` option — expected `into`, `skip = "…"` or `doc = "…"`
+error: unknown `setters` option on a field — expected `into`, `skip = "…"`, `doc = "…"` or `flatten`, and `flattenable` marks the base itself rather than the field holding it
  --> tests/compile_fail/an_unknown_option_fails.rs:6:15
   |
 6 |     #[setters(rename = "max")]

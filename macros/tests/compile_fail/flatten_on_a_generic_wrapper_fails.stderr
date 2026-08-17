@@ -1,0 +1,5 @@
+error: `flatten` generates an impl naming this type, so a generic one would lose its parameters — write the delegating setters by hand
+  --> tests/compile_fail/flatten_on_a_generic_wrapper_fails.rs:13:15
+   |
+13 |     #[setters(flatten)]
+   |               ^^^^^^^

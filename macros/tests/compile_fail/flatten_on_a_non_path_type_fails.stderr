@@ -1,0 +1,5 @@
+error: `flatten` delegates to a base named by a plain path with no generic arguments, and this type is not one — only a struct carrying `#[setters(flattenable)]` can be flattened, and the helper it emits carries no parameters
+  --> tests/compile_fail/flatten_on_a_non_path_type_fails.rs:14:15
+   |
+14 |     pub base: (Base, u32),
+   |               ^^^^^^^^^^^

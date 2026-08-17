@@ -115,9 +115,20 @@ Cargo treats `0.1.1` as compatible and would deliver it without you choosing it.
   `EventStreamRequest::until` needs `since`, and says so in its own
   documentation, which the derive carries onto the setter.
 
+  The five market data requests that wrap a `TimeseriesRequest` —
+  `StockBarsRequest`, `CryptoBarsRequest`, `OptionBarsRequest`,
+  `StockTimeseriesRequest` and `StockAuctionsRequest` — offer that base's five
+  filters as their own, and those delegates are read off the base rather than
+  copied out beside each wrapper. It is a statement about how they are produced
+  rather than about what they are: the same five methods with the same
+  signatures and the same documentation, and a sixth field on
+  `TimeseriesRequest` reaching all five wrappers on its own.
+
   Nothing was removed or narrowed. The 79 setters that already existed were
   written by hand and are now generated, keeping their names, their
-  documentation and their behaviour. Nine *widened*, from `Vec<T>` to
+  documentation and their behaviour — as are the 25 the deleted
+  `timeseries_delegates!` produced, five methods written once and expanded
+  across the five wrappers above. Nine *widened*, from `Vec<T>` to
   `impl Into<Vec<T>>` —
   `GetUsCorporatesRequest::{cusips, tickers}`,
   `GetAggregatePositionsRequest::symbols`, `GetSettlementsRequest::statuses`,
@@ -148,6 +159,20 @@ Cargo treats `0.1.1` as compatible and would deliver it without you choosing it.
   `include` and now takes `firm_accounts`, since the derive names a parameter
   after its field. Rust has no named arguments, so no call site changes; it is
   noted because it is visible in the documentation.
+
+- **`Setters` now reads struct-level `#[setters(…)]`, and refuses what it does
+  not recognise.** Before, only field attributes were parsed, so
+  `#[setters(anything)]` on a struct compiled and did nothing at all. It now
+  accepts `flattenable` and rejects everything else, taking the field parser's
+  stance that an attribute which looks configured has to be.
+
+  **Not a break**, though it would read like one out of context: the entry
+  above is the one that first publishes `alpaca-sdk-macros`, so there is no
+  released version whose behaviour this changes and nothing downstream that
+  compiled against the permissive form. It is recorded because the *shape* of
+  the change — an attribute that silently did nothing now failing to compile —
+  is the kind `cargo-semver-checks` cannot see, and the next such change, after
+  0.1.1 ships, will be a real break.
 
 ### Fixed
 

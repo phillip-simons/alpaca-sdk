@@ -313,8 +313,9 @@ parameters:
 #
 # It does not check that each *field* has a setter — `#[derive(Setters)]` reads
 # the real field list, so that half is the compiler's, and stays true for a
-# field added by someone who never read the script. What is left is the question
-# a derive cannot ask about itself: which types should be deriving it.
+# field added by someone who never read the script. What is left are the two
+# questions a derive cannot ask about itself: which types should be deriving it,
+# and which fields hold a `#[setters(flattenable)]` base without flattening it.
 setters:
     python3 scripts/setters.py
 

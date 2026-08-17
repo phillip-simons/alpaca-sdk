@@ -1,0 +1,5 @@
+error: cannot find macro `__setters_flatten_Base` in this scope
+  --> tests/compile_fail/flatten_without_flattenable_fails.rs:19:15
+   |
+19 |     pub base: Base,
+   |               ^^^^

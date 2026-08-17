@@ -191,10 +191,30 @@ doing when it found it.
     together, because `OrderAmount` made that unreachable; a setter for each
     would quietly make it reachable again.
 
-  `just setters` names request types that do not derive it, and **fails** if it
-  finds one. Unlike `just parameters` and `just enums-drift`, which report a
-  difference with Alpaca that may be Alpaca's to resolve, this checks a rule
-  this repository sets for itself and can always satisfy.
+  - `#[setters(flatten)]` on a field holding a shared base, with
+    `#[setters(flattenable)]` on the base itself. **A request that wraps a
+    shared base flattens it rather than restating it.** The five market data
+    requests holding a `TimeseriesRequest` offer its filters as their own, so a
+    caller writes `.limit(50)` rather than `.base.limit(50)`, and the delegates
+    are read off the base — no wrapper names a field of it. One rule comes with
+    it: `macro_rules!` is textually scoped, so the base has to be declared
+    before its wrappers, in the same module or an ancestor. Violating it is a
+    compile error naming the missing helper, not a silently absent setter.
+
+    That rule is also why two types wrap a base and do not flatten it —
+    `CorporateActionEventsRequest::window` and `broker::OrderRequest::order`,
+    both of whose bases live in another module. `src/types/setters.rs` says so
+    beside the convention; neither restates its base's fields, so neither is the
+    drift this exists to delete.
+
+  `just setters` names request types that do not derive it, and fields holding a
+  flattenable base without flattening it, and **fails** on either. Unlike `just
+  parameters` and `just enums-drift`, which report a difference with Alpaca that
+  may be Alpaca's to resolve, this checks a rule this repository sets for itself
+  and can satisfy — with one coupling written down in `scripts/setters.py`: a
+  base marked `flattenable` for one wrapper's sake makes the gate demand
+  `flatten` of *every* wrapper, including any whose module cannot reach the
+  helper.
 
   The derive lives in `macros/`, a second published crate, because a procedural
   macro cannot live in the crate that uses it. See `RELEASING.md` — the two
