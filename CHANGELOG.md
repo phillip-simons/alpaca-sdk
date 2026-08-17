@@ -20,7 +20,7 @@ asking for it.
 ### Added
 
 - **A setter for every optional field on every request type** — 531 of the 547,
-  across 127 types. `GetOrdersRequest` had fourteen filters and a setter for
+  across 129 types. `GetOrdersRequest` had fourteen filters and a setter for
   none of them; `UpdatableIdentity` had twenty-one and none; the five check
   types inside a CIP payload had sixty-eight between them.
 
@@ -82,11 +82,16 @@ asking for it.
   "mutually exclusive with `since`" and reachable through the `from_id`
   constructor.
 
-  Window filters are *not* in this category. `start` and `end` set together in
-  the wrong order is a mistake a checked `between(start, end)` catches where one
-  exists, but one-sided windows are ordinary and `TimeseriesRequest` has offered
-  unchecked `start`/`end` since 0.1.0. Mutual exclusion is what earns a skip;
-  ordering is not.
+  What earns a skip is narrower than "these fields interact". Exclusivity the
+  type already *checks* does not: `GetAccountActivitiesRequest`'s `category` and
+  `activity_types` are as mutually exclusive as `qty` and `notional`, and both
+  keep their setters, because `validate` rejects the pair and the client calls
+  it before sending. Ordering does not either — `start` and `end` keep their
+  setters everywhere, including on the four types that also offer a fallible
+  `between(start, end)`, because a one-sided window is ordinary and `between`
+  cannot express one. Nor does a field that merely *requires* a companion:
+  `EventStreamRequest::until` needs `since`, and says so in its own
+  documentation, which the derive carries onto the setter.
 
   Purely additive. The 79 setters that already existed were written by hand and
   are now generated, keeping their names, their documentation and their
@@ -115,6 +120,11 @@ asking for it.
 
   Written down here because this is the class of change `cargo-semver-checks`
   cannot see and a `0.1.1` reaches you without your asking.
+
+  One parameter was renamed — `GetAggregatePositionsRequest::firm_accounts` took
+  `include` and now takes `firm_accounts`, since the derive names a parameter
+  after its field. Rust has no named arguments, so no call site changes; it is
+  noted because it is visible in the documentation.
 
 ### Changed
 

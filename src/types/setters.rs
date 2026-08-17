@@ -62,7 +62,10 @@
 //! - `CreateRecipientBankRequest`'s `routing_code` and `routing_code_type` go
 //!   together because a routing code without its scheme is ambiguous.
 //! - `EventStreamRequest`'s `since_id` is documented mutually exclusive with
-//!   `since`, and `from_id` is its constructor.
+//!   `since`, and `from_id` is its constructor. The broker's
+//!   `GetEventsRequest` has the same two fields and keeps both setters,
+//!   deliberately: only `EventStreamRequest` documents the exclusivity, and
+//!   this crate does not refuse a request on a guess about the other.
 //!
 //! The test is not "could a caller misuse this" — the fields are public, so
 //! they always could. It is whether the incoherent state is one the API

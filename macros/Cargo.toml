@@ -9,6 +9,9 @@ rust-version = "1.88"
 description = "Derive macros for alpaca-sdk. Not intended for direct use."
 authors = ["Phillip Simons <phillip@simons.gg>"]
 license = "Apache-2.0"
+# Its own, not the SDK's: a caller who lands on this crate's page arrived by
+# accident, and the most useful thing it can say is which crate they wanted.
+readme = "README.md"
 repository = "https://github.com/phillip-simons/alpaca-sdk"
 homepage = "https://github.com/phillip-simons/alpaca-sdk"
 documentation = "https://docs.rs/alpaca-sdk-macros"

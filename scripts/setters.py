@@ -76,6 +76,14 @@ import sys
 # script exists to remove.
 STRUCT_DECL = re.compile(r"^pub struct (\w+)(?:<[^>]*>)?\s*\{")
 
+# `pub struct PingRequest {}` — braces opened and closed on one line. Matched
+# separately because the body scan looks for a line that is exactly `}`, and an
+# empty struct has none: the scan ran on into the *next* struct, credited that
+# struct's fields to this one, and consumed it so it was never checked at all.
+# Latent — no empty-braced struct is in `src/` today, and `cargo fmt` leaves the
+# shape alone, so nothing would have caught it arriving.
+EMPTY_STRUCT = re.compile(r"^pub struct (\w+)(?:<[^>]*>)?\s*\{\s*\}\s*$")
+
 # Anything that starts a `pub` field, matched before its type is known so that a
 # declaration rustfmt wrapped across lines can be rejoined — see `fields`.
 FIELD_START = re.compile(r"^    pub (\w+):")
@@ -120,12 +128,17 @@ UNPARSED_STRUCT = re.compile(r"^\s*pub struct\b")
 # struct, so a derive list rustfmt has split across lines still hits.
 DERIVES_SETTERS = re.compile(r"#\[derive\([^)]*\bSetters\b[^)]*\)\]", re.S)
 
-# A doc or ordinary comment, dropped before the block is searched for a derive.
-# Without this a struct whose *documentation* shows `#[derive(…, Setters)]` in an
-# example is credited with deriving it — and that example is the one CONTRIBUTING
-# and the derive's own rustdoc both use, so the likeliest place to hit this is a
-# type documented by someone following the house style.
+# A doc or ordinary line comment, dropped before the block is searched for a
+# derive. Without this a struct whose *documentation* shows
+# `#[derive(…, Setters)]` in an example is credited with deriving it — and that
+# example is the one CONTRIBUTING and the derive's own rustdoc both use, so the
+# likeliest place to hit this is a type documented in the house style.
 COMMENT = re.compile(r"^\s*//")
+
+# The same hazard in the other comment syntax. `rustfmt` reformats neither, so
+# nothing else in the toolchain would notice a `/* … Setters … */` sitting above
+# a struct that derives nothing.
+BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
 
 # `#[setters(skip = "why")]`, and the field it sits above.
 SKIP_ATTR = re.compile(r'#\[setters\(skip = "(.+?)"\)\]', re.S)
@@ -162,6 +175,8 @@ ADDITIONS: dict[str, str] = {
     # an optional field is the day this list decides whether anybody notices.
     "PlaidACHRelationship": "the Plaid arm of `CreateACHRelationshipRequest`",
     "BankAddress": "the address on a `CreateBankRequest`",
+    "SettlementTransfer": "an element of `CreateInstantFundingSettlementRequest::transfers`",
+    "JitSettlementAccount": "an element of `CreateJitSettlementRequest::accounts`",
     "TransmitterInfo": "the travel-rule payload on a crypto transfer",
     "AccountConfiguration": "read-modify-write: fetched, adjusted, sent back",
     "TokenizationMintCallback": "the callback body a caller posts back",
@@ -281,7 +296,14 @@ def parse(path: pathlib.Path) -> dict[str, tuple[bool, list[str], list[tuple[str
             continue
 
         attributes = "\n".join(line for line in pending if not COMMENT.match(line))
-        derives = bool(DERIVES_SETTERS.search(attributes))
+        derives = bool(DERIVES_SETTERS.search(BLOCK_COMMENT.sub("", attributes)))
+
+        empty = EMPTY_STRUCT.match(line)
+        if empty:
+            found[empty.group(1)] = (derives, [], [])
+            pending = []
+            index += 1
+            continue
         optional, skipped, index = fields(lines, index)
         found[declaration.group(1)] = (derives, optional, skipped)
         pending = []

@@ -257,11 +257,24 @@ fn parse_options(attrs: &[Attribute]) -> syn::Result<Options> {
             continue;
         }
         attr.parse_nested_meta(|meta| {
+            // Every other ambiguity here is a hard refusal, and a repeat is one:
+            // last-wins is invisible, and two `skip` reasons would leave the
+            // derive using the last while `scripts/setters.py` reports the
+            // first — two sources disagreeing about why a field has no setter.
             if meta.path.is_ident("into") {
+                if options.into.is_some() {
+                    return Err(meta.error("`into` is already set on this field"));
+                }
                 options.into = Some(meta.path.span());
                 return Ok(());
             }
             if meta.path.is_ident("skip") {
+                if options.skip.is_some() {
+                    return Err(meta.error(
+                        "`skip` is already set on this field, with a different \
+                         reason — keep the one that is true",
+                    ));
+                }
                 let reason: LitStr = meta.value()?.parse()?;
                 if reason.value().trim().is_empty() {
                     return Err(meta.error(
