@@ -216,6 +216,19 @@ def unwrap(text: str) -> str:
     return re.sub(r"\\\s*\n\s*", "", text).strip()
 
 
+def balance(text: str) -> int:
+    """How many brackets `text` leaves open.
+
+    Only enough of Rust's grammar to know whether a type is finished. A `->` is
+    not a closing angle bracket and would otherwise count as one, which matters
+    for a field holding a function pointer.
+    """
+    depth = 0
+    for opening, closing in (("<", ">"), ("(", ")"), ("[", "]")):
+        depth += text.count(opening) - text.replace("->", "").count(closing)
+    return depth
+
+
 def fields(lines: list[str], start: int) -> tuple[list[str], list[tuple[str, str]], int]:
     """One struct's optional fields and skips, plus the index of its closing `}`.
 
@@ -242,8 +255,14 @@ def fields(lines: list[str], start: int) -> tuple[list[str], list[tuple[str, str
             index += 1
             continue
 
+        # Join until the brackets balance *and* the declaration terminates.
+        # Stopping at the first trailing comma is not enough: rustfmt wraps a
+        # long nested generic as `pub filters: Option< HashMap< String,` — which
+        # ends in a comma, mid-type, and reads as a complete required field.
         parts = [LINE_COMMENT.sub("", lines[index]).strip()]
-        while not parts[-1].endswith(",") and index + 1 < len(lines):
+        while index + 1 < len(lines) and (
+            balance("".join(parts)) > 0 or not parts[-1].endswith(",")
+        ):
             index += 1
             if lines[index] == "}":  # an unterminated declaration; stop here
                 break

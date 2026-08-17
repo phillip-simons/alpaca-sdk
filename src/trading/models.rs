@@ -758,6 +758,10 @@ pub struct AccountConfiguration {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(skip = "this field is `Option` so that `None` is omitted rather \
+                      than sent as `null` — not so a caller can choose a value. \
+                      The PATCH route does not document it at all, and a setter \
+                      would invite sending it")]
     pub dtbp_check: Option<DTBPCheck>,
     /// Whether the account may trade fractional shares.
     pub fractional_trading: bool,
@@ -778,6 +782,9 @@ pub struct AccountConfiguration {
         deserialize_with = "empty_string_as_none",
         skip_serializing_if = "Option::is_none"
     )]
+    #[setters(skip = "removed from Alpaca's responses too, and skipped for the \
+                      same reason as `dtbp_check` — the `Option` is about how \
+                      the field serializes, not about a caller choosing it")]
     pub pdt_check: Option<PDTCheck>,
     /// Whether the account is blocked from submitting new orders.
     pub suspend_trade: bool,

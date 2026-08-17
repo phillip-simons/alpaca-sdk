@@ -36,8 +36,11 @@ generates nothing and records why, and `#[setters(doc = "…")]` overrides the
 documentation the setter would otherwise inherit from its field.
 
 See the [API documentation](https://docs.rs/alpaca-sdk-macros) for the full
-rules, and `alpaca-sdk`'s `types::setters` module for the convention that
-governs where each attribute is used.
+rules. The *convention* governing where each attribute is used — which fields
+take `into`, which take no setter and why — lives in `src/types/setters.rs` in
+[the repository](https://github.com/phillip-simons/alpaca-sdk). It is a
+`pub(crate)` module, so it is deliberately not on docs.rs: it is a rule for
+contributors, not a surface for callers.
 
 ## Licence
 

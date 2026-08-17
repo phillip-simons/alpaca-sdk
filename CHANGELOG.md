@@ -19,7 +19,7 @@ asking for it.
 
 ### Added
 
-- **A setter for every optional field on every request type** — 531 of the 547,
+- **A setter for every optional field on every request type** — 529 of the 547,
   across 129 types. `GetOrdersRequest` had fourteen filters and a setter for
   none of them; `UpdatableIdentity` had twenty-one and none; the five check
   types inside a CIP payload had sixty-eight between them.
@@ -51,13 +51,13 @@ asking for it.
   `String` and `Vec<T>` fields take `impl Into<T>`, so `.subtag("desk-7")` works
   without a `to_owned()`. Everything else takes its type exactly.
 
-  Sixteen fields have no setter, deliberately, and assignment remains the way
+  Eighteen fields have no setter, deliberately, and assignment remains the way
   to reach them. Three because a *constructor* already holds the name and two
   `pub fn` of one name cannot coexist in one impl:
   `GetEventsRequest::since`, `EventStreamRequest::since` and
   `EstimateOrderRequest::notional`.
 
-  The other thirteen because one setter writes them as a group, and offering one
+  Thirteen more because one setter writes them as a group, and offering one
   per field would make an incoherent request easy to build by accident. Ten are
   on `OrderRequest`, whose module documentation names three combinations the
   *type* makes unrepresentable — a per-field setter would have quietly undone
@@ -78,9 +78,15 @@ asking for it.
 
   Two more are `CreateRecipientBankRequest`'s `routing_code` and
   `routing_code_type`, which go together because a routing code without its
-  scheme is ambiguous. The last is `EventStreamRequest::since_id`, documented
-  "mutually exclusive with `since`" and reachable through the `from_id`
-  constructor.
+  scheme is ambiguous, and the thirteenth is `EventStreamRequest::since_id`,
+  documented "mutually exclusive with `since`" and reachable through the
+  `from_id` constructor.
+
+  The last two are `AccountConfiguration`'s `dtbp_check` and `pdt_check`, for a
+  different reason again: Alpaca removed both from its responses on 2026-07-06
+  and neither appears in the current PATCH schema. They are `Option` so that
+  absent means *omitted* rather than `null` — a fact about how the field
+  serializes, not an invitation to choose a value.
 
   What earns a skip is narrower than "these fields interact". Exclusivity the
   type already *checks* does not: `GetAccountActivitiesRequest`'s `category` and

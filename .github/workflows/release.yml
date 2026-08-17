@@ -88,6 +88,10 @@ jobs:
       - name: The macros pin must name the version being published
         run: |
           set -euo pipefail
+          # Re-derived, not carried over: each `run:` is its own shell, and
+          # under `set -u` a variable from the step above is a failure rather
+          # than an empty string.
+          tag="${GITHUB_REF_NAME#v}"
           macros="$(cargo metadata --no-deps --format-version 1 \
             | jq -r '.packages[] | select(.name == "alpaca-sdk-macros") | .version')"
           pin="$(cargo metadata --no-deps --format-version 1 \
@@ -97,7 +101,17 @@ jobs:
             echo "::error::alpaca-sdk depends on alpaca-sdk-macros $pin, but that crate is $macros"
             exit 1
           fi
-          echo "macros pinned at $pin"
+          # And the lockstep rule from RELEASING.md step 1b. The pin agreeing
+          # with the macros crate is not enough on its own: forget to bump
+          # `macros/Cargo.toml` and both still agree, at a version already on
+          # crates.io. `cargo publish --workspace --dry-run` only *warns* about
+          # an already-indexed version and exits 0, so `verify` would pass and
+          # the failure would land in `publish` — after the approval prompt.
+          if [ "$macros" != "$tag" ]; then
+            echo "::error::alpaca-sdk-macros is $macros but this tag publishes $tag — bump macros/Cargo.toml and the = pin together (RELEASING.md step 1b)"
+            exit 1
+          fi
+          echo "macros pinned at $pin, in lockstep with $tag"
 
       # The repo's own definition of ready-to-publish: `just ci` (fmt, clippy,
       # rustdoc, tests, feature combinations, MSRV, cargo-deny) plus
@@ -106,8 +120,17 @@ jobs:
 
       # Printed so the tarball contents are on the record next to the approval,
       # rather than something to go and check afterwards.
+      # Both tarballs. `cargo package --list` without `-p` resolves to the root
+      # package, so before the workspace this printed everything there was and
+      # after it printed half.
       - name: What would be uploaded
-        run: cargo package --list --all-features
+        run: |
+          set -euo pipefail
+          for crate in alpaca-sdk-macros alpaca-sdk; do
+            echo "::group::$crate"
+            cargo package --list --all-features -p "$crate"
+            echo "::endgroup::"
+          done
 
   # The platforms routine CI no longer runs on every commit.
   #

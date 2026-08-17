@@ -1,0 +1,5 @@
+error: `into` is already set on this field
+ --> tests/compile_fail/a_repeated_into_fails.rs:6:21
+  |
+6 |     #[setters(into, into)]
+  |                     ^^^^

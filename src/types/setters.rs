@@ -67,6 +67,19 @@
 //!   deliberately: only `EventStreamRequest` documents the exclusivity, and
 //!   this crate does not refuse a request on a guess about the other.
 //!
+//! **The `Option` is about serialization, not about a caller choosing.**
+//! `AccountConfiguration`'s `dtbp_check` and `pdt_check` are the two. Alpaca
+//! removed both from its responses, neither is in the current PATCH schema, and
+//! they are `Option` only so that absent serializes as *omitted* rather than
+//! `null` — a round trip used to PATCH `"dtbp_check": null` at a route that
+//! does not document the field. A setter would invite sending exactly what the
+//! `Option` was added to stop sending.
+//!
+//! Worth checking for on any field whose `Option` arrived with a
+//! `skip_serializing_if` and a comment about `null`: the question a setter asks
+//! is "should a caller pick this?", and `Option` sometimes answers a different
+//! one.
+//!
 //! The test is not "could a caller misuse this" — the fields are public, so
 //! they always could. It is whether the incoherent state is one the API
 //! *offers*, in a documented method a reader would reasonably take as blessed.

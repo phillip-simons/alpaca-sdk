@@ -122,7 +122,7 @@ test-scripts:
 # Auto-fix what is mechanically fixable, then show what is left.
 fix:
     cargo fmt --all
-    cargo clippy --all-targets --all-features --fix --allow-dirty --allow-staged
+    cargo clippy --workspace --all-targets --all-features --fix --allow-dirty --allow-staged
     just check
 
 # Check that each API surface still builds on its own.
@@ -193,7 +193,7 @@ hooks:
 
 # Fast inner-loop compile check. Needs `cargo install cargo-watch`.
 watch:
-    cargo watch -x 'clippy --all-targets --all-features -- -D warnings'
+    cargo watch -x 'clippy --workspace --all-targets --all-features -- -D warnings'
 
 # ---------------------------------------------------------------------------
 # Fixtures

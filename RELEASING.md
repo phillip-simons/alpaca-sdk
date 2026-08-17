@@ -146,8 +146,12 @@ tests, feature combinations, MSRV, cargo-deny — plus `cargo-semver-checks` and
 packaging dry run, all on Linux. Then:
 
 - the tag matches `Cargo.toml`;
-- the `=` pin on `alpaca-sdk-macros` names the version being published;
-- the tarball's file list is printed for review.
+- the `=` pin on `alpaca-sdk-macros` names the version being published, **and**
+  that version matches the tag — the pin agreeing with the macros crate is not
+  enough on its own, since forgetting step 1b leaves both agreeing at a version
+  already on crates.io, and `cargo publish --workspace --dry-run` only *warns*
+  about that;
+- both tarballs' file lists are printed for review.
 
 `cross-platform` runs the test suite on macOS and Windows, in parallel with
 `verify`. **This is the only place those two platforms are tested.** Routine CI
