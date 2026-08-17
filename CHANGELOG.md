@@ -19,7 +19,7 @@ asking for it.
 
 ### Added
 
-- **A setter for every optional field on every request type** — 529 of the 547,
+- **A setter for every optional field on every request type** — 527 of the 547,
   across 129 types. `GetOrdersRequest` had fourteen filters and a setter for
   none of them; `UpdatableIdentity` had twenty-one and none; the five check
   types inside a CIP payload had sixty-eight between them.
@@ -51,15 +51,15 @@ asking for it.
   `String` and `Vec<T>` fields take `impl Into<T>`, so `.subtag("desk-7")` works
   without a `to_owned()`. Everything else takes its type exactly.
 
-  Eighteen fields have no setter, deliberately, and assignment remains the way
+  Twenty fields have no setter, deliberately, and assignment remains the way
   to reach them. Three because a *constructor* already holds the name and two
   `pub fn` of one name cannot coexist in one impl:
   `GetEventsRequest::since`, `EventStreamRequest::since` and
   `EstimateOrderRequest::notional`.
 
-  Thirteen more because one setter writes them as a group, and offering one
-  per field would make an incoherent request easy to build by accident. Ten are
-  on `OrderRequest`, whose module documentation names three combinations the
+  Fifteen more because one setter writes them as a group, and offering one
+  per field would make an incoherent request easy to build by accident. Twelve
+  are on `OrderRequest`, whose module documentation names three combinations the
   *type* makes unrepresentable — a per-field setter would have quietly undone
   two of them:
 
@@ -75,10 +75,14 @@ asking for it.
     `oco`, `oto_take_profit`, `oto_stop_loss` and `multi_leg`. An exit leg with
     no order class passes `validate` and is not a bracket — it is a plain order
     carrying a field Alpaca ignores.
+  - `symbol` and `side` are set by whichever constructor chose the order's
+    shape, and `multi_leg` deliberately sets neither: a multi-leg order carries
+    its side per leg. `validate` requires them for every other class and has no
+    reason to examine them for `mleg`.
 
   Two more are `CreateRecipientBankRequest`'s `routing_code` and
   `routing_code_type`, which go together because a routing code without its
-  scheme is ambiguous, and the thirteenth is `EventStreamRequest::since_id`,
+  scheme is ambiguous, and the fifteenth is `EventStreamRequest::since_id`,
   documented "mutually exclusive with `since`" and reachable through the
   `from_id` constructor.
 

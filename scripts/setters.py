@@ -51,11 +51,13 @@ nothing still reads as a decision.
 
 # What it does not check
 
-Fields carrying `#[setters(skip = "…")]`, which fall into two kinds. Either a
+Fields carrying `#[setters(skip = "…")]`, which fall into three kinds. Either a
 constructor already holds the name, and two `pub fn` of one name cannot coexist
 in one impl; or the field is only coherent set alongside another, and one setter
 writes the group — `OrderAmount`'s `qty`/`notional`, a bracket's class and its
-legs, a routing code and its scheme.
+legs, a routing code and its scheme; or the `Option` is there so the field
+serializes as *omitted* rather than `null`, and is not a value a caller picks at
+all, which is `AccountConfiguration`'s two.
 
 The reason lives in the source next to the field, and the derive refuses a skip
 without one, so there is nothing for a list here to add. They are printed on
@@ -321,7 +323,14 @@ def parse(path: pathlib.Path) -> dict[str, tuple[bool, list[str], list[tuple[str
 
         declaration = STRUCT_DECL.match(line)
         if not declaration:
-            if UNPARSED_STRUCT.match(line) and not UNNAMED_STRUCT.match(line):
+            if UNNAMED_STRUCT.match(line):
+                # A tuple or unit struct is an item boundary like any other. It
+                # used to fall through to the accumulator, so its `#[derive(…)]`
+                # stayed pending and was credited to whatever struct came next.
+                pending = []
+                index += 1
+                continue
+            if UNPARSED_STRUCT.match(line):
                 raise SyntaxError(
                     f"{path}:{index + 1}: cannot parse `{line.strip()}` — this "
                     f"script decides which types need `Setters`, so a struct it "
@@ -369,7 +378,7 @@ def main() -> int:
     seen_additions: set[str] = set()
     seen_exclusions: set[str] = set()
     types = 0
-    fields = 0
+    optional_fields = 0
     covered = 0
 
     for rs in sorted(args.src.rglob("*.rs")):
@@ -390,7 +399,7 @@ def main() -> int:
                 continue
 
             types += 1
-            fields += len(optional)
+            optional_fields += len(optional)
             if derives:
                 covered += len(optional) - len(skipped)
                 skips.extend((rs.as_posix(), field, why) for field, why in skipped)
@@ -416,8 +425,8 @@ def main() -> int:
             )
             return 1
 
-    print(f"{types} request types, {fields} optional fields")
-    print(f"{covered} have a setter, {fields - covered} do not\n")
+    print(f"{types} request types, {optional_fields} optional fields")
+    print(f"{covered} have a setter, {optional_fields - covered} do not\n")
 
     if skips:
         print("No setter, by decision — each field says why:\n")

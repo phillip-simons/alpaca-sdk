@@ -215,7 +215,11 @@ impl OptionLegRequest {
 pub struct OrderRequest {
     /// The symbol being traded. Required for every order class except mleg.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[setters(into)]
+    #[setters(skip = "set by whichever constructor chose the order's shape, and \
+                      `multi_leg` deliberately does not — a symbol beside `legs` \
+                      is a single-leg field on a multi-leg order, which \
+                      `validate` does not examine because the mleg branch has \
+                      no reason to")]
     pub symbol: Option<String>,
     /// Number of shares to trade.
     #[serde(
@@ -239,6 +243,8 @@ pub struct OrderRequest {
     pub notional: Option<Decimal>,
     /// Whether the order buys or sells. Required for every class except mleg.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[setters(skip = "the sibling of `symbol`, and skipped with it: an mleg \
+                      order carries its side per leg, on `OptionLegRequest`")]
     pub side: Option<OrderSide>,
     /// The execution logic of the order.
     #[serde(rename = "type")]

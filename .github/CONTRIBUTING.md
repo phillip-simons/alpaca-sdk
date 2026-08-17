@@ -175,12 +175,14 @@ doing when it found it.
     and the method should read as an action. The derive uses the field's
     documentation otherwise, and refuses to generate a setter for a field with
     none.
-  - `#[setters(skip = "why")]` where a setter should not exist. Two kinds: a
-    constructor already holds the name, or the field is only coherent set
+  - `#[setters(skip = "why")]` where a setter should not exist. Three kinds: a
+    constructor already holds the name; the field is only coherent set
     alongside another and one setter writes the group — `OrderAmount`'s
-    `qty`/`notional`, a bracket's class and its legs. The reason is required, so
-    a skip is never mistakable for an oversight, and `just setters` prints them
-    all on every run.
+    `qty`/`notional`, a bracket's class and its legs; or the `Option` exists so
+    the field serializes as *omitted* rather than `null` and is not a value a
+    caller picks at all, which is what `AccountConfiguration`'s `dtbp_check` and
+    `pdt_check` are. The reason is required, so a skip is never mistakable for
+    an oversight, and `just setters` prints them all on every run.
 
     The test for the second kind is not "could a caller misuse this" — the
     fields are public, so they always could. It is whether the incoherent state
